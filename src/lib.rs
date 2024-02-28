@@ -2,11 +2,12 @@ use bollard::Docker;
 use bollard::image::CreateImageOptions;
 use bollard::container;
 use bollard::exec::{CreateExecOptions, StartExecResults};
-use bollard::models::HostConfig;
+use bollard::models::{HostConfig,ResourcesUlimits};
+use bollard::container::StatsOptions;
 
 use std::{thread, time};
 
-
+use tokio::task;
 
 use std::error::Error;
 
@@ -109,7 +110,9 @@ impl Task {
             image: Some(config.img_name.clone()),
             cmd: Some(vec!["roscore".to_string()]),
             host_config: Some(HostConfig {
-                binds: Some(path_mounts),..Default::default()
+                binds: Some(path_mounts),
+                ulimits: Some(vec![ResourcesUlimits{name:Some("nofile".to_string()),soft:Some(1024), hard:Some(524288)}]),
+                ..Default::default()
             }),
             ..Default::default()
         };
@@ -135,7 +138,7 @@ impl Task {
             .create_exec(
             &self.image_id,
             CreateExecOptions {
-                // attach_stdout: Some(true),
+                attach_stdout: Some(true),
                 attach_stderr: Some(true),
                 cmd: Some(vec!["/bin/bash", "-l", "-c", "rosbag play /rustle/dataset/*.bag"]),
                 ..Default::default()
@@ -168,13 +171,74 @@ impl Task {
         let play_exec_id = play_options_future.await.unwrap().id; 
         let task_exec_id = task_options_future.await.unwrap().id; 
         // let record_exec_id = record_exec_options.await.unwrap().id; 
+        
+        let ten_sec = time::Duration::from_secs(1); 
+        thread::sleep(ten_sec);
+        
+        // Spawn a tokio::task (green thread) for each command to run, namely:
+        //     - rosbag Play
+        //     - roslaunch rustle
+        //     - rosbag record
+        //     - stream container data
+        
 
-        //Do I need a select? OR can I just stream data after this block?
-        //How can I know that the record has stopped?
+        let docker1 = self.config.docker.clone();
 
-        self.config.docker.start_exec(&task_exec_id, None);
-        thread::sleep(time::Duration::from_secs(5));
-        self.config.docker.start_exec(&play_exec_id, None).await;
+        // let roslaunch_task = task::spawn(async move {
+        //     //spawn a task for roslaunch
+        //     // docker1.start_exec(&task_exec_id, None);
+        //     if let StartExecResults::Attached { mut output, .. } = docker1.start_exec(&task_exec_id, None).await.unwrap() {
+        //         while let Some(Ok(msg)) = output.next().await {
+        //             print!("RUSTLE TASK: {msg}");
+        //         }
+        //     } else {
+        //         println!("STREAM ENDED");
+        //         unreachable!();
+        //     }
+        //         //Loop to give the prints;
+        // });
+
+        let docker2 = self.config.docker.clone();
+
+        let rosplay_task = task::spawn(async move {
+            //spawn a task for roslaunch
+            // docker1.start_exec(&task_exec_id, None);
+            if let StartExecResults::Attached { mut output, .. } = docker2.start_exec(&play_exec_id, None).await.unwrap() {
+                while let Some(Ok(msg)) = output.next().await {
+                    print!("RUSTLE PLAY: {msg}");
+                }
+            } else {
+                println!("STREAM PLAY ENDED");
+                unreachable!();
+            }
+                //Loop to give the prints;
+        });
+
+
+        // let stream = &mut self.config.docker
+        //             .stats(
+        //                 &self.image_id,
+        //                 Some(StatsOptions {
+        //                     stream: true,
+        //                     one_shot: false
+        //                 }),
+        //             );
+        //             // .take(1);
+        //
+        // while let Some(Ok(stats)) = stream.next().await {
+        //     println!(
+        //         "rustle-task -  {:?}",
+        //         stats
+        //     );
+        // }
+
+
+        // tokio::join!(roslaunch_task);
+        tokio::join!(rosplay_task);
+
+        // self.config.docker.start_exec(&task_exec_id, None);
+        // thread::sleep(time::Duration::from_secs(5));
+        // self.config.docker.start_exec(&play_exec_id, None).await;
 
 
 
