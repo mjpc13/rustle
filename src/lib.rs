@@ -7,12 +7,16 @@ use bollard::container::StatsOptions;
 
 use std::{thread, time};
 
-use tokio::task;
+use tokio;
+use tokio::select;
+use tokio_util::sync::CancellationToken;
 
 use std::error::Error;
 
 use futures_util::stream::{StreamExt, TryStreamExt};
 
+//Logs
+use log::{debug, error, info, warn, trace};
 
 async fn pull_image(img_name: &str, docker: &Docker) -> Result<(), Box<dyn Error>>{
 
@@ -21,13 +25,13 @@ async fn pull_image(img_name: &str, docker: &Docker) -> Result<(), Box<dyn Error
       ..Default::default()
     });
 
-    println!("Docker Image downloading:");
+    info!("Docker Image downloading:");
 
     let mut image_down_stream = docker.create_image(options, None, None);
 
     while let Some(image_info) = image_down_stream.next().await {
         match image_info{
-            Ok(msg) => println!("{0:#?}", msg),
+            Ok(msg) => debug!("{0:#?}", msg),
             Err(e) => panic!("Error downloading image: {:?}", e)
         }
     };
@@ -57,7 +61,7 @@ impl Config {
 
         //Check if Docker Image is in the system, if not pull it from a Docker repository
         match docker.inspect_image(&img_name).await {
-            Ok(_) => println!("Docker image found!"),
+            Ok(_) => info!("Docker image found!"),
             Err(error) => match error{
                 DockerResponseServerError => match pull_image(&img_name, &docker).await {
                     Ok(_) => (),
@@ -123,10 +127,7 @@ impl Task {
             .await.unwrap()
             .id;
 
-    println!("STOPING");
-
     Task{image_id:id, config}
-
     }
 
     pub async fn run(&self){
@@ -140,7 +141,7 @@ impl Task {
             CreateExecOptions {
                 attach_stdout: Some(true),
                 attach_stderr: Some(true),
-                cmd: Some(vec!["/bin/bash", "-l", "-c", "rosbag play /rustle/dataset/*.bag"]),
+                cmd: Some(vec!["/bin/bash", "-l", "-c", "rosbag play -d 5 -u 10 /rustle/dataset/*.bag"]),
                 ..Default::default()
             },
         );
@@ -171,50 +172,67 @@ impl Task {
         let play_exec_id = play_options_future.await.unwrap().id; 
         let task_exec_id = task_options_future.await.unwrap().id; 
         // let record_exec_id = record_exec_options.await.unwrap().id; 
-        
-        let ten_sec = time::Duration::from_secs(1); 
-        thread::sleep(ten_sec);
-        
+
+       
         // Spawn a tokio::task (green thread) for each command to run, namely:
         //     - rosbag Play
         //     - roslaunch rustle
         //     - rosbag record
         //     - stream container data
-        
 
         let docker1 = self.config.docker.clone();
+        let token = CancellationToken::new();
+        let cloned_token = token.clone();
 
-        // let roslaunch_task = task::spawn(async move {
-        //     //spawn a task for roslaunch
-        //     // docker1.start_exec(&task_exec_id, None);
-        //     if let StartExecResults::Attached { mut output, .. } = docker1.start_exec(&task_exec_id, None).await.unwrap() {
-        //         while let Some(Ok(msg)) = output.next().await {
-        //             print!("RUSTLE TASK: {msg}");
-        //         }
-        //     } else {
-        //         println!("STREAM ENDED");
-        //         unreachable!();
-        //     }
-        //         //Loop to give the prints;
-        // });
+        //spawn a task for roslaunch
+        let roslaunch_task = tokio::spawn(async move {
+            if let StartExecResults::Attached { mut output, .. } = docker1.start_exec(&task_exec_id, None).await.unwrap() {
+                loop{
+                    select!{
+                        Some(Ok(msg)) = output.next() => {
+                            trace!("RUSTLE TASK: {msg}");
+                        },
+                        _ = cloned_token.cancelled()=>{
+                            info!("Roslaunch was asked to stop");
+                            //logic to cancel this task
+                            break;
+                        }
+                    }
+                }
+            } else {
+                warn!("STREAM ENDED");
+                unreachable!();
+            }
+
+        });
 
         let docker2 = self.config.docker.clone();
 
-        let rosplay_task = task::spawn(async move {
-            //spawn a task for roslaunch
-            // docker1.start_exec(&task_exec_id, None);
+        // Wait a certain number of seconds for the algorithm to init, PARAMETER
+        let ten_sec = time::Duration::from_secs(1);
+        thread::sleep(ten_sec);
+
+        //spawn a task for roslaunch
+        let rosplay_task = tokio::spawn(async move {
             if let StartExecResults::Attached { mut output, .. } = docker2.start_exec(&play_exec_id, None).await.unwrap() {
                 while let Some(Ok(msg)) = output.next().await {
-                    print!("RUSTLE PLAY: {msg}");
+                    trace!("RUSTLE PLAY: {msg}");
                 }
             } else {
-                println!("STREAM PLAY ENDED");
+                warn!("STREAM PLAY ENDED");
                 unreachable!();
             }
                 //Loop to give the prints;
         });
 
+        tokio::join!(rosplay_task);
+        token.cancel(); // the end of the rosbag will be the first point where the other tasks need
+        // to stop
+        // tokio::join!(roslaunch_task);
 
+
+
+        //Create a thread to stream data
         // let stream = &mut self.config.docker
         //             .stats(
         //                 &self.image_id,
@@ -233,13 +251,8 @@ impl Task {
         // }
 
 
-        // tokio::join!(roslaunch_task);
-        tokio::join!(rosplay_task);
 
-        // self.config.docker.start_exec(&task_exec_id, None);
-        // thread::sleep(time::Duration::from_secs(5));
-        // self.config.docker.start_exec(&play_exec_id, None).await;
-
+        
 
 
         //Stream container data (CPU load, memory, etc...)

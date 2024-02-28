@@ -5,9 +5,13 @@ use rustle::Task;
 // Use a connection function described above
 
 
+use env_logger::init;
+
 #[tokio::main]
 async fn main() {
     
+    init();
+
     //Hardcode paths
     let dataset_path = "/home/mjpc13/Documents/rustle/test/dataset/";
     let params_path = "/home/mjpc13/Documents/rustle/test/config/";
