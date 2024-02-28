@@ -35,5 +35,5 @@ RUN catkin build -s
 # source catkin workspace
 RUN echo "source /rustle/catkin_ws/devel/setup.bash" >> /root/.profile && chmod +x /entrypoint.sh
 
-# ENTRYPOINT ["/entrypoint.sh"]
-CMD [ "roscore" ]
+ENTRYPOINT ["/entrypoint.sh"]
+# CMD [ "roscore" ]
