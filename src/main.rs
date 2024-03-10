@@ -1,7 +1,7 @@
 use tokio;
 
-use rustle::Config;
-use rustle::Task;
+use rustle::task::Config;
+use rustle::task::Task;
 // Use a connection function described above
 
 
