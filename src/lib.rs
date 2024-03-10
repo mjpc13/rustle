@@ -141,7 +141,8 @@ impl Task {
             CreateExecOptions {
                 attach_stdout: Some(true),
                 attach_stderr: Some(true),
-                cmd: Some(vec!["/bin/bash", "-l", "-c", "rosbag play -d 5 -u 10 /rustle/dataset/*.bag"]),
+                // cmd: Some(vec!["/bin/bash", "-l", "-c", "rosbag play -d 5 --clock /rustle/dataset/*.bag"]),
+                cmd: Some(vec!["/bin/bash", "-l", "-c", "rosbag play -d 5 --clock -u 10 /rustle/dataset/*.bag"]),
                 ..Default::default()
             },
         );
@@ -158,35 +159,61 @@ impl Task {
         );
         
         // Check how I'm gonna record the localization
-        // let record_options_future = self.docker
-        //     .create_exec(
-        //     &id,
-        //     CreateExecOptions {
-        //         // attach_stdout: Some(true),
-        //         attach_stderr: Some(true),
-        //         cmd: Some(vec!["/bin/bash", "-l", "-c", "rosbag record /rustle/result.bag -a"]),
-        //         ..Default::default()
-        //     },
-        // );
+        let record_options_future = self.config.docker
+            .create_exec(
+            &self.image_id,
+            CreateExecOptions {
+                // attach_stdout: Some(true),
+                attach_stderr: Some(true),
+                cmd: Some(vec!["/bin/bash", "-l", "-c", "rosbag record -o /rustle/result.bag /lio_sam/mapping/odometry /lio_sam/mapping/odometry_incremental"]),
+                ..Default::default()
+            },
+        );
+
+        let id = self.image_id.clone();
+
+
 
         let play_exec_id = play_options_future.await.unwrap().id; 
         let task_exec_id = task_options_future.await.unwrap().id; 
-        // let record_exec_id = record_exec_options.await.unwrap().id; 
+        let record_exec_id = record_options_future.await.unwrap().id; 
 
-       
-        // Spawn a tokio::task (green thread) for each command to run, namely:
-        //     - rosbag Play
-        //     - roslaunch rustle
-        //     - rosbag record
-        //     - stream container data
-
-        let docker1 = self.config.docker.clone();
         let token = CancellationToken::new();
         let cloned_token = token.clone();
+        let stream_token = token.clone();
+        let record_token = token.clone();
 
+
+        let docker3 = self.config.docker.clone();
+        let image_id = self.image_id.clone();
+        let stream_task = tokio::spawn(async move{
+            let stream= &mut docker3
+                    .stats(
+                        &image_id,
+                        Some(StatsOptions {
+                            stream: true,
+                            one_shot: false
+                        }),
+                    );
+            loop{
+                select!{
+                    Some(Ok(stats)) = stream.next() => {
+                        //TODO: Do something with this data (save it into an object)
+                        // trace!{"{:#?}", stats};
+                    },
+                    _ = stream_token.cancelled()=>{
+                        break;
+                    }
+
+                }
+            }
+        });
+
+
+        let docker1 = self.config.docker.clone();
         //spawn a task for roslaunch
         let roslaunch_task = tokio::spawn(async move {
-            if let StartExecResults::Attached { mut output, .. } = docker1.start_exec(&task_exec_id, None).await.unwrap() {
+            if let StartExecResults::Attached { mut output, mut input } = docker1.start_exec(&task_exec_id, None).await.unwrap() {
                 loop{
                     select!{
                         Some(Ok(msg)) = output.next() => {
@@ -195,6 +222,65 @@ impl Task {
                         _ = cloned_token.cancelled()=>{
                             info!("Roslaunch was asked to stop");
                             //logic to cancel this task
+
+                            let record_options_future = docker1
+                                .create_exec(
+                                &id,
+                                CreateExecOptions {
+                                    attach_stdout: Some(true),
+                                    attach_stderr: Some(true),
+                                    cmd: Some(vec!["killall", "-SIGINT", "record"]),
+                                    ..Default::default()
+                                },
+                            ).await.unwrap();
+
+                            docker1.start_exec(&record_options_future.id, None).await.unwrap(); //kill
+                            //the record command
+
+                            let ten_sec = time::Duration::from_secs(1);
+                            thread::sleep(ten_sec);
+                            println!("JUST A TEST");
+
+                            break;
+                        }
+                    }
+                }
+            } else {
+                warn!("STREAM ENDED");
+                unreachable!();
+            }
+        });
+
+        let docker4 = self.config.docker.clone();
+        let id = self.image_id.clone();
+        //spawn a task for roslaunch
+        let record_task = tokio::spawn(async move {
+            if let StartExecResults::Attached { mut output, .. } = docker4.start_exec(&record_exec_id, None).await.unwrap() {
+                loop{
+                    select!{
+                        Some(Ok(msg)) = output.next() => {
+                        },
+                        _ = record_token.cancelled()=>{
+                             let bollard::models::ExecInspectResponse{ pid ,..} = docker4.inspect_exec(&record_exec_id).await.unwrap();
+                            
+                            let record_options_future = docker4
+                                .create_exec(
+                                &id,
+                                CreateExecOptions {
+                                    // attach_stdout: Some(true),
+                                    attach_stderr: Some(true),
+                                    cmd: Some(vec!["pkill", "-SIGINT", "record"]),
+                                    ..Default::default()
+                                },
+                            ).await.unwrap();    // kill -SIGINT pid
+
+                            docker4.start_exec(&record_options_future.id, None).await.unwrap();
+
+                            let ten_sec = time::Duration::from_secs(10);
+                            thread::sleep(ten_sec);
+                            println!("JUST A TEST2");
+
+                            // println!("{:?}", pid);
                             break;
                         }
                     }
@@ -212,7 +298,7 @@ impl Task {
         let ten_sec = time::Duration::from_secs(1);
         thread::sleep(ten_sec);
 
-        //spawn a task for roslaunch
+        //spawn a task for rosplay
         let rosplay_task = tokio::spawn(async move {
             if let StartExecResults::Attached { mut output, .. } = docker2.start_exec(&play_exec_id, None).await.unwrap() {
                 while let Some(Ok(msg)) = output.next().await {
@@ -226,33 +312,13 @@ impl Task {
         });
 
         tokio::join!(rosplay_task);
+
+        //Here I can wait on conditions to cancel the other tasks (like give extra time to compute
+        //graphs)
+
         token.cancel(); // the end of the rosbag will be the first point where the other tasks need
         // to stop
-        // tokio::join!(roslaunch_task);
-
-
-
-        //Create a thread to stream data
-        // let stream = &mut self.config.docker
-        //             .stats(
-        //                 &self.image_id,
-        //                 Some(StatsOptions {
-        //                     stream: true,
-        //                     one_shot: false
-        //                 }),
-        //             );
-        //             // .take(1);
-        //
-        // while let Some(Ok(stats)) = stream.next().await {
-        //     println!(
-        //         "rustle-task -  {:?}",
-        //         stats
-        //     );
-        // }
-
-
-
-        
+        tokio::join!(roslaunch_task);
 
 
         //Stream container data (CPU load, memory, etc...)
