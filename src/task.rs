@@ -15,6 +15,14 @@ use std::error::Error;
 
 use futures_util::stream::{StreamExt};
 
+use crate::db::{DB, Stats};
+use surrealdb::{
+    Surreal,
+    engine::any
+};
+
+
+
 //Logs
 use log::{debug, error, info, warn, trace};
 
@@ -133,6 +141,12 @@ impl Task {
     pub async fn run(&self){
         //Start the container
         let _ = self.config.docker.start_container::<String>(&self.image_id, None).await;
+
+        let endpoint = std::env::var("SURREALDB_ENDPOINT").unwrap_or_else(|_| "memory".to_owned());
+        let db = any::connect(endpoint).await.unwrap();
+        db.use_ns("namespace").use_db("database").await.unwrap();
+
+        let db = DB { db };
         
         //Create the Execution instructions
         let play_options_future = self.config.docker
@@ -195,11 +209,22 @@ impl Task {
                             one_shot: false
                         }),
                     );
+            let mut count=0;
             loop{
+                count+=1;
                 select!{
-                    Some(Ok(stats)) = stream.next() => {
-                        //TODO: Do something with this data (save it into an object)
-                        // trace!{"{:#?}", stats};
+                    Some(Ok(msg)) = stream.next() => {
+
+                        let stats = Stats {
+                            id: Some(count.to_string()),
+                            memory_stats: msg.memory_stats,
+                            cpu_stats: msg.cpu_stats,
+                            num_procs: msg.num_procs,
+                            created_at: None
+                        };
+
+                        // Add stats the the database;
+                        db.add_stat(stats).await;
                     },
                     _ = stream_token.cancelled()=>{
                         break;
