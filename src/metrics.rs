@@ -1,26 +1,19 @@
+use crate::db::{DB, Stats};
+use surrealdb::{
+    Surreal,
+    engine::any
+};
 
-
-enum MetricError {
-    APE,
-    RTE,
+struct MetricError{
+    max: i32,
+    median: i32,
+    min: i32,
+    rmse: i32,
+    sse: i32,
+    std: i32
 }
 
-pub struct APE{
-    pub max: u32,
-    pub median: u32,
-    pub min: u32,
-    pub rmse: u32,
-    pub sse: u32,
-    pub std: u32
+enum LocalizationMetric {
+    APE(MetricError),
+    RTE(MetricError)
 }
-
-pub struct RPE{
-    pub max: u32,
-    pub median: u32,
-    pub min: u32,
-    pub rmse: u32,
-    pub sse: u32,
-    pub std: u32
-}
-
-
