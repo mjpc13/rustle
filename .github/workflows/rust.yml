@@ -1,4 +1,4 @@
-name: Rust
+name: Rust CI
 
 on:
   push:
@@ -16,7 +16,13 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
+    - name: Install cargo-audit
+      run: cargo install cargo-audit
     - name: Build
       run: cargo build --verbose
     - name: Run tests
       run: cargo test --verbose
+    - name: Clippy
+      run: clippy --verbose -- -D warning
+    - name: Audit
+      run: cargo audit
