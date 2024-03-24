@@ -6,6 +6,7 @@ use bollard::models::{HostConfig,ResourcesUlimits};
 use bollard::container::StatsOptions;
 
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use std::{thread, time};
 
@@ -56,14 +57,14 @@ async fn pull_image(img_name: &str, docker: &Docker) -> Result<(), Box<dyn Error
 
 #[derive(Debug, Clone)]
 pub struct Config {
-    pub img_name: String,
-    pub dataset_path: String,
-    pub params_path: String,
+    pub img_name: Arc<str>,
+    pub dataset_path: Arc<str>,
+    pub params_path: Arc<str>,
     pub docker: Docker,
 }
 impl Config {
     // add code here
-    pub async fn new (img_name: String, dataset_path: String, params_path: String) -> Result<Config, &'static str> {
+    pub async fn new (img_name: Arc<str>, dataset_path: Arc<str>, params_path: Arc<str>) -> Result<Config, &'static str> {
 
         //TODO: Check if img_name//dataset_path//params_path are valid.
 
@@ -106,7 +107,7 @@ impl Task {
         });
 
         //Set up the binds config to mount these volumes inside our container (needs refactor)
-        let hm: HashMap<&str, &String> = HashMap::from([
+        let hm: HashMap<&str, &Arc<str>> = HashMap::from([
             ("/rustle/dataset/", &config.dataset_path),
             ("/rustle/config/", &config.params_path),
         ]);
@@ -124,7 +125,7 @@ impl Task {
         
         //Create the running config (cmd to execute, env variables, volumes to mount, etc...)
         let config_docker = container::Config {
-            image: Some(config.img_name.clone()),
+            image: Some(config.img_name.to_string()),
             cmd: Some(vec!["roscore".to_string()]),
             host_config: Some(HostConfig {
                 binds: Some(path_mounts),
