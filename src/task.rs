@@ -1,20 +1,26 @@
-use bollard::Docker;
-use bollard::image::CreateImageOptions;
-use bollard::container;
-use bollard::exec::{CreateExecOptions, StartExecResults};
-use bollard::models::{HostConfig,ResourcesUlimits};
-use bollard::container::StatsOptions;
+use bollard::{Docker,
+    image::{CreateImageOptions},
+    container,
+    exec::{CreateExecOptions, StartExecResults},
+    models::{HostConfig, ResourcesUlimits},
+    container::{StatsOptions}
+};
 
-use std::collections::HashMap;
-use std::sync::Arc;
-
-use std::{thread, time};
+use std::{
+    collections::HashMap,
+    sync::Arc,
+    thread,
+    time,
+    error::Error,
+    fmt,
+    fs::{OpenOptions,File},
+    io::Write,
+    path::Path
+};
 
 use tokio;
 use tokio::select;
 use tokio_util::sync::CancellationToken;
-
-use std::error::Error;
 
 use futures_util::stream::{StreamExt};
 use futures_util::future;
@@ -24,6 +30,9 @@ use surrealdb::{
     Surreal,
     engine::any
 };
+
+use crate::errors::RosError;
+use crate::ros_msgs::{Header, Pose, Twist, Odometry};
 
 
 //Logs
@@ -64,6 +73,7 @@ pub struct Config {
 }
 impl Config {
     // add code here
+    // TODO: Change the return to Result<Config, RosError>
     pub async fn new (img_name: Arc<str>, dataset_path: Arc<str>, params_path: Arc<str>) -> Result<Config, &'static str> {
 
         //TODO: Check if img_name//dataset_path//params_path are valid.
@@ -86,7 +96,6 @@ impl Config {
 
         Ok(Config{img_name, dataset_path, params_path, docker})
     }
-
 }
 
 pub struct Task{
@@ -152,7 +161,7 @@ impl Task {
         let ten_sec = time::Duration::from_secs(1);
         thread::sleep(ten_sec);
 
-        //TODO: redo how I am calling the database
+        //TODO: Test Code. Redo how I am calling the database
         let endpoint = std::env::var("SURREALDB_ENDPOINT").unwrap_or_else(|_| "memory".to_owned());
         let db = any::connect(endpoint).await.unwrap();
         db.use_ns("namespace").use_db("database").await.unwrap();
@@ -161,8 +170,8 @@ impl Task {
 
         let commands: Vec<_> = vec![
             "roslaunch rustle rustle.launch --wait",
-            "rosbag play --clock /rustle/dataset/*.bag"
-            // "rosbag play -d 5 --clock -u 10 /rustle/dataset/*.bag"
+            // "rosbag play --clock /rustle/dataset/*.bag"
+            "rosbag play -d 5 --clock -u 20 /rustle/dataset/*.bag"
         ];
 
         let execs: Vec<_> = future::try_join_all(commands
@@ -267,7 +276,8 @@ impl Task {
 
         //spawn a task to extract the results and add them to DB
         //TODO: Dont hardcode this
-        let rec_cmd = vec!["/lio_sam/mapping/odometry", "/lio_sam/mapping/odometry_incremental"];  
+        // let rec_cmd = vec!["/lio_sam/mapping/odometry", "/lio_sam/mapping/odometry_incremental"];  
+        let rec_cmd = vec!["/lio_sam/mapping/odometry_incremental"];  
         let res_tasks: Vec<_> = rec_cmd
             .iter()
             .map( |s| {
@@ -310,6 +320,21 @@ impl Task {
         // to stop
         tokio::join!(roslaunch_task);
 
+        
+        let rec_cmd = vec!["/lio_sam/mapping/odometry_incremental"];  
+        let write_results: Vec<_> = rec_cmd
+            .into_iter()
+            .map( |s| {
+                let db_clone = db.clone();
+                tokio::spawn(async move {
+                    let stuff = db_clone.query_odom(s).await.expect("Unable to find odometry data on table!");
+                    Self::write_result(stuff, s);
+                })
+            })
+            .collect();
+
+        let result = futures_util::future::join_all(write_results).await;
+
     }
 
     async fn record_task(docker: Docker, image_id: &str, db: DB, topic: &str, record_token: CancellationToken){
@@ -337,10 +362,11 @@ impl Task {
 
                             //Split msg by "\n" if the second field is not empty than we are
                             //receiving the first message;
-
-                            //TODO: Add odometry messages into the database
-                            
-                            // warn!("{}", msg)
+                            //TODO: Add custom ROSError here
+                            match Self::convert_to_odom(msg.to_string()){
+                                Ok(odom) => db.add_odom(odom, topic).await,
+                                Err(error) => warn!("{}", error),
+                            }
 
                         },
                         _ = record_token.cancelled()=>{
@@ -364,8 +390,65 @@ impl Task {
                         }
                     }
                 }
+
             } else {
                 warn!("STREAM ENDED");
             }
     }
+
+    fn convert_to_odom(msg: String) -> Result<Odometry, RosError> {
+
+        let ros_msg: Vec<_> = msg.split("\n")
+            // .filter(|&s| s.chars().next().map(char::is_numeric).unwrap_or(false))
+            .collect();
+
+
+        warn!("ROS Message: {:?}", ros_msg);
+        if !ros_msg.is_empty() {
+            
+            let message_list: Vec<_> = ros_msg
+                .iter()
+                .next().expect("Was empty")
+                .split(",")
+                .collect();
+
+            if message_list.len() >= 3{
+                //TODO: Change this "default stuff"
+                let odom: Odometry = Odometry::default();
+                let res: Odometry = odom.parse(message_list)?;
+
+                warn!("{}", res);
+
+                return Ok(res)
+            }
+
+        }
+        return Err(RosError::FormatError{name: msg.into()})
+
+    }
+
+    fn write_result(data: Vec<Odometry>, name: &str){
+
+        let path_name = format!("/home/mjpc13/Documents/rustle/results{}.txt", name.replace("/", "-"));
+        
+        if Path::new(&path_name).is_file() == false{
+            File::create(&path_name);
+        }
+
+        let mut file = OpenOptions::new()
+            .write(true)
+            .append(true)
+            .create(true)
+            .open(&path_name).unwrap();
+
+        
+        let _: Vec<_> = data.iter()
+            .map(|o|{
+                if let Err(e) = writeln!(file, "{}", o ){
+                    eprintln!("Couldn't write to file: {}", e);
+                }
+            })
+            .collect();
+    }
+
 }

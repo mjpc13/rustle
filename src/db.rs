@@ -2,7 +2,7 @@ use anyhow::{anyhow, Result};
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-
+use std::fmt::Debug;
 
 use surrealdb::{
     sql::{Thing, Array, Object, Value, to_value},
@@ -12,6 +12,9 @@ use surrealdb::{
 };
 
 use bollard::container::{MemoryStats, CPUStats};
+use crate::ros_msgs::{Pose, Twist, Header, Odometry};
+
+use log::{info};
 
 // =====DATA MODELS=====
 #[derive(Debug, Serialize, Deserialize)]
@@ -49,7 +52,6 @@ pub struct DB{
     pub db: Surreal<Any>,
 }
 impl DB{
-
     pub async fn add_stat(&self, mut data: Stats){
         
         data.created_at = Some(Utc::now());
@@ -63,7 +65,6 @@ impl DB{
     }
 
     pub async fn query_stats(&self) -> Response {
-       
         //TODO: return an array of Stats instead of the Response
         //TODO: Probably add a more relevant query
 
@@ -72,6 +73,24 @@ impl DB{
             .bind(("table", "stat"))
             .await.unwrap();
         groups
+    }
+    pub async fn add_odom(&self, mut data: Odometry, table: &str)
+    {
+        let create: Vec<Record> = self.db.create(table)
+            .content(data)
+            .await
+            .unwrap();
+    }
 
+    pub async fn query_odom(&self, table: &str) -> Result<Vec<Odometry>, surrealdb::Error> 
+    {    
+        let mut response = self.db
+            .query("SELECT * FROM type::table($table)")
+            .bind(("table", table))
+            .await.unwrap();
+
+        let odoms: Vec<_> = response.take(0)?;
+        
+        Ok(odoms)
     }
 }

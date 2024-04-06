@@ -4,7 +4,6 @@ use rustle::task::Config;
 use rustle::task::Task;
 // Use a connection function described above
 
-
 use env_logger::init;
 
 #[tokio::main]
