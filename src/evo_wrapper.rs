@@ -27,7 +27,7 @@ pub struct EvoArgs{
     scale: bool,
     n_to_align: Option<f32>,
     align_origin: bool,
-    //plot: PlotArg
+    plot: PlotArg
 }
 
 impl EvoArgs {
@@ -51,27 +51,30 @@ impl EvoArgs {
                         match s{
                             "align" => commands.push(" -a".to_string()),
                             "scale" => commands.push(" -s".to_string()),
-                            "align_origin" => commands.push(" --align_origin"),
+                            "align_origin" => commands.push(" --align_origin".to_string()),
                             _ => (),
                         }
                     }
                 } else if o.is::<PoseRelation>(){ 
                     match o.downcast_ref::<PoseRelation>().unwrap(){
-                        PoseRelation::Full => commands.push(" -r full"),
-                        PoseRelation::TransPart => commands.push(" -r trans_part"),
-                        PoseRelation::RotPart => commands.push(" -r rot_part"),
-                        PoseRelation::Angle(AngleUnit::Degree) => commands.push(" -r angle_deg"),
-                        PoseRelation::Angle(AngleUnit::Radian) => commands.push(" -r angle_rad"),
-                        PoseRelation::PointDistance => commands.push(" -r point_distance"),
+                        PoseRelation::Full => commands.push(" -r full".to_string()),
+                        PoseRelation::TransPart => commands.push(" -r trans_part".to_string()),
+                        PoseRelation::RotPart => commands.push(" -r rot_part".to_string()),
+                        PoseRelation::Angle(AngleUnit::Degree) => commands.push(" -r angle_deg".to_string()),
+                        PoseRelation::Angle(AngleUnit::Radian) => commands.push(" -r angle_rad".to_string()),
+                        PoseRelation::PointDistance => commands.push(" -r point_distance".to_string()),
                         _ => (),
                     }
                 } else{
                     println!("WHAT THE HELLLL")
                 }
-
             }).collect();
+
+        let plot_cmd: Vec<String> = self.plot.get_commands();
+
+        commands.extend(plot_cmd);
         
-        todo!();
+        return commands;
     }
 }
 
@@ -87,7 +90,7 @@ impl Default for EvoArgs {
             scale: true,
             n_to_align: None,
             align_origin: true,
-            //plot: PlotArg::default()
+            plot: PlotArg::default()
         }
     }
 }
@@ -153,13 +156,61 @@ enum PlotMode{
     XYZ
 }
 
+#[derive(Iterable)]
 pub struct PlotArg{
     mode: PlotMode,//xy,xz,yx,yz,zx,zy,xyz
     x_dimension: AxisUnit,//index,seconds,distances
     colormap_max: Option<u32>,
     colormap_min: Option<u32>,
     colormap_max_percentile: Option<u32>, //overrides plot_colormap_max
-    path: String,//
+    path: Option<String>,//
+}
+
+impl PlotArg {
+    fn get_commands(&self) -> Vec<String>{
+        
+        let mut commands: Vec<String> = Vec::new();
+
+        let test: Vec<_> = self
+            .iter()
+            .map( | (s, o) | {
+                
+                //This handles all the Option<u32>
+                if o.is::<Option<u32>>(){
+                    match o.downcast_ref::<Option<u32>>().unwrap(){
+                        Some(val) => commands.push(format!(" --plot_{s} {val}")),
+                        None => (),
+                    }
+                } else if o.is::<String>(){ //This handles all the bools
+                    match o.downcast_ref::<Option<String>>().unwrap(){
+                        Some(val) => commands.push(val.to_string()),
+                        None => (),
+                    }
+                } else if o.is::<PlotMode>(){ 
+                    match o.downcast_ref::<PlotMode>().unwrap(){
+                        PlotMode::XY => commands.push(" --plot_mode=xy".to_string()),
+                        PlotMode::XZ => commands.push(" --plot_mode=xz".to_string()),
+                        PlotMode::YX => commands.push(" --plot_mode=yx".to_string()),
+                        PlotMode::YZ => commands.push(" --plot_mode=yz".to_string()),
+                        PlotMode::ZX => commands.push(" --plot_mode=zx".to_string()),
+                        PlotMode::ZY => commands.push(" --plot_mode=zy".to_string()),
+                        PlotMode::XYZ => commands.push(" --plot_mode=xyz".to_string()),
+                        _ => (),
+                    }
+                } else if o.is::<AxisUnit>(){ 
+                    match o.downcast_ref::<AxisUnit>().unwrap(){
+                        AxisUnit::Index => commands.push(" --plot_x_dimention index".to_string()),
+                        AxisUnit::Second => commands.push(" --plot_x_dimention second".to_string()),
+                        AxisUnit::Distance => commands.push(" --plot_x_dimention distance".to_string()),
+                        _ => (),
+                    }
+                } else{
+                    println!("WHAT THE HELLLL")
+                }
+            }).collect();
+        
+        return commands;
+    }
 }
 
 impl Default for PlotArg {
@@ -170,7 +221,7 @@ impl Default for PlotArg {
             colormap_max: None,
             colormap_min: None,
             colormap_max_percentile: None, //overrides plot_colormap_max
-            path: String::from("SomeString"),//
+            path: None,//
         }
     }
 }
@@ -181,7 +232,7 @@ pub fn evo(groundtruth: &str, data: &str, args: EvoArgs){
         .arg("tum")
         .arg(groundtruth)
         .arg(data)
-        //.args(args)
+        .args(args.get_commands().iter())
         .output()
         .unwrap();
 
