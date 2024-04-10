@@ -47,7 +47,7 @@ struct Record{
 
 
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct DB{
     pub db: Surreal<Any>,
 }

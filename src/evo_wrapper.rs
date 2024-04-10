@@ -1,84 +1,194 @@
-use pyo3::{prelude::*, types::{IntoPyDict, PyModule}};
+use core::f32;
+use std::process::Command;
+use std::fmt;
+use log::warn;
+use struct_iterable::Iterable;
 
-pub fn test() -> PyResult<()>{
+enum AngleUnit{
+    Degree,
+    Radian
+}
 
-    Python::with_gil(|py| {
-        // let builtins = PyModule::import(py, "builtins")?;
-        // let total: i32 = builtins
-        //     .getattr("sum")?
-        //     .call1((vec![1, 2, 3],))?
-        //     .extract()?;
+enum PoseRelation{
+    Full,
+    TransPart,
+    RotPart,
+    Angle(AngleUnit),
+    PointDistance
+}
+#[derive(Iterable)]
+pub struct EvoArgs{
+    t_max_diff: Option<f32>,
+    t_offset: Option<f32>,
+    t_start: Option<f32>,
+    t_end: Option<f32>,
+    pose_relation: PoseRelation,// full,trans_part,rot_part,angle_deg,angle_rad,point_distance
+    align: bool,
+    scale: bool,
+    n_to_align: Option<f32>,
+    align_origin: bool,
+    //plot: PlotArg
+}
 
-        let numpy = PyModule::import(py, "numpy")?;
+impl EvoArgs {
+    fn get_commands(&self) -> Vec<String>{
+        
+        let mut commands: Vec<String> = Vec::new();
 
-        let total2: String = numpy.getattr("__version__")?
-                               .extract()?;
+        let test: Vec<_> = self
+            .iter()
+            .map( | (s, o) | {
+                
+                //This handles all the Option<f32>
+                if o.is::<Option<f32>>(){
+                    match o.downcast_ref::<Option<f32>>().unwrap(){
+                        Some(val) => commands.push(format!(" --{s} {val}")),
+                        None => (),
+                    }
+                } else if o.is::<bool>(){ //This handles all the bools
+                    let val = o.downcast_ref::<bool>().unwrap();
+                    if *val{
+                        match s{
+                            "align" => commands.push(" -a".to_string()),
+                            "scale" => commands.push(" -s".to_string()),
+                            "align_origin" => commands.push(" --align_origin"),
+                            _ => (),
+                        }
+                    }
+                } else if o.is::<PoseRelation>(){ 
+                    match o.downcast_ref::<PoseRelation>().unwrap(){
+                        PoseRelation::Full => commands.push(" -r full"),
+                        PoseRelation::TransPart => commands.push(" -r trans_part"),
+                        PoseRelation::RotPart => commands.push(" -r rot_part"),
+                        PoseRelation::Angle(AngleUnit::Degree) => commands.push(" -r angle_deg"),
+                        PoseRelation::Angle(AngleUnit::Radian) => commands.push(" -r angle_rad"),
+                        PoseRelation::PointDistance => commands.push(" -r point_distance"),
+                        _ => (),
+                    }
+                } else{
+                    println!("WHAT THE HELLLL")
+                }
 
-        // assert_eq!(total, 6);
-        println!("{}", total2);
-        Ok(())
-    })
+            }).collect();
+        
+        todo!();
+    }
+}
 
+impl Default for EvoArgs {
+    fn default() -> EvoArgs {
+        EvoArgs{
+            t_max_diff: None,
+            t_offset: None,
+            t_start: None,
+            t_end: None,
+            pose_relation: PoseRelation::Full,// full,trans_part,rot_part,angle_deg,angle_rad,point_distance
+            align: true,
+            scale: true,
+            n_to_align: None,
+            align_origin: true,
+            //plot: PlotArg::default()
+        }
+    }
+}
 
-    // Python::with_gil(|py| {
-    //     let sys = py.import("sys")?;
-    //     let version: String = sys.getattr("version")?.extract()?;
-    //
-    //     let locals = [("os", py.import("os")?)].into_py_dict(py);
-    //     let code = "os.getenv('USER') or os.getenv('USERNAME') or 'Unknown'";
-    //     let user: String = py.eval(code, None, Some(&locals))?.extract()?;
-    //
-    //     println!("Hello {}, I'm Python {}", user, version);
-    //     Ok(())
-    // })
+impl fmt::Display for EvoArgs {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 
+        let mut string = String::new();
+
+        let test: Vec<_> = self
+            .iter()
+            .map( | (s, o) | {
+                
+                //This handles all the Option<f32>
+                if o.is::<Option<f32>>(){
+                    match o.downcast_ref::<Option<f32>>().unwrap(){
+                        Some(val) => string.push_str(&format!(" --{s} {val}")),
+                        None => (),
+                    }
+                } else if o.is::<bool>(){ //This handles all the bools
+                    let val = o.downcast_ref::<bool>().unwrap();
+                    if *val{
+                        match s{
+                            "align" => string.push_str(" -a"),
+                            "scale" => string.push_str(" -s"),
+                            "align_origin" => string.push_str(" --align_origin"),
+                            _ => (),
+                        }
+                    }
+                } else if o.is::<PoseRelation>(){ 
+                    match o.downcast_ref::<PoseRelation>().unwrap(){
+                        PoseRelation::Full => string.push_str(" -r full"),
+                        PoseRelation::TransPart => string.push_str(" -r trans_part"),
+                        PoseRelation::RotPart => string.push_str(" -r rot_part"),
+                        PoseRelation::Angle(AngleUnit::Degree) => string.push_str(" -r angle_deg"),
+                        PoseRelation::Angle(AngleUnit::Radian) => string.push_str(" -r angle_rad"),
+                        PoseRelation::PointDistance => string.push_str(" -r point_distance"),
+                        _ => (),
+                    }
+                } else{
+                    println!("WHAT THE HELLLL")
+                }
+
+            }).collect();
+
+        write!(f, "{}", string)
+    }
+}
+
+enum AxisUnit{
+    Index,
+    Second,
+    Distance
+}
+
+enum PlotMode{
+    XY,
+    XZ,
+    YX,
+    YZ,
+    ZX,
+    ZY,
+    XYZ
+}
+
+pub struct PlotArg{
+    mode: PlotMode,//xy,xz,yx,yz,zx,zy,xyz
+    x_dimension: AxisUnit,//index,seconds,distances
+    colormap_max: Option<u32>,
+    colormap_min: Option<u32>,
+    colormap_max_percentile: Option<u32>, //overrides plot_colormap_max
+    path: String,//
+}
+
+impl Default for PlotArg {
+    fn default() -> PlotArg {
+        PlotArg{
+            mode: PlotMode::XYZ,//xy,xz,yx,yz,zx,zy,xyz
+            x_dimension: AxisUnit::Second,//index,seconds,distances
+            colormap_max: None,
+            colormap_min: None,
+            colormap_max_percentile: None, //overrides plot_colormap_max
+            path: String::from("SomeString"),//
+        }
+    }
 }
 
 
-// pub fn run_slam_benchmark() -> PyResult<()> {
-//     Python::with_gil(|py| {
-//         // Importing required modules
-//         let evo_core = PyModule::new(py, "evo.core")?;
-//         let metrics = PyModule::new(py, "evo.core.metrics")?;
-//         let units = PyModule::new(py, "evo.core.units")?;
-//         let log = PyModule::new(py, "evo.tools.log")?;
-//         let tools = PyModule::new(py, "evo.tools")?;
-//         let file_interface = PyModule::new(py, "evo.tools.file_interface")?;
-//         let sync = PyModule::new(py, "evo.core.sync")?;
-//
-//         // Setting up logging
-//         log.setattr("configure_logging", (true, true, false))?;
-//
-//         // Reading trajectory files
-//         let ref_file = "../test/data/freiburg1_xyz-groundtruth.txt";
-//         let est_file = "../test/data/freiburg1_xyz-rgbdslam_drift.txt";
-//
-//         let traj_ref: PyObject = file_interface.call1("read_tum_trajectory_file", (ref_file,))?.to_object(py)?;
-//         let traj_est: PyObject = file_interface.call1("read_tum_trajectory_file", (est_file,))?.to_object(py)?;
-//
-//         // Synchronizing trajectories
-//         let max_diff = 0.01;
-//         let associated_traj = sync.call1("associate_trajectories", (traj_ref, traj_est, max_diff))?;
-//
-//         // Aligning trajectories
-//         let traj_est_aligned: PyObject = associated_traj.getattr("align")((traj_ref, false, false))?;
-//
-//         // Configuring pose relation and trajectory data
-//         let pose_relation: PyObject = metrics.getattr("PoseRelation")?.getattr("translation_part")?;
-//         let use_aligned_trajectories = false;
-//
-//         let data = if use_aligned_trajectories {
-//             (traj_ref, traj_est_aligned)
-//         } else {
-//             (traj_ref, traj_est)
-//         };
-//
-//         // Calculating APE
-//         let ape_metric: PyObject = metrics.getattr("APE")?.call1((pose_relation,))?;
-//         ape_metric.call1("process_data", (data,))?;
-//
-//         Ok(())
-//     })
-// }
-//
-//
+pub fn evo(groundtruth: &str, data: &str, args: EvoArgs){
+    let output = Command::new("evo_ape")
+        .arg("tum")
+        .arg(groundtruth)
+        .arg(data)
+        //.args(args)
+        .output()
+        .unwrap();
+
+    println!("STDOUT {}", String::from_utf8_lossy(&output.stdout));
+    println!("========================================");
+    println!("STDERR {}", String::from_utf8_lossy(&output.stderr));
+
+    //To parse the result I must subdivide with /n (the second index will be the Aligment,then max, min,...)
+
+}
