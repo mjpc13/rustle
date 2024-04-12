@@ -7,3 +7,7 @@ custom_error!{pub RosError
     EmptyCovariance{} = "The covariance matrix is empty",
 }
 
+custom_error!{pub EvoError
+    CommandError{stderr: Arc<str>} = "Could not run evo tool: {stderr}",
+}
+

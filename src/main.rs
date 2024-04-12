@@ -20,14 +20,19 @@ async fn main() {
     //let test = Config::new("mjpc13/rustle:lio-sam".into(), dataset_path.into(), params_path.into()).await;
     //let task1: Task = Task::new(test.unwrap()).await;
 
-    //task1.run().await;
+    //task1.run().await; //Needs to returs a struct with Vec<Stats> and Vec<Odometry>...
 
+
+
+    
     let groundtruth = "/home/mario/Documents/rustle/test/evo/groundtruth.txt";
     let data = "/home/mario/Documents/rustle/test/evo/data.txt";
 
     let evo_args = EvoArgs::default();
     println!("{}", evo_args);
 
-    evo_wrapper::evo(groundtruth, data, EvoArgs::default());
+    let m = evo_wrapper::evo_ape(groundtruth, data, EvoArgs::default());
+
+    println!("{:?}", m.unwrap());
 
 }

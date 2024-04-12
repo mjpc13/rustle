@@ -1,8 +1,10 @@
 use core::f32;
 use std::process::Command;
 use std::fmt;
-use log::warn;
+use log::{warn, trace};
 use struct_iterable::Iterable;
+
+use crate::{errors::{EvoError, RosError}, metrics::Metrics};
 
 enum AngleUnit{
     Degree,
@@ -16,18 +18,19 @@ enum PoseRelation{
     Angle(AngleUnit),
     PointDistance
 }
+
 #[derive(Iterable)]
 pub struct EvoArgs{
     t_max_diff: Option<f32>,
     t_offset: Option<f32>,
     t_start: Option<f32>,
     t_end: Option<f32>,
-    pose_relation: PoseRelation,// full,trans_part,rot_part,angle_deg,angle_rad,point_distance
+    pose_relation: Option<PoseRelation>,// full,trans_part,rot_part,angle_deg,angle_rad,point_distance
     align: bool,
     scale: bool,
     n_to_align: Option<f32>,
     align_origin: bool,
-    plot: PlotArg
+    plot: Option<PlotArg>
 }
 
 impl EvoArgs {
@@ -42,38 +45,46 @@ impl EvoArgs {
                 //This handles all the Option<f32>
                 if o.is::<Option<f32>>(){
                     match o.downcast_ref::<Option<f32>>().unwrap(){
-                        Some(val) => commands.push(format!(" --{s} {val}")),
+                        Some(val) => commands.push(format!("--{s} {val}")),
                         None => (),
                     }
                 } else if o.is::<bool>(){ //This handles all the bools
                     let val = o.downcast_ref::<bool>().unwrap();
                     if *val{
                         match s{
-                            "align" => commands.push(" -a".to_string()),
-                            "scale" => commands.push(" -s".to_string()),
-                            "align_origin" => commands.push(" --align_origin".to_string()),
+                            "align" => commands.push("-a".to_string()),
+                            "scale" => commands.push("-s".to_string()),
+                            "align_origin" => commands.push("--align_origin".to_string()),
                             _ => (),
                         }
                     }
-                } else if o.is::<PoseRelation>(){ 
-                    match o.downcast_ref::<PoseRelation>().unwrap(){
-                        PoseRelation::Full => commands.push(" -r full".to_string()),
-                        PoseRelation::TransPart => commands.push(" -r trans_part".to_string()),
-                        PoseRelation::RotPart => commands.push(" -r rot_part".to_string()),
-                        PoseRelation::Angle(AngleUnit::Degree) => commands.push(" -r angle_deg".to_string()),
-                        PoseRelation::Angle(AngleUnit::Radian) => commands.push(" -r angle_rad".to_string()),
-                        PoseRelation::PointDistance => commands.push(" -r point_distance".to_string()),
-                        _ => (),
+                } else if o.is::<Option<PoseRelation>>(){ 
+                    match o.downcast_ref::<Option<PoseRelation>>().unwrap(){
+                        Some(val) => {
+                            match val{
+                                PoseRelation::Full => commands.push("-r full".to_string()),
+                                PoseRelation::TransPart => commands.push("-r trans_part".to_string()),
+                                PoseRelation::RotPart => commands.push("-r rot_part".to_string()),
+                                PoseRelation::Angle(AngleUnit::Degree) => commands.push("-r angle_deg".to_string()),
+                                PoseRelation::Angle(AngleUnit::Radian) => commands.push("-r angle_rad".to_string()),
+                                PoseRelation::PointDistance => commands.push("-r point_distance".to_string())                            }
+                        },
+                        None => (),
                     }
+
                 } else{
-                    println!("WHAT THE HELLLL")
+                    println!("{s:}");
                 }
             }).collect();
-
-        let plot_cmd: Vec<String> = self.plot.get_commands();
-
-        commands.extend(plot_cmd);
         
+        match &self.plot{
+            Some(p) =>{
+                let plot_cmd: Vec<String> = p.get_commands();
+                commands.extend(plot_cmd);
+            },
+            None => ()
+        }
+
         return commands;
     }
 }
@@ -85,12 +96,12 @@ impl Default for EvoArgs {
             t_offset: None,
             t_start: None,
             t_end: None,
-            pose_relation: PoseRelation::Full,// full,trans_part,rot_part,angle_deg,angle_rad,point_distance
+            pose_relation: None,// full,trans_part,rot_part,angle_deg,angle_rad,point_distance
             align: true,
             scale: true,
             n_to_align: None,
             align_origin: true,
-            plot: PlotArg::default()
+            plot: None
         }
     }
 }
@@ -131,7 +142,7 @@ impl fmt::Display for EvoArgs {
                         _ => (),
                     }
                 } else{
-                    println!("WHAT THE HELLLL")
+                    println!("{s:}")
                 }
 
             }).collect();
@@ -227,19 +238,30 @@ impl Default for PlotArg {
 }
 
 
-pub fn evo(groundtruth: &str, data: &str, args: EvoArgs){
+pub fn evo_ape(groundtruth: &str, data: &str, args: EvoArgs) -> Result<Metrics, EvoError>{
     let output = Command::new("evo_ape")
         .arg("tum")
         .arg(groundtruth)
         .arg(data)
-        .args(args.get_commands().iter())
+        .args(args.get_commands())
         .output()
         .unwrap();
 
-    println!("STDOUT {}", String::from_utf8_lossy(&output.stdout));
-    println!("========================================");
-    println!("STDERR {}", String::from_utf8_lossy(&output.stderr));
+    let stdout = std::str::from_utf8(&output.stdout).unwrap();
+    let stderr = std::str::from_utf8(&output.stderr).unwrap();
+    
+    trace!("========================================");
+    trace!("STDOUT {}", stdout);
+    trace!("========================================");
+    trace!("STDERR {}", stderr);
+    trace!("========================================");
 
-    //To parse the result I must subdivide with /n (the second index will be the Aligment,then max, min,...)
+    if stderr.is_empty() && !stdout.is_empty(){
 
+        return Ok(Metrics::parse(stdout)?);
+
+        //parse
+    } else{
+        return Err(EvoError::CommandError { stderr: stderr.into() });
+    }
 }
