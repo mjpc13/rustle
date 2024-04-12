@@ -72,6 +72,7 @@ struct InnerConfig {
     dataset_path: String,
     params_path: String,
     docker: Docker,
+    topics: Vec<String>, //Should be &str, but lifetime issues, look at this later
     db: DB,
     dir: TempDir
 }
@@ -86,7 +87,7 @@ pub struct Config {
 impl Config {
     // add code here
     // TODO: Change the return to Result<Config, RosError>
-    pub async fn new (img_name: String, dataset_path: String, params_path: String) -> Result<Config, &'static str> {
+    pub async fn new (img_name: String, dataset_path: String, params_path: String, topics: Vec<String>) -> Result<Config, &'static str> {
 
         //TODO: Check if img_name//dataset_path//params_path are valid.
         let docker = Docker::connect_with_local_defaults().unwrap();
@@ -113,7 +114,7 @@ impl Config {
 
         let dir = TempDir::new().unwrap();
 
-        let config: InnerConfig = InnerConfig{img_name, dataset_path, params_path, docker: docker, db, dir};
+        let config: InnerConfig = InnerConfig{img_name, dataset_path, params_path, topics, docker: docker, db, dir};
         let config_arc = Arc::new(config);
 
         Ok(Config{config: config_arc})
@@ -140,6 +141,9 @@ impl Config {
     }
     fn get_dir(&self) -> &TempDir {
         &self.config.dir
+    }
+    fn get_topics(&self) -> Vec<String> {
+        self.config.topics.clone()
     }
 }
 
@@ -206,13 +210,6 @@ impl Task {
         //Wait 1s for roscore to start
         let ten_sec = time::Duration::from_secs(1);
         thread::sleep(ten_sec);
-
-        //TODO: Test Code. Redo how I am calling the database
-        // let endpoint = std::env::var("SURREALDB_ENDPOINT").unwrap_or_else(|_| "memory".to_owned());
-        // let db = any::connect(endpoint).await.unwrap();
-        // db.use_ns("namespace").use_db("database").await.unwrap();
-        // let db = DB { db };
-
 
         let commands: Vec<_> = vec![
             "roslaunch rustle rustle.launch --wait",
@@ -322,9 +319,12 @@ impl Task {
 
         //spawn a task to extract the results and add them to DB
         //TODO: Dont hardcode this
-        // let rec_cmd = vec!["/lio_sam/mapping/odometry", "/lio_sam/mapping/odometry_incremental"];  
-        let rec_cmd = vec!["/lio_sam/mapping/odometry_incremental"];  
-        let res_tasks: Vec<_> = rec_cmd
+        let rec_cmd = vec!["/lio_sam/mapping/odometry", "/lio_sam/mapping/odometry_incremental"];  
+        //let rec_cmd = vec!["/lio_sam/mapping/odometry_incremental"];  
+        
+        
+        
+        let res_tasks: Vec<_> = self.config.get_topics()
             .into_iter()
             .map( |s| {
                 //TODO: TO Arc<Mutex<T>> OR NOT Arc<Mutex<T>>?
@@ -332,7 +332,7 @@ impl Task {
                 let id = self.image_id.clone();
                 let token = token.clone();
                 tokio::spawn(async move {
-                    Self::record_task(config_clone, &id, s, token).await;
+                    Self::record_task(config_clone, &id, &s, token).await;
                 })
             })
             .collect();
@@ -364,7 +364,7 @@ impl Task {
         tokio::join!(roslaunch_task);
 
         
-        let rec_cmd = vec!["/lio_sam/mapping/odometry_incremental"];  
+        let rec_cmd = vec!["/lio_sam/mapping/odometry_incremental"];
         let write_results: Vec<_> = rec_cmd
             .into_iter()
             .map( |s| {
@@ -378,6 +378,9 @@ impl Task {
             .collect();
 
         let result = futures_util::future::join_all(write_results).await;
+
+
+        //Return the N results;
 
     }
 
@@ -404,8 +407,6 @@ impl Task {
                     select!{
                         Some(Ok(msg)) = output.next() => {
 
-                            //Split msg by "\n" if the second field is not empty than we are
-                            //receiving the first message;
                             //TODO: Add custom ROSError here
                             match Self::convert_to_odom(msg.to_string()){
                                 Ok(odom) => config.get_db().add_odom(odom, topic).await,
