@@ -12,38 +12,13 @@ use surrealdb::{
 };
 
 use bollard::container::{MemoryStats, CPUStats};
-use crate::ros_msgs::{Pose, Twist, Header, Odometry};
-
-use log::{info};
-
-// =====DATA MODELS=====
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Stats {
-    pub uid: Option<u32>,
-    pub memory_stats: MemoryStats,
-    pub cpu_stats: CPUStats,
-    pub num_procs: u32,
-    pub created_at: Option<DateTime<Utc>>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Metrics{
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub id: Option<String>,
-    pub ape: u32,
-    pub rte: u32,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub created_at: Option<DateTime<Utc>>,
-}
+use crate::{metrics::Stats, ros_msgs::{Header, Odometry, Pose, Twist}};
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Record{
     #[allow(dead_code)]
     id: Thing
 }
-// =====DATA MODELS=====
-
-
 
 #[derive(Debug, Clone)]
 pub struct DB{

@@ -1,5 +1,10 @@
 use bollard::{API_DEFAULT_VERSION, Docker};
+
+
 use rustle::evo_wrapper;
+
+
+
 // use rustle::evo_wrapper::EvoArgs;
 use tokio;
 
@@ -10,7 +15,6 @@ use rustle::task::Task;
 use surrealdb::{
     engine::any
 };
-
 
 use env_logger::init;
 
@@ -27,12 +31,6 @@ async fn main() {
        "/lio_sam/mapping/odometry_incremental".to_string()
     ];
 
-    //Supply Docker socket AND Database
-    
-    //let endpoint = std::env::var("SURREALDB_ENDPOINT").unwrap_or_else(|_| "memory".to_owned());
-    //let db = any::connect(endpoint).await.unwrap();
-    //db.use_ns("namespace").use_db("database").await.unwrap();
-
     let test = Config::new(
         "mjpc13/rustle:lio-sam".into(), 
         dataset_path.into(), 
@@ -43,10 +41,7 @@ async fn main() {
     ).await;
     
     let task1: Task = Task::new(test.unwrap()).await;
-
-    let result = task1.run().await.unwrap(); //Needs to returs a struct with Vec<Stats> and Vec<Odometry>...
-
-    println!("{:#?}", result.odoms);
+    let _result = task1.run().await.unwrap();
 
     // let groundtruth = "/home/mario/Documents/rustle/test/evo/groundtruth.txt";
     // let data = "/home/mario/Documents/rustle/test/evo/data.txt";

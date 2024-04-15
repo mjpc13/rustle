@@ -1,4 +1,8 @@
-use crate::{db::{Stats, DB}, errors::{EvoError, RosError}};
+use crate::{errors::{EvoError, RosError}};
+use serde::{Deserialize, Serialize};
+use bollard::container::{MemoryStats, CPUStats};
+use chrono::{DateTime, Utc};
+
 use surrealdb::{
     Surreal,
     engine::any
@@ -11,7 +15,16 @@ enum LocalizationMetric {
     RTE(Metrics)
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Stats {
+    pub uid: Option<u32>,
+    pub memory_stats: MemoryStats,
+    pub cpu_stats: CPUStats,
+    pub num_procs: u32,
+    pub created_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Metrics{
     max: f32,
     median: f32,

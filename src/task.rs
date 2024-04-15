@@ -7,7 +7,14 @@ use bollard::{Docker,
 };
 
 use std::{
-    collections::HashMap, error::Error, fmt, fs::{File, OpenOptions}, io::Write, path::Path, sync::{Arc, Mutex}, thread, time
+    collections::HashMap, 
+    error::Error, 
+    fmt, 
+    fs::{File, OpenOptions}, 
+    io::Write, path::Path, 
+    sync::{Arc, Mutex}, 
+    thread, 
+    time
 };
 
 use tokio;
@@ -18,7 +25,9 @@ use futures_util::stream::{StreamExt};
 use futures_util::future;
 use temp_dir::TempDir;
 
-use crate::db::{DB, Stats};
+use crate::db::DB;
+use crate::metrics::Stats;
+
 use surrealdb::{
     Surreal,
     engine::any
@@ -69,6 +78,7 @@ struct InnerConfig {
     dir: TempDir
 }
 
+/// Wraps InnerConfig in an `Arc<InnerConfig>`
 #[derive(Clone)]
 pub struct Config {
     config: Arc<InnerConfig>
@@ -80,9 +90,31 @@ pub struct TaskOutput {
 }
 
 impl Config {
-
-    // TODO: Change the return to Result<Config, RosError>
+    /// Constructs a new `Config`.
+    /// 
+    /// You can optionally pass a custom Docker socket (to work with rootless docker for instance) and a 
+    /// custom SurrealDB. By default the database create is not persistent, if you want to access the database after
+    /// the execution of the program you should pass a custom SurrealDB database into this struct.
+    /// 
+    /// # Examples
+    /// ```
+    /// let dataset_path = "/path/to/dataset/";
+    /// let params_path = "/path/to/config/";
+    /// let image_name = "mjpc13/rustle:lio-sam".into();
+    /// let topics: Vec<String> = vec![
+    ///    "/lio_sam/mapping/odometry".to_string(),
+    /// ];
+    /// let config = Config::new(
+    ///        image_name,
+    ///        dataset_path.into(),
+    ///        params_path.into(),
+    ///        topics,
+    ///        None,
+    ///        None
+    ///    ).await;
+    /// ```
     pub async fn new (img_name: String, dataset_path: String, params_path: String, topics: Vec<String>, docker: Option<Docker>, db: Option<Surreal<any::Any>>) -> Result<Config, &'static str> {
+        // TODO: Change the return to Result<Config, RosError>
 
         //TODO: Check if img_name//dataset_path//params_path are valid.
         let docker = match docker{
@@ -123,6 +155,7 @@ impl Config {
         Ok(Config{config: config_arc})
     }
 
+    /// Starts a container based on the img_name field.
     async fn start_container(&self) -> () {
         self.config.docker.start_container::<String>(self.get_img(), None).await;
     }

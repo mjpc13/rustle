@@ -250,11 +250,8 @@ pub fn evo_ape(groundtruth: &str, data: &str, args: EvoArgs) -> Result<Metrics, 
     let stdout = std::str::from_utf8(&output.stdout).unwrap();
     let stderr = std::str::from_utf8(&output.stderr).unwrap();
     
-    trace!("========================================");
     trace!("STDOUT {}", stdout);
-    trace!("========================================");
     trace!("STDERR {}", stderr);
-    trace!("========================================");
 
     if stderr.is_empty() && !stdout.is_empty(){
 
