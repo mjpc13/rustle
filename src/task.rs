@@ -85,12 +85,15 @@ pub struct Config {
 
 
 impl Config {
-    // add code here
+
     // TODO: Change the return to Result<Config, RosError>
-    pub async fn new (img_name: String, dataset_path: String, params_path: String, topics: Vec<String>) -> Result<Config, &'static str> {
+    pub async fn new (img_name: String, dataset_path: String, params_path: String, topics: Vec<String>, docker: Option<Docker>, db: Option<Surreal<any::Any>>) -> Result<Config, &'static str> {
 
         //TODO: Check if img_name//dataset_path//params_path are valid.
-        let docker = Docker::connect_with_local_defaults().unwrap();
+        let docker = match docker{
+            Some(val) => val,
+            None => Docker::connect_with_local_defaults().unwrap()
+        };
 
         //Check if Docker Image is in the system, if not pull it from a Docker repository
         match docker.inspect_image(&img_name).await {
@@ -107,10 +110,15 @@ impl Config {
         };
         
         //Creates the DB
-        let endpoint = std::env::var("SURREALDB_ENDPOINT").unwrap_or_else(|_| "memory".to_owned());
-        let db = any::connect(endpoint).await.unwrap();
-        db.use_ns("namespace").use_db("database").await.unwrap();
-        let db = DB { db };
+        let db = match db{
+            Some(val) => DB{ db: val },
+            None => {
+                let endpoint = std::env::var("SURREALDB_ENDPOINT").unwrap_or_else(|_| "memory".to_owned());
+                let d = any::connect(endpoint).await.unwrap();
+                d.use_ns("namespace").use_db("database").await.unwrap();
+                DB { db: d }
+            }
+        };
 
         let dir = TempDir::new().unwrap();
 
