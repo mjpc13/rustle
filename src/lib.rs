@@ -17,6 +17,6 @@
 pub mod task;
 pub mod metrics;
 pub mod errors;
-mod db;
+pub mod db;
 mod ros_msgs;
 pub mod evo_wrapper;

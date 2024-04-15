@@ -93,8 +93,8 @@ impl Config {
     /// Constructs a new `Config`.
     /// 
     /// You can optionally pass a custom Docker socket (to work with rootless docker for instance) and a 
-    /// custom SurrealDB. By default the database create is not persistent, if you want to access the database after
-    /// the execution of the program you should pass a custom SurrealDB database into this struct.
+    /// custom endpoint. By default the database create is not persistent (is stored in memory), if you want to access the database after
+    /// the execution of the program you should pass a custom endpoint.
     /// 
     /// # Examples
     /// ```
@@ -110,10 +110,10 @@ impl Config {
     ///        params_path.into(),
     ///        topics,
     ///        None,
-    ///        None
+    ///        Some("file://path/to/database") //custom endpoint, this will write a persistent database
     ///    ).await;
     /// ```
-    pub async fn new (img_name: String, dataset_path: String, params_path: String, topics: Vec<String>, docker: Option<Docker>, db: Option<Surreal<any::Any>>) -> Result<Config, &'static str> {
+    pub async fn new (img_name: String, dataset_path: String, params_path: String, topics: Vec<String>, docker: Option<Docker>, endpoint: Option<&str>) -> Result<Config, &'static str> {
         // TODO: Change the return to Result<Config, RosError>
 
         //TODO: Check if img_name//dataset_path//params_path are valid.
@@ -137,15 +137,15 @@ impl Config {
         };
         
         //Creates the DB
-        let db = match db{
-            Some(val) => DB{ db: val },
-            None => {
-                let endpoint = std::env::var("SURREALDB_ENDPOINT").unwrap_or_else(|_| "memory".to_owned());
-                let d = any::connect(endpoint).await.unwrap();
-                d.use_ns("namespace").use_db("database").await.unwrap();
-                DB { db: d }
-            }
+
+        let endpoint = match endpoint{
+            Some(val) => val.to_string(),
+            None => std::env::var("SURREALDB_ENDPOINT").unwrap_or_else(|_| "memory".to_owned())
         };
+        let connection = any::connect(endpoint).await.unwrap();
+        connection.use_ns("namespace").use_db("database").await.unwrap();
+        let db = DB { db: connection };
+
 
         let dir = TempDir::new().unwrap();
 
@@ -249,8 +249,8 @@ impl Task {
 
         let commands: Vec<_> = vec![
             "roslaunch rustle rustle.launch --wait",
-            // "rosbag play --clock /rustle/dataset/*.bag"
-            "rosbag play -d 0 --clock -u 10 /rustle/dataset/*.bag"
+            "rosbag play --clock /rustle/dataset/*.bag"
+            //"rosbag play -d 0 --clock -u 10 /rustle/dataset/*.bag"
         ];
 
         let execs: Vec<_> = future::try_join_all(commands

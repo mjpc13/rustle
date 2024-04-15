@@ -1,4 +1,4 @@
-use crate::{errors::{EvoError, RosError}};
+use crate::{errors::{EvoError, RosError}, evo_wrapper::{evo_ape, EvoArgs}};
 use serde::{Deserialize, Serialize};
 use bollard::container::{MemoryStats, CPUStats};
 use chrono::{DateTime, Utc};
@@ -10,10 +10,6 @@ use surrealdb::{
 use std::collections::HashMap;
 use itertools::Itertools;
 
-enum LocalizationMetric {
-    APE(Metrics),
-    RTE(Metrics)
-}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Stats {
@@ -34,7 +30,9 @@ pub struct Metrics{
     std: f32
 }
 
-impl Metrics {
+
+
+impl Metrics{
 
     pub fn parse(data: &str) -> Result<Metrics, EvoError>{
 
@@ -79,4 +77,10 @@ impl Metrics {
         })
     }
     
+    pub fn compute_ape(&self, groundtruth: &str, data: &str, args: EvoArgs) -> Metrics {
+
+        evo_ape(groundtruth, data, args).unwrap()
+
+    }
+
 }
