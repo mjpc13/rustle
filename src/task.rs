@@ -7,15 +7,7 @@ use bollard::{Docker,
 };
 
 use std::{
-    collections::HashMap,
-    sync::Arc,
-    thread,
-    time,
-    error::Error,
-    fmt,
-    fs::{OpenOptions,File},
-    io::Write,
-    path::Path
+    collections::HashMap, error::Error, fmt, fs::{File, OpenOptions}, io::Write, path::Path, sync::{Arc, Mutex}, thread, time
 };
 
 use tokio;
@@ -82,7 +74,10 @@ pub struct Config {
     config: Arc<InnerConfig>
 }
 
-
+pub struct TaskOutput {
+    pub stats: Vec<Stats>,
+    pub odoms: HashMap<String, Vec<Odometry>>
+}
 
 impl Config {
 
@@ -210,7 +205,7 @@ impl Task {
         Task{image_id:id, config}
     }
 
-    pub async fn run(&self){
+    pub async fn run(&self) -> Result<TaskOutput, RosError>{
         //Start the container
         // let _ = self.config.start_container().await;
         let _ = self.config.get_docker().start_container::<String>(&self.image_id, None).await;
@@ -222,7 +217,7 @@ impl Task {
         let commands: Vec<_> = vec![
             "roslaunch rustle rustle.launch --wait",
             // "rosbag play --clock /rustle/dataset/*.bag"
-            "rosbag play -d 5 --clock -u 20 /rustle/dataset/*.bag"
+            "rosbag play -d 0 --clock -u 10 /rustle/dataset/*.bag"
         ];
 
         let execs: Vec<_> = future::try_join_all(commands
@@ -262,7 +257,7 @@ impl Task {
                     Some(Ok(msg)) = stream.next() => {
 
                         let stats = Stats {
-                            id: Some(count.to_string()),
+                            uid: Some(count),
                             memory_stats: msg.memory_stats,
                             cpu_stats: msg.cpu_stats,
                             num_procs: msg.num_procs,
@@ -280,8 +275,6 @@ impl Task {
             }
         });
 
-
-        // let docker = self.config.docker.clone();
         let config_clone = self.config.clone();
         let roslaunch_id = execs[0].id.clone();
         let task_token = token.clone();
@@ -327,10 +320,7 @@ impl Task {
 
         //spawn a task to extract the results and add them to DB
         //TODO: Dont hardcode this
-        let rec_cmd = vec!["/lio_sam/mapping/odometry", "/lio_sam/mapping/odometry_incremental"];  
-        //let rec_cmd = vec!["/lio_sam/mapping/odometry_incremental"];  
-        
-        
+        let rec_cmd = vec!["/lio_sam/mapping/odometry", "/lio_sam/mapping/odometry_incremental"];          
         
         let res_tasks: Vec<_> = self.config.get_topics()
             .into_iter()
@@ -371,24 +361,45 @@ impl Task {
         // to stop
         tokio::join!(roslaunch_task);
 
+        let mut odoms_result = Arc::new(Mutex::new(HashMap::<String, Vec<Odometry>>::new()));
+        let stats_result: Vec<Stats> = self.config.get_db().query_stats().await.unwrap();
         
-        let rec_cmd = vec!["/lio_sam/mapping/odometry_incremental"];
-        let write_results: Vec<_> = rec_cmd
+        let write_results:Vec<_> = rec_cmd
             .into_iter()
-            .map( |s| {
-                // let db_clone = db.clone();
+            .map(|s|{
                 let config_clone = self.config.clone();
+                let mut odoms_result_clone = odoms_result.clone();
                 tokio::spawn(async move {
-                    let odoms: Vec<Odometry> = config_clone.get_db().query_odom(s).await.expect("Unable to find odometry data on table!");
-                    Self::write_result(odoms, s, config_clone.get_dir());
+                    let odoms: Vec<Odometry> = config_clone
+                        .get_db()
+                        .query_odom(s)
+                        .await
+                        .expect("Unable to find odometry data on table!");
+                    let test = odoms_result_clone.lock().unwrap().insert(s.to_string(), odoms);
                 })
             })
             .collect();
 
-        let result = futures_util::future::join_all(write_results).await;
 
+        //let write_results: Vec<_> = rec_cmd
+        //    .into_iter()
+        //    .map( |s| {
+        //        let config_clone = self.config.clone();
+        //        tokio::spawn(async move {
+        //            let odoms: Vec<Odometry> = config_clone.get_db().query_odom(s).await.expect("Unable to find odometry data on table!");
+        //            Self::write_result(odoms, s, config_clone.get_dir());
+        //        })
+        //    })
+        //    .collect();
+        
+        futures_util::future::join_all(write_results).await;
 
-        //Return the N results;
+        let odoms_result = Arc::into_inner(odoms_result).unwrap().into_inner().unwrap();
+
+        Ok(TaskOutput{
+            stats: stats_result,
+            odoms: odoms_result
+        })
 
     }
 

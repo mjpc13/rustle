@@ -19,31 +19,35 @@ async fn main() {
     
     init();
 
-    let dataset_path = "/home/mjpc13/Documents/rustle/test/dataset/";
-    let params_path = "/home/mjpc13/Documents/rustle/test/config/";
+    let dataset_path = "/home/mario/Documents/rustle/test/dataset/";
+    let params_path = "/home/mario/Documents/rustle/test/config/";
 
     let topics: Vec<String> = vec![
        "/lio_sam/mapping/odometry".to_string(), 
        "/lio_sam/mapping/odometry_incremental".to_string()
     ];
 
-
     //Supply Docker socket AND Database
     
-    let _docker = Docker::connect_with_local_defaults().unwrap();
+    //let endpoint = std::env::var("SURREALDB_ENDPOINT").unwrap_or_else(|_| "memory".to_owned());
+    //let db = any::connect(endpoint).await.unwrap();
+    //db.use_ns("namespace").use_db("database").await.unwrap();
 
-    let endpoint = std::env::var("SURREALDB_ENDPOINT").unwrap_or_else(|_| "memory".to_owned());
-    let db = any::connect(endpoint).await.unwrap();
-    db.use_ns("namespace").use_db("database").await.unwrap();
-
-    let test = Config::new("mjpc13/rustle:lio-sam".into(), dataset_path.into(), params_path.into(), topics, None, None).await;
+    let test = Config::new(
+        "mjpc13/rustle:lio-sam".into(), 
+        dataset_path.into(), 
+        params_path.into(), 
+        topics, 
+        None, //optionally we can pass a custom Docker socket
+        None // connect to a custom (and persistent) Surreal database
+    ).await;
+    
     let task1: Task = Task::new(test.unwrap()).await;
 
-    task1.run().await; //Needs to returs a struct with Vec<Stats> and Vec<Odometry>...
+    let result = task1.run().await.unwrap(); //Needs to returs a struct with Vec<Stats> and Vec<Odometry>...
 
+    println!("{:#?}", result.odoms);
 
-
-    // 
     // let groundtruth = "/home/mario/Documents/rustle/test/evo/groundtruth.txt";
     // let data = "/home/mario/Documents/rustle/test/evo/data.txt";
     //

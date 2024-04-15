@@ -19,12 +19,10 @@ use log::{info};
 // =====DATA MODELS=====
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Stats {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub id: Option<String>,
+    pub uid: Option<u32>,
     pub memory_stats: MemoryStats,
     pub cpu_stats: CPUStats,
     pub num_procs: u32,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub created_at: Option<DateTime<Utc>>,
 }
 
@@ -64,16 +62,19 @@ impl DB{
 
     }
 
-    pub async fn query_stats(&self) -> Response {
-        //TODO: return an array of Stats instead of the Response
-        //TODO: Probably add a more relevant query
+    pub async fn query_stats(&self) -> Result<Vec<Stats>, surrealdb::Error> {    
 
-        let groups = self.db
+        let mut groups = self.db
             .query("SELECT * FROM type::table($table)")
             .bind(("table", "stat"))
             .await.unwrap();
-        groups
+
+
+        let stats: Vec<Stats> = groups.take(0)?;
+
+        Ok(stats)
     }
+
     pub async fn add_odom(&self, mut data: Odometry, table: &str)
     {
         let create: Vec<Record> = self.db.create(table)
