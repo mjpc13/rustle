@@ -40,13 +40,9 @@ RUN catkin config --extend /opt/ros/$ROS_DISTRO && catkin create pkg -p src/ rus
 
 #Copy custom launch file into our package
 COPY ./rustle.launch /rustle/catkin_ws/src/rustle/launch/rustle.launch
-COPY ./entrypoint.sh /entrypoint.sh
 
 #Compile packages
 RUN catkin build -s
 
 # source catkin workspace
-RUN echo "source /rustle/catkin_ws/devel/setup.bash" >> /root/.profile && chmod +x /entrypoint.sh
-
-ENTRYPOINT [ "/entrypoint.sh"]
-# CMD [ "roscore"]
+RUN echo "source /rustle/catkin_ws/devel/setup.bash" >> /root/.profile
