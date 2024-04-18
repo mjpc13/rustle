@@ -1,18 +1,18 @@
 lio_sam:
   # Topics
-  pointCloudTopic: "points_raw" # Point cloud data
-  imuTopic: "imu_raw" # IMU data
+  pointCloudTopic: "velodyne_points" # Point cloud data
+  imuTopic: "imu/data" # IMU data
   odomTopic: "odometry/imu" # IMU pre-preintegration odometry, same frequency as IMU
-  gpsTopic: "odometry/gpsz" # GPS odometry topic from navsat, see module_navsat.launch file
+  #gpsTopic: "odometry/gpsz" # GPS odometry topic from navsat, see module_navsat.launch file
 
   # Frames
-  lidarFrame: "base_link"
+  lidarFrame: "velodyne"
   baselinkFrame: "base_link"
   odometryFrame: "odom"
   mapFrame: "map"
 
   # GPS Settings
-  useImuHeadingInitialization: true # if using GPS data, set to "true"
+  useImuHeadingInitialization: false # if using GPS data, set to "true"
   useGpsElevation: false # if GPS elevation is bad, set to "false"
   gpsCovThreshold: 2.0 # m^2, threshold for using GPS data
   poseCovThreshold: 25.0 # m^2, threshold for using GPS data
@@ -39,14 +39,17 @@ lio_sam:
 
   # Extrinsics: T_lb (lidar -> imu)
   extrinsicTrans: [ 0.0, 0.0, 0.0 ]
-  extrinsicRot: [ -1, 0, 0, 0, 1, 0, 0, 0, -1 ]
-  extrinsicRPY: [ 0, -1, 0, 1, 0, 0, 0, 0, 1 ]
-  # extrinsicRot: [1, 0, 0,
-  #                 0, 1, 0,
-  #                 0, 0, 1]
-  # extrinsicRPY: [1, 0, 0,
-  #                 0, 1, 0,
-  #                 0, 0, 1]
+  #extrinsicRot: [ -1, 0, 0, 0, 1, 0, 0, 0, -1 ]
+  #extrinsicRPY: [ 0, -1, 0, 
+  #  1, 0, 0, 
+  #  0, 0, 1 
+  #  ]
+   extrinsicRot: [1, 0, 0,
+                   0, 1, 0,
+                   0, 0, 1]
+   extrinsicRPY: [1, 0, 0,
+                   0, 1, 0,
+                   0, 0, 1]
 
   # LOAM feature threshold
   edgeThreshold: 1.0
@@ -64,7 +67,7 @@ lio_sam:
   rotation_tollerance: 1000 # radians
 
   # CPU Params
-  numberOfCores: 4 # number of cores for mapping optimization
+  numberOfCores: 16 # number of cores for mapping optimization
   mappingProcessInterval: 0.15 # seconds, regulate mapping frequency
 
   # Surrounding map
@@ -160,233 +163,20 @@ ekf_gps:
     ]
   odom0_differential: false
   odom0_queue_size: 10
-
+  
   #                            x     y     z     r     p     y   x_dot  y_dot  z_dot  r_dot p_dot y_dot x_ddot y_ddot z_ddot
-  process_noise_covariance:
-    [
-      1.0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      1.0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      10.0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0.03,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0.03,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0.1,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0.25,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0.25,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0.04,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0.01,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0.01,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0.5,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0.01,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0.01,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0.015
-    ]
+  process_noise_covariance: [  1.0,  0,    0,    0,    0,    0,    0,     0,     0,     0,    0,    0,    0,    0,      0,
+                               0,    1.0,  0,    0,    0,    0,    0,     0,     0,     0,    0,    0,    0,    0,      0,
+                               0,    0,    10.0, 0,    0,    0,    0,     0,     0,     0,    0,    0,    0,    0,      0,
+                               0,    0,    0,    0.03, 0,    0,    0,     0,     0,     0,    0,    0,    0,    0,      0,
+                               0,    0,    0,    0,    0.03, 0,    0,     0,     0,     0,    0,    0,    0,    0,      0,
+                               0,    0,    0,    0,    0,    0.1,  0,     0,     0,     0,    0,    0,    0,    0,      0,
+                               0,    0,    0,    0,    0,    0,    0.25,  0,     0,     0,    0,    0,    0,    0,      0,
+                               0,    0,    0,    0,    0,    0,    0,     0.25,  0,     0,    0,    0,    0,    0,      0,
+                               0,    0,    0,    0,    0,    0,    0,     0,     0.04,  0,    0,    0,    0,    0,      0,
+                               0,    0,    0,    0,    0,    0,    0,     0,     0,     0.01, 0,    0,    0,    0,      0,
+                               0,    0,    0,    0,    0,    0,    0,     0,     0,     0,    0.01, 0,    0,    0,      0,
+                               0,    0,    0,    0,    0,    0,    0,     0,     0,     0,    0,    0.5,  0,    0,      0,
+                               0,    0,    0,    0,    0,    0,    0,     0,     0,     0,    0,    0,    0.01, 0,      0,
+                               0,    0,    0,    0,    0,    0,    0,     0,     0,     0,    0,    0,    0,    0.01,   0,
+                               0,    0,    0,    0,    0,    0,    0,     0,     0,     0,    0,    0,    0,    0,      0.015]
