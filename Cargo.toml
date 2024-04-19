@@ -34,3 +34,5 @@ struct_iterable = "0.1.1"
 itertools = "*"
 
 nalgebra = { version = "0.32.4", features = ["serde-serialize"] }
+plotters = "0.3.4"
+#fontconfig-sys = "0.8.0"

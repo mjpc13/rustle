@@ -10,12 +10,12 @@ use surrealdb::{
 use std::collections::HashMap;
 use itertools::Itertools;
 
-
 #[derive(Debug, Serialize, Deserialize)]
-pub struct Stats {
+pub struct ContainerStats {
     pub uid: Option<u32>,
     pub memory_stats: MemoryStats,
     pub cpu_stats: CPUStats,
+    pub precpu_stats: CPUStats,
     pub num_procs: u32,
     pub created_at: Option<DateTime<Utc>>,
 }
@@ -31,10 +31,31 @@ pub struct Metrics{
 }
 
 
+pub enum Metricss{
+    APE{
+        max: f32,
+        median: f32,
+        min: f32,
+        rmse: f32,
+        sse: f32,
+        std: f32
+    },
+    RTE{
+        max: f32,
+        median: f32,
+        min: f32,
+        rmse: f32,
+        sse: f32,
+        std: f32
+    }
+}
+
+
+
 
 impl Metrics{
 
-    pub fn parse(data: &str) -> Result<Metrics, EvoError>{
+    fn parse(data: &str) -> Result<Metrics, EvoError>{
 
         let mut hash: HashMap<&str, f32> = HashMap::new();
 
@@ -77,10 +98,10 @@ impl Metrics{
         })
     }
     
-    pub fn compute_ape(&self, groundtruth: &str, data: &str, args: EvoArgs) -> Metrics {
-
-        evo_ape(groundtruth, data, args).unwrap()
-
-    }
+    //pub fn compute_ape(&self, groundtruth: &str, data: &str, args: EvoArgs) -> Metrics {
+//
+    //    evo_ape(groundtruth, data, args).unwrap()
+//
+    //}
 
 }

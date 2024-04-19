@@ -7,6 +7,7 @@ use rustle::evo_wrapper;
 use rustle::evo_wrapper::EvoArgs;
 use rustle::metrics::Metrics;
 use rustle::metrics::ContainerStats;
+use rustle::task::AdvancedConfig;
 use tokio;
 
 use rustle::task::Config;
@@ -34,6 +35,14 @@ async fn main() {
     let topics: Vec<String> = vec![
        "/lio_odom".to_string(), 
     ];
+    let gt_topic: String = String::from("/gt_poses");
+
+    let adv = AdvancedConfig{
+        db_endpoint: String::from("file://test/db"),
+        db_database: String::from("ig-lio"),
+        ..Default::default()
+    };
+
     //let topics_lio-sam: Vec<String> = vec![
     //    "/lio_sam/mapping/odometry".to_string(), 
     //    "/lio_sam/mapping/odometry_incremental".to_string()
@@ -42,12 +51,12 @@ async fn main() {
 
     let test = Config::new(
         "mjpc13/rustle:ig-lio".into(), 
+        "ig-lio".into(), 
         dataset_path.into(), 
         params_path.into(), 
-        topics, 
-        None, //optionally we can pass a custom Docker socket
-        None
-        //Some(file) // connect to a custom (and persistent) Surreal database. TODO: Don't pass a database but the endpoint!
+        topics,
+        gt_topic, 
+        Some(adv) // connect to a custom (and persistent) Surreal database. TODO: Don't pass a database but the endpoint!
     ).await;
     
     let task1: Task = Task::new(test.unwrap()).await;

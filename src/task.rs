@@ -25,8 +25,8 @@ use futures_util::stream::{StreamExt};
 use futures_util::future;
 use temp_dir::TempDir;
 
-use crate::db::DB;
-use crate::metrics::Stats;
+use crate::{db::DB, metrics::ContainerStats};
+//use crate::metrics::Stats;
 
 use surrealdb::{
     Surreal,
@@ -65,15 +65,34 @@ async fn pull_image(img_name: &str, docker: &Docker) -> Result<(), Box<dyn Error
     };
     test
 }
+#[derive(Debug, Clone)]
+pub struct AdvancedConfig{
+    pub docker_socket: Docker,
+    pub db_endpoint: String,
+    pub db_namespace: String,
+    pub db_database: String
+}
 
+impl Default for AdvancedConfig {
+    fn default() -> AdvancedConfig {
+        AdvancedConfig{
+            docker_socket: Docker::connect_with_local_defaults().unwrap(),
+            db_endpoint: "endpoint".to_string(),
+            db_namespace: "namespace".to_string(),
+            db_database: "database".to_string()
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 struct InnerConfig {
     img_name: String,
+    algo_name: String,
     dataset_path: String,
     params_path: String,
     docker: Docker,
     topics: Vec<String>, //Should be &str, but lifetime issues, look at this later
+    groundtruth: String, //Should be &str, but lifetime issues, look at this later
     db: DB,
     dir: TempDir
 }
@@ -85,8 +104,9 @@ pub struct Config {
 }
 
 pub struct TaskOutput {
-    pub stats: Vec<Stats>,
-    pub odoms: HashMap<String, Vec<Odometry>>
+    pub stats: Vec<ContainerStats>,
+    pub odoms: HashMap<String, Vec<Odometry>>,
+    pub groundtruth: Vec<Odometry>
 }
 
 impl Config {
@@ -113,12 +133,30 @@ impl Config {
     ///        Some("file://path/to/database") //custom endpoint, this will write a persistent database
     ///    ).await;
     /// ```
-    pub async fn new (img_name: String, dataset_path: String, params_path: String, topics: Vec<String>, docker: Option<Docker>, endpoint: Option<&str>) -> Result<Config, &'static str> {
+    pub async fn new (img_name: String, algo_name: String, dataset_path: String, params_path: String, topics: Vec<String>, gt_topic: String, advanced_args: Option<AdvancedConfig>) -> Result<Config, &'static str> {
         // TODO: Change the return to Result<Config, RosError>
 
+        //Creates the DB
+        let connection = match advanced_args{
+            Some(ref val) => {
+                std::env::var("SURREALDB_ENDPOINT").unwrap_or_else(|_| "memory".to_owned());
+                let connection = any::connect(&val.db_endpoint).await.unwrap();
+                connection.use_ns(&val.db_namespace).use_db(&val.db_database).await.unwrap();
+                connection
+            } ,
+            None => {
+                let endpoint = std::env::var("SURREALDB_ENDPOINT").unwrap_or_else(|_| "memory".to_owned());
+                let connection = any::connect(endpoint).await.unwrap();
+                connection.use_ns("namespace").use_db(&algo_name).await.unwrap();
+                connection
+            }
+        };
+
+        let db = DB { db: connection };
+
         //TODO: Check if img_name//dataset_path//params_path are valid.
-        let docker = match docker{
-            Some(val) => val,
+        let docker = match advanced_args{
+            Some(val) => val.docker_socket,
             None => Docker::connect_with_local_defaults().unwrap()
         };
 
@@ -135,21 +173,21 @@ impl Config {
                 }
             }
         };
-        
-        //Creates the DB
-
-        let endpoint = match endpoint{
-            Some(val) => val.to_string(),
-            None => std::env::var("SURREALDB_ENDPOINT").unwrap_or_else(|_| "memory".to_owned())
-        };
-        let connection = any::connect(endpoint).await.unwrap();
-        connection.use_ns("namespace").use_db("database").await.unwrap();
-        let db = DB { db: connection };
-
 
         let dir = TempDir::new().unwrap();
 
-        let config: InnerConfig = InnerConfig{img_name, dataset_path, params_path, topics, docker: docker, db, dir};
+        let config: InnerConfig = InnerConfig{
+            img_name, 
+            algo_name, 
+            dataset_path, 
+            params_path, 
+            topics, 
+            groundtruth: gt_topic, 
+            docker: docker, 
+            db, 
+            dir
+        };
+
         let config_arc = Arc::new(config);
 
         Ok(Config{config: config_arc})
@@ -162,6 +200,12 @@ impl Config {
 
     fn get_img(&self) -> &str {
         &self.config.img_name
+    }
+    fn get_algo(&self) -> &str {
+        &self.config.algo_name
+    }
+    fn get_gt(&self) -> &str {
+        &self.config.groundtruth
     }
     fn get_dataset(&self) -> &str {
         &self.config.dataset_path
@@ -192,11 +236,10 @@ impl Task {
     // add code here
     // pub async fn new (config: Config) -> Result<Task, &'static str> {
     pub async fn new (config: Config) -> Task {
-        //TODO: Create a container by mounting the dataset into Docker and pass relevant parameters
         
         //TODO Parse the parameters of yaml? Or mount the YAML file into Docker container 
         let options = Some(container::CreateContainerOptions{
-            name: "rustle-task",
+            name: format!("rustle-{}", config.get_algo()),
             platform: None,
         });
 
@@ -289,10 +332,11 @@ impl Task {
                 select!{
                     Some(Ok(msg)) = stream.next() => {
 
-                        let stats = Stats {
+                        let stats = ContainerStats {
                             uid: Some(count),
                             memory_stats: msg.memory_stats,
                             cpu_stats: msg.cpu_stats,
+                            precpu_stats: msg.precpu_stats,
                             num_procs: msg.num_procs,
                             created_at: None
                         };
@@ -353,23 +397,29 @@ impl Task {
 
         //spawn a task to extract the results and add them to DB
         //TODO: Dont hardcode this
-        let rec_cmd = vec!["/lio_sam/mapping/odometry", "/lio_sam/mapping/odometry_incremental"];          
+        //let rec_cmd = vec!["/lio_sam/mapping/odometry", "/lio_sam/mapping/odometry_incremental"];          
         
         let res_tasks: Vec<_> = self.config.get_topics()
             .into_iter()
             .map( |s| {
-                //TODO: TO Arc<Mutex<T>> OR NOT Arc<Mutex<T>>?
                 let config_clone = self.config.clone();
-                let id = self.image_id.clone();
                 let token = token.clone();
                 tokio::spawn(async move {
-                    Self::record_task(config_clone, &id, &s, token).await;
+                    Self::record_task(config_clone, &s, token).await;
                 })
             })
             .collect();
+
+        //Record the groundtruth: It is given as Poses... Need to change the code
+        let config_clone = self.config.clone();
+        let s = self.config.get_gt().to_string();
+        let token_clone = token.clone();
+        tokio::spawn(async move {
+            Self::record_task(config_clone, &s, token_clone).await;
+        });
  
         // Wait a certain number of seconds for the algorithm to init, PARAMETER
-        let ten_sec = time::Duration::from_secs(1);
+        let ten_sec = time::Duration::from_secs(5);
         thread::sleep(ten_sec);
 
         let rosplay_id = execs[1].id.clone();
@@ -395,9 +445,11 @@ impl Task {
         tokio::join!(roslaunch_task);
 
         let mut odoms_result = Arc::new(Mutex::new(HashMap::<String, Vec<Odometry>>::new()));
-        let stats_result: Vec<Stats> = self.config.get_db().query_stats().await.unwrap();
+        let stats_result: Vec<ContainerStats> = self.config.get_db().query_stats().await.unwrap();
+
+        let  gt_result: Vec<Odometry> = self.config.get_db().query_odom(self.config.get_gt()).await.unwrap();
         
-        let write_results:Vec<_> = rec_cmd
+        let write_results:Vec<_> = self.config.get_topics()
             .into_iter()
             .map(|s|{
                 let config_clone = self.config.clone();
@@ -405,13 +457,15 @@ impl Task {
                 tokio::spawn(async move {
                     let odoms: Vec<Odometry> = config_clone
                         .get_db()
-                        .query_odom(s)
+                        .query_odom(&s)
                         .await
                         .expect("Unable to find odometry data on table!");
                     let test = odoms_result_clone.lock().unwrap().insert(s.to_string(), odoms);
                 })
             })
             .collect();
+
+
 
 
         //let write_results: Vec<_> = rec_cmd
@@ -431,19 +485,22 @@ impl Task {
 
         Ok(TaskOutput{
             stats: stats_result,
-            odoms: odoms_result
+            odoms: odoms_result,
+            groundtruth: gt_result
         })
 
     }
 
-    async fn record_task(config: Config, image_id: &str, topic: &str, record_token: CancellationToken){
+    async fn record_task(config: Config, topic: &str, record_token: CancellationToken){
 
         let cmd = format!("rostopic echo -p {topic}");
+
+        let image_id = format!("rustle-{}", config.get_algo());
 
          // Check how I'm gonna record the localization
         let record_options_future = config.get_docker()
             .create_exec(
-            image_id,
+            &image_id,
             CreateExecOptions {
                 attach_stdout: Some(true),
                 attach_stderr: Some(true),
@@ -470,7 +527,7 @@ impl Task {
                             
                             let record_options_future = config.get_docker()
                                 .create_exec(
-                                image_id,
+                                &image_id,
                                 CreateExecOptions {
                                     attach_stderr: Some(true),
                                     cmd: Some(vec!["pkill", "-SIGINT", "record"]),

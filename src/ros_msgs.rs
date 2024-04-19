@@ -26,6 +26,10 @@ use num::Float;
 use log::{debug, error, info, warn, trace};
 
 
+pub trait RosMsg{}
+
+
+
 #[derive(Debug, Serialize, Deserialize, Default)]
 pub struct Header{
     pub seq: u32,
@@ -145,6 +149,107 @@ impl Pose
 }
 
 #[derive(Debug, Serialize, Deserialize, Default)]
+pub struct PoseStamped
+{
+    header: Header,
+    position: Point3<f64>,
+    orientation: Quaternion<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    covariance: Option<Matrix6<f64>>
+}
+impl PoseStamped
+{
+    pub fn parse(data: Vec<&str>) -> Result<PoseStamped, RosError>{
+        let data_vec: Vec<Arc<str>> = data.iter().map(|s| Arc::from(*s)).collect();
+
+        let header: Header = Header::parse(&data_vec[1..4])?;
+        let position: Point3<f64> = Self::parse_position(&data_vec[0..3])?;
+        let quaternion: Quaternion<f64> = Self::parse_orientation(&data_vec[3..7])?;
+
+        let pose = match Self::parse_covariances(&data_vec[7..data_vec.len()]){
+            Ok(cov) => PoseStamped{
+                header: header,
+                position: position,
+                orientation: quaternion,
+                covariance: Some(cov)
+            },
+            Err(e) => PoseStamped{
+                header: header,
+                position: position,
+                orientation: quaternion,
+                covariance: None
+            }
+
+        };
+
+        return Ok(pose);
+    }
+    fn parse_position(data: &[Arc<str>]) -> Result<Point3<f64>, RosError>
+    {
+        //TODO: Check if this parser is working
+        let vec = Vector3::from_iterator(
+            data.iter()
+                .map(|s| {
+                    s.parse::<f64>().map_err(|_e| RosError::ParseError {
+                        value: s.to_string().into(),
+                        name: "Pose.position".into(),
+                    })
+                })
+            .collect::<Result<Vec<f64>, RosError>>()?
+        );
+
+        return Ok(Point3::from(vec));
+    }
+    fn parse_orientation(data: &[Arc<str>]) -> Result<Quaternion<f64>, RosError>
+    {
+        //TODO: Check if this parser is working
+        let vec = Vector4::from_iterator(
+            data.iter()
+                .map(|s| {
+                    s.parse::<f64>().map_err(|_e| RosError::ParseError {
+                        value: s.to_string().into(),
+                        name: "Pose.orientation".into(),
+                    })
+                })
+            .collect::<Result<Vec<f64>, RosError>>()?
+        );
+
+        return Ok(Quaternion::from(vec));
+    }
+
+    fn parse_covariances(data: &[Arc<str>]) -> Result<Matrix6<f64>, RosError>
+     {
+        //TODO: Check if this parser is working
+        //I might want to ensure that the w is between -1 and 1;
+        let matrix = Matrix6::from_iterator(
+            data.iter()
+                .map(|s| {
+                    s.parse::<f64>().map_err(|_e| RosError::ParseError {
+                        value: s.to_string().into(),
+                        name: "Pose.covariance".into(),
+                    })
+                })
+            .collect::<Result<Vec<f64>, RosError>>()?
+        );
+
+        if matrix.sum() == 0.0 || data.len() != 36 {
+            return Err(RosError::ParseError{value: "".into(), name: "Pose.covariance".into()})
+        }
+        else{
+            return Ok(matrix);
+        };
+    }   
+}
+
+
+
+
+
+
+
+
+
+#[derive(Debug, Serialize, Deserialize, Default)]
 pub struct Twist
 {
     linear: Vector3<f64>,
@@ -236,7 +341,7 @@ impl Odometry
 
         Ok(Odometry{
             header: header,
-            child_frame_id: None,//Some(child_frame_id),
+            child_frame_id: None, //Some(child_frame_id),
             pose: pose,
             twist: twist
         })
@@ -247,7 +352,7 @@ impl fmt::Display for Odometry {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // The odometry messages will be printed in the TUM format file
         write!(f, "{}, {}, {}, {}, {}, {}, {}, {}",
-            self.header.time.timestamp_nanos() as f64 /f64::powf(10.0,9.0), 
+            self.header.time.timestamp_nanos_opt().unwrap() as f64 /f64::powf(10.0,9.0), 
             self.pose.position[0], 
             self.pose.position[1], 
             self.pose.position[2], 
@@ -258,3 +363,6 @@ impl fmt::Display for Odometry {
         )
     }
 }
+
+impl RosMsg for Odometry { }
+impl RosMsg for PoseStamped { }

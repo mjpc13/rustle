@@ -12,7 +12,7 @@ use surrealdb::{
 };
 
 use bollard::container::{MemoryStats, CPUStats};
-use crate::{metrics::Stats, ros_msgs::{Header, Odometry, Pose, Twist}};
+use crate::{metrics::ContainerStats, ros_msgs::{Header, Odometry, Pose, Twist}};
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Record{
@@ -25,7 +25,7 @@ pub struct DB{
     pub db: Surreal<Any>,
 }
 impl DB{
-    pub async fn add_stat(&self, mut data: Stats){
+    pub async fn add_stat(&self, mut data: ContainerStats){
         
         data.created_at = Some(Utc::now());
 
@@ -37,15 +37,15 @@ impl DB{
 
     }
 
-    pub async fn query_stats(&self) -> Result<Vec<Stats>, surrealdb::Error> {    
+    pub async fn query_stats(&self) -> Result<Vec<ContainerStats>, surrealdb::Error> {    
 
         let mut groups = self.db
-            .query("SELECT * FROM type::table($table)")
+            .query("SELECT * FROM type::table($table) ORDER BY uid;")
             .bind(("table", "stat"))
             .await.unwrap();
 
 
-        let stats: Vec<Stats> = groups.take(0)?;
+        let stats: Vec<ContainerStats> = groups.take(0)?;
 
         Ok(stats)
     }

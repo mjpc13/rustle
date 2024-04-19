@@ -238,7 +238,7 @@ impl Default for PlotArg {
 }
 
 
-pub fn evo_ape(groundtruth: &str, data: &str, args: EvoArgs) -> Result<Metrics, EvoError>{
+pub fn evo_ape<'a>(groundtruth: &str, data: &str, args: EvoArgs) -> Result<String, EvoError>{
     let output = Command::new("evo_ape")
         .arg("tum")
         .arg(groundtruth)
@@ -255,7 +255,7 @@ pub fn evo_ape(groundtruth: &str, data: &str, args: EvoArgs) -> Result<Metrics, 
 
     if stderr.is_empty() && !stdout.is_empty(){
 
-        return Ok(Metrics::parse(stdout)?);
+        return Ok(stdout.to_string());
 
         //parse
     } else{
