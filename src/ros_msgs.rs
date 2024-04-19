@@ -26,9 +26,13 @@ use num::Float;
 use log::{debug, error, info, warn, trace};
 
 
-pub trait RosMsg{}
+pub trait RosMsg: Sized + Default{
+    fn echo(&self) -> String;
+    fn get_header(&self) -> Result<&Header, RosError>;
+    fn from_vec(data: Vec<&str>) -> Result<Self, RosError>;
+}
 
-
+pub trait GeometryMsg: RosMsg{}
 
 #[derive(Debug, Serialize, Deserialize, Default)]
 pub struct Header{
@@ -37,9 +41,9 @@ pub struct Header{
     #[serde(skip_serializing_if = "Option::is_none")]
     pub frame_id: Option<String>
 }
-impl Header
-{
-   pub fn parse(data: &[Arc<str>]) -> Result<Header, RosError>{
+
+impl RosMsg for Header{
+    fn from_vec(data:  Vec<&str>) -> Result<Header, RosError>{
 
         let seq = match data[0].parse::<u32>(){
             Ok(result) => result,
@@ -59,7 +63,14 @@ impl Header
             frame_id: Some(data[2].to_string())
         })
     }
+    fn echo(&self) -> String{
+        todo!()
+    }
+    fn get_header(&self) -> Result<&Header, RosError>{ Ok(&self) }
+    
 }
+
+
 
 #[derive(Debug, Serialize, Deserialize, Default)]
 pub struct Pose
@@ -71,11 +82,77 @@ pub struct Pose
 }
 impl Pose
 {
-    pub fn parse(data: &[Arc<str>]) -> Result<Pose, RosError>{
-        let position: Point3<f64> = Self::parse_position(&data[0..3])?;
-        let quaternion: Quaternion<f64> = Self::parse_orientation(&data[3..7])?;
+    fn parse_position(data:  &[Arc<str>]) -> Result<Point3<f64>, RosError>
+    {
+        //TODO: Check if this parser is working
+        let vec = Vector3::from_iterator(
+            data.iter()
+                .map(|s| {
+                    s.parse::<f64>().map_err(|_e| RosError::ParseError {
+                        value: s.to_string().into(),
+                        name: "Pose.position".into(),
+                    })
+                })
+            .collect::<Result<Vec<f64>, RosError>>()?
+        );
 
-        let pose = match Self::parse_covariances(&data[7..data.len()]){
+        return Ok(Point3::from(vec));
+    }
+    fn parse_orientation(data:  &[Arc<str>]) -> Result<Quaternion<f64>, RosError>
+    {
+        //TODO: Check if this parser is working
+        let vec = Vector4::from_iterator(
+            data.iter()
+                .map(|s| {
+                    s.parse::<f64>().map_err(|_e| RosError::ParseError {
+                        value: s.to_string().into(),
+                        name: "Pose.orientation".into(),
+                    })
+                })
+            .collect::<Result<Vec<f64>, RosError>>()?
+        );
+
+        return Ok(Quaternion::from(vec));
+    }
+
+    fn parse_covariances(data:  &[Arc<str>]) -> Result<Matrix6<f64>, RosError>
+     {
+        //TODO: Check if this parser is working
+        //I might want to ensure that the w is between -1 and 1;
+        let matrix = Matrix6::from_iterator(
+            data.iter()
+                .map(|s| {
+                    s.parse::<f64>().map_err(|_e| RosError::ParseError {
+                        value: s.to_string().into(),
+                        name: "Pose.covariance".into(),
+                    })
+                })
+            .collect::<Result<Vec<f64>, RosError>>()?
+        );
+
+        if matrix.sum() == 0.0 || data.len() != 36 {
+            return Err(RosError::ParseError{value: "".into(), name: "Pose.covariance".into()})
+        }
+        else{
+            return Ok(matrix);
+        };
+    }   
+}
+
+impl RosMsg for Pose{
+    fn echo(&self) -> String{
+        todo!()
+    }
+    fn get_header(&self) -> Result<&Header, RosError>{
+        Err(RosError::MissingHeader { rostype: "Pose".into() })
+    }
+    fn from_vec(data:  Vec<&str>) -> Result<Pose, RosError>{
+        let data_vec: Vec<Arc<str>> = data.iter().map(|s| Arc::from(*s)).collect();
+
+        let position: Point3<f64> = Self::parse_position(&data_vec[0..3])?;
+        let quaternion: Quaternion<f64> = Self::parse_orientation(&data_vec[3..7])?;
+
+        let pose = match Self::parse_covariances(&data_vec[7..data_vec.len()]){
             Ok(cov) => Pose{
                 position: position,
                 orientation: quaternion,
@@ -91,162 +168,34 @@ impl Pose
 
         return Ok(pose);
     }
-    fn parse_position(data: &[Arc<str>]) -> Result<Point3<f64>, RosError>
-    {
-        //TODO: Check if this parser is working
-        let vec = Vector3::from_iterator(
-            data.iter()
-                .map(|s| {
-                    s.parse::<f64>().map_err(|_e| RosError::ParseError {
-                        value: s.to_string().into(),
-                        name: "Pose.position".into(),
-                    })
-                })
-            .collect::<Result<Vec<f64>, RosError>>()?
-        );
-
-        return Ok(Point3::from(vec));
-    }
-    fn parse_orientation(data: &[Arc<str>]) -> Result<Quaternion<f64>, RosError>
-    {
-        //TODO: Check if this parser is working
-        let vec = Vector4::from_iterator(
-            data.iter()
-                .map(|s| {
-                    s.parse::<f64>().map_err(|_e| RosError::ParseError {
-                        value: s.to_string().into(),
-                        name: "Pose.orientation".into(),
-                    })
-                })
-            .collect::<Result<Vec<f64>, RosError>>()?
-        );
-
-        return Ok(Quaternion::from(vec));
-    }
-
-    fn parse_covariances(data: &[Arc<str>]) -> Result<Matrix6<f64>, RosError>
-     {
-        //TODO: Check if this parser is working
-        //I might want to ensure that the w is between -1 and 1;
-        let matrix = Matrix6::from_iterator(
-            data.iter()
-                .map(|s| {
-                    s.parse::<f64>().map_err(|_e| RosError::ParseError {
-                        value: s.to_string().into(),
-                        name: "Pose.covariance".into(),
-                    })
-                })
-            .collect::<Result<Vec<f64>, RosError>>()?
-        );
-
-        if matrix.sum() == 0.0 || data.len() != 36 {
-            return Err(RosError::ParseError{value: "".into(), name: "Pose.covariance".into()})
-        }
-        else{
-            return Ok(matrix);
-        };
-    }   
 }
+impl GeometryMsg for Pose{}
+
 
 #[derive(Debug, Serialize, Deserialize, Default)]
 pub struct PoseStamped
 {
     header: Header,
-    position: Point3<f64>,
-    orientation: Quaternion<f64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    covariance: Option<Matrix6<f64>>
+    pose: Pose
 }
-impl PoseStamped
-{
-    pub fn parse(data: Vec<&str>) -> Result<PoseStamped, RosError>{
-        let data_vec: Vec<Arc<str>> = data.iter().map(|s| Arc::from(*s)).collect();
-
-        let header: Header = Header::parse(&data_vec[1..4])?;
-        let position: Point3<f64> = Self::parse_position(&data_vec[0..3])?;
-        let quaternion: Quaternion<f64> = Self::parse_orientation(&data_vec[3..7])?;
-
-        let pose = match Self::parse_covariances(&data_vec[7..data_vec.len()]){
-            Ok(cov) => PoseStamped{
-                header: header,
-                position: position,
-                orientation: quaternion,
-                covariance: Some(cov)
-            },
-            Err(e) => PoseStamped{
-                header: header,
-                position: position,
-                orientation: quaternion,
-                covariance: None
-            }
-
-        };
-
-        return Ok(pose);
+impl RosMsg for PoseStamped{
+    fn echo(&self) -> String{
+        todo!()
     }
-    fn parse_position(data: &[Arc<str>]) -> Result<Point3<f64>, RosError>
-    {
-        //TODO: Check if this parser is working
-        let vec = Vector3::from_iterator(
-            data.iter()
-                .map(|s| {
-                    s.parse::<f64>().map_err(|_e| RosError::ParseError {
-                        value: s.to_string().into(),
-                        name: "Pose.position".into(),
-                    })
-                })
-            .collect::<Result<Vec<f64>, RosError>>()?
-        );
-
-        return Ok(Point3::from(vec));
+    fn get_header(&self) -> Result<&Header, RosError>{
+        Ok(&self.header)
     }
-    fn parse_orientation(data: &[Arc<str>]) -> Result<Quaternion<f64>, RosError>
-    {
-        //TODO: Check if this parser is working
-        let vec = Vector4::from_iterator(
-            data.iter()
-                .map(|s| {
-                    s.parse::<f64>().map_err(|_e| RosError::ParseError {
-                        value: s.to_string().into(),
-                        name: "Pose.orientation".into(),
-                    })
-                })
-            .collect::<Result<Vec<f64>, RosError>>()?
-        );
+    fn from_vec(data: Vec<&str>) -> Result<PoseStamped, RosError>{
 
-        return Ok(Quaternion::from(vec));
+        let header: Header = Header::from_vec(data[0..3].into())?;
+        let pose: Pose = Pose::from_vec(data[3..data.len()].into())?;
+
+        return Ok(PoseStamped{
+            header,
+            pose
+        });
     }
-
-    fn parse_covariances(data: &[Arc<str>]) -> Result<Matrix6<f64>, RosError>
-     {
-        //TODO: Check if this parser is working
-        //I might want to ensure that the w is between -1 and 1;
-        let matrix = Matrix6::from_iterator(
-            data.iter()
-                .map(|s| {
-                    s.parse::<f64>().map_err(|_e| RosError::ParseError {
-                        value: s.to_string().into(),
-                        name: "Pose.covariance".into(),
-                    })
-                })
-            .collect::<Result<Vec<f64>, RosError>>()?
-        );
-
-        if matrix.sum() == 0.0 || data.len() != 36 {
-            return Err(RosError::ParseError{value: "".into(), name: "Pose.covariance".into()})
-        }
-        else{
-            return Ok(matrix);
-        };
-    }   
 }
-
-
-
-
-
-
-
 
 
 #[derive(Debug, Serialize, Deserialize, Default)]
@@ -319,6 +268,40 @@ impl Twist
     }
 }
 
+
+impl RosMsg for Twist {
+    fn echo(&self) -> String{
+        todo!()
+    }
+    fn get_header(&self) -> Result<&Header, RosError>{
+        Err(RosError::MissingHeader { rostype: "Pose".into() })
+    }
+    fn from_vec(data:  Vec<&str>) -> Result<Self, RosError> {
+        let data_vec: Vec<Arc<str>> = data.iter().map(|s| Arc::from(*s)).collect();
+
+
+        let linear = Self::parse_vector(&data_vec[0..3])?;
+        let angular = Self::parse_vector(&data_vec[3..6])?;
+
+        let twist = match Self::parse_covariances(&data_vec[6..data_vec.len()]){
+            Ok(cov) => Twist{
+                linear: linear,
+                angular: angular,
+                covariance: Some(cov)
+            },
+            Err(e) => Twist{
+                linear: linear,
+                angular: angular,
+                covariance: None
+            }
+        };
+
+        return Ok(twist);
+    }
+
+}
+
+
 #[derive(Debug, Serialize, Deserialize, Default)]
 pub struct Odometry
 {
@@ -334,9 +317,9 @@ impl Odometry
 
         let data_vec: Vec<Arc<str>> = data.iter().map(|s| Arc::from(*s)).collect();
 
-        let header: Header = Header::parse(&data_vec[1..4])?;
+        let header: Header = Header::from_vec(data[1..4].into())?;
         let child_frame_id: &Arc<str> = &data_vec[4];
-        let pose: Pose = Pose::parse(&data_vec[5..48])?;
+        let pose: Pose = Pose::from_vec(data[5..48].into())?;
         let twist: Twist = Twist::parse(&data_vec[48..])?;
 
         Ok(Odometry{
@@ -347,6 +330,33 @@ impl Odometry
         })
     }
 }
+
+
+impl RosMsg for Odometry{
+    fn echo(&self) -> String{
+        todo!()
+    }
+    fn get_header(&self) -> Result<&Header, RosError>{
+        Ok(&self.header)
+    }
+    fn from_vec(data:  Vec<&str>) -> Result<Self, RosError> {
+        //let data_vec: Vec<Arc<str>> = data.iter().map(|s| Arc::from(*s)).collect();
+
+        let header: Header = Header::from_vec(data[1..4].into())?;
+        let child_frame_id: &str = data[4];
+        let pose: Pose = Pose::from_vec(data[5..48].into())?;
+        let twist: Twist = Twist::from_vec(data[48..].into())?;
+
+        Ok(Odometry{
+            header: header,
+            child_frame_id: None, //Ok(child_frame_id),
+            pose: pose,
+            twist: twist
+        })
+    }
+}
+
+impl GeometryMsg for Odometry { }
 
 impl fmt::Display for Odometry {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -363,6 +373,3 @@ impl fmt::Display for Odometry {
         )
     }
 }
-
-impl RosMsg for Odometry { }
-impl RosMsg for PoseStamped { }
