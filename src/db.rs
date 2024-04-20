@@ -12,7 +12,7 @@ use surrealdb::{
 };
 
 use bollard::container::{MemoryStats, CPUStats};
-use crate::{metrics::ContainerStats, ros_msgs::{Header, Odometry, Pose, Twist}};
+use crate::{metrics::ContainerStats, ros_msgs::{GeometryMsg, Header, Odometry, Pose, RosMsg, Twist}};
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Record{
@@ -50,7 +50,7 @@ impl DB{
         Ok(stats)
     }
 
-    pub async fn add_odom(&self, mut data: Odometry, table: &str)
+    pub async fn add_msg<T: GeometryMsg>(&self, mut data: T, table: &str)
     {
         let create: Vec<Record> = self.db.create(table)
             .content(data)
@@ -58,14 +58,14 @@ impl DB{
             .unwrap();
     }
 
-    pub async fn query_odom(&self, table: &str) -> Result<Vec<Odometry>, surrealdb::Error> 
+    pub async fn query_msg<T: GeometryMsg>(&self, table: &str) -> Result<Vec<T>, surrealdb::Error> 
     {    
         let mut response = self.db
             .query("SELECT * FROM type::table($table)")
             .bind(("table", table))
             .await.unwrap();
 
-        let odoms: Vec<_> = response.take(0)?;
+        let odoms: Vec<_> = response.take(0).unwrap();
         
         Ok(odoms)
     }

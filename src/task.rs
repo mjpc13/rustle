@@ -1,9 +1,4 @@
-use bollard::{Docker,
-    image::{CreateImageOptions},
-    container,
-    exec::{CreateExecOptions, StartExecResults},
-    models::{HostConfig, ResourcesUlimits},
-    container::{StatsOptions}
+use bollard::{container::{self, RemoveContainerOptions, StatsOptions}, exec::{CreateExecOptions, StartExecResults}, image::CreateImageOptions, models::{HostConfig, ResourcesUlimits}, Docker
 };
 
 use std::{
@@ -25,7 +20,7 @@ use futures_util::stream::{StreamExt};
 use futures_util::future;
 use temp_dir::TempDir;
 
-use crate::{db::DB, metrics::ContainerStats};
+use crate::{db::DB, metrics::ContainerStats, ros_msgs::{GeometryMsg, PoseStamped, RosMsg}};
 //use crate::metrics::Stats;
 
 use surrealdb::{
@@ -77,7 +72,7 @@ impl Default for AdvancedConfig {
     fn default() -> AdvancedConfig {
         AdvancedConfig{
             docker_socket: Docker::connect_with_local_defaults().unwrap(),
-            db_endpoint: "endpoint".to_string(),
+            db_endpoint: "memory".to_string(),
             db_namespace: "namespace".to_string(),
             db_database: "database".to_string()
         }
@@ -102,11 +97,11 @@ struct InnerConfig {
 pub struct Config {
     config: Arc<InnerConfig>
 }
-
-pub struct TaskOutput {
+#[derive(Debug)]
+pub struct TaskOutput<T: GeometryMsg> {
     pub stats: Vec<ContainerStats>,
     pub odoms: HashMap<String, Vec<Odometry>>,
-    pub groundtruth: Vec<Odometry>
+    pub groundtruth: Vec<T>
 }
 
 impl Config {
@@ -139,7 +134,6 @@ impl Config {
         //Creates the DB
         let connection = match advanced_args{
             Some(ref val) => {
-                std::env::var("SURREALDB_ENDPOINT").unwrap_or_else(|_| "memory".to_owned());
                 let connection = any::connect(&val.db_endpoint).await.unwrap();
                 connection.use_ns(&val.db_namespace).use_db(&val.db_database).await.unwrap();
                 connection
@@ -281,7 +275,7 @@ impl Task {
         Task{image_id:id, config}
     }
 
-    pub async fn run(&self) -> Result<TaskOutput, RosError>{
+    pub async fn run(&self) -> Result<TaskOutput<PoseStamped>, RosError>{
         //Start the container
         // let _ = self.config.start_container().await;
         let _ = self.config.get_docker().start_container::<String>(&self.image_id, None).await;
@@ -293,7 +287,7 @@ impl Task {
         let commands: Vec<_> = vec![
             "roslaunch rustle rustle.launch --wait",
             "rosbag play --clock /rustle/dataset/*.bag"
-            //"rosbag play -d 0 --clock -u 10 /rustle/dataset/*.bag"
+            //"rosbag play -d 0 --clock -u 20 /rustle/dataset/*.bag"
         ];
 
         let execs: Vec<_> = future::try_join_all(commands
@@ -395,11 +389,11 @@ impl Task {
             }
         });
 
-        //spawn a task to extract the results and add them to DB
-        //TODO: Dont hardcode this
-        //let rec_cmd = vec!["/lio_sam/mapping/odometry", "/lio_sam/mapping/odometry_incremental"];          
+        //Add the ground truth as a topic
+        let mut topics = self.config.get_topics();
+        topics.push(self.config.get_gt().to_string());
         
-        let res_tasks: Vec<_> = self.config.get_topics()
+        let res_tasks: Vec<_> = topics
             .into_iter()
             .map( |s| {
                 let config_clone = self.config.clone();
@@ -410,14 +404,6 @@ impl Task {
             })
             .collect();
 
-        //Record the groundtruth: It is given as Poses... Need to change the code
-        let config_clone = self.config.clone();
-        let s = self.config.get_gt().to_string();
-        let token_clone = token.clone();
-        tokio::spawn(async move {
-            Self::record_task(config_clone, &s, token_clone).await;
-        });
- 
         // Wait a certain number of seconds for the algorithm to init, PARAMETER
         let ten_sec = time::Duration::from_secs(5);
         thread::sleep(ten_sec);
@@ -447,7 +433,7 @@ impl Task {
         let mut odoms_result = Arc::new(Mutex::new(HashMap::<String, Vec<Odometry>>::new()));
         let stats_result: Vec<ContainerStats> = self.config.get_db().query_stats().await.unwrap();
 
-        let  gt_result: Vec<Odometry> = self.config.get_db().query_odom(self.config.get_gt()).await.unwrap();
+        let  gt_result: Vec<PoseStamped> = self.config.get_db().query_msg(self.config.get_gt()).await.unwrap();
         
         let write_results:Vec<_> = self.config.get_topics()
             .into_iter()
@@ -457,7 +443,7 @@ impl Task {
                 tokio::spawn(async move {
                     let odoms: Vec<Odometry> = config_clone
                         .get_db()
-                        .query_odom(&s)
+                        .query_msg(&s)
                         .await
                         .expect("Unable to find odometry data on table!");
                     let test = odoms_result_clone.lock().unwrap().insert(s.to_string(), odoms);
@@ -478,6 +464,17 @@ impl Task {
         //        })
         //    })
         //    .collect();
+
+        
+        self.config.get_docker().remove_container(
+            &format!("rustle-{}", self.config.get_algo()), 
+            Some(
+                RemoveContainerOptions{
+                    force: true,
+                    ..Default::default()
+                }
+            )
+        );
         
         futures_util::future::join_all(write_results).await;
 
@@ -516,12 +513,20 @@ impl Task {
                     select!{
                         Some(Ok(msg)) = output.next() => {
 
-                            //TODO: Add custom ROSError here
-                            match Self::convert_to_odom(msg.to_string()){
-                                Ok(odom) => config.get_db().add_odom(odom, topic).await,
-                                Err(error) => warn!("{}", error),
+                            //TODO: CHECK THIS FUTURE MARIO
+                            match Self::convert_to_ros::<Odometry>(msg.to_string()){
+                                Ok(odom) => {
+                                    config.get_db().add_msg(odom, topic).await;
+                                },
+                                Err(error) => {
+                                    match Self::convert_to_ros::<PoseStamped>(msg.to_string()){
+                                        Ok(pose_stamped) => {
+                                            config.get_db().add_msg(pose_stamped, topic).await;
+                                        },
+                                        Err(e) => warn!("{e:}"),
+                                    }
+                                },
                             }
-
                         },
                         _ = record_token.cancelled()=>{
                             
@@ -550,14 +555,12 @@ impl Task {
             }
     }
 
-    fn convert_to_odom(msg: String) -> Result<Odometry, RosError> {
+    fn convert_to_ros<T: RosMsg>(msg: String) -> Result<T, RosError> {
 
         let ros_msg: Vec<_> = msg.split("\n")
             // .filter(|&s| s.chars().next().map(char::is_numeric).unwrap_or(false))
             .collect();
 
-
-        warn!("ROS Message: {:?}", ros_msg);
         if !ros_msg.is_empty() {
             
             let message_list: Vec<_> = ros_msg
@@ -568,10 +571,8 @@ impl Task {
 
             if message_list.len() >= 3{
                 //TODO: Change this "default stuff"
-                let odom: Odometry = Odometry::default();
-                let res: Odometry = odom.parse(message_list)?;
-
-                warn!("{}", res);
+                let res: T = T::from_vec(message_list)?;
+                trace!("A valid ROS msg: {}", res.echo());
 
                 return Ok(res)
             }

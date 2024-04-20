@@ -43,12 +43,6 @@ async fn main() {
         ..Default::default()
     };
 
-    //let topics_lio-sam: Vec<String> = vec![
-    //    "/lio_sam/mapping/odometry".to_string(), 
-    //    "/lio_sam/mapping/odometry_incremental".to_string()
-    //];
-    //let file = "file://test/db/";
-
     let test = Config::new(
         "mjpc13/rustle:ig-lio".into(), 
         "ig-lio".into(), 
@@ -60,9 +54,7 @@ async fn main() {
     ).await;
     
     let task1: Task = Task::new(test.unwrap()).await;
-    let _result = task1.run().await.unwrap();
-
-
+    let result = task1.run().await.unwrap();
 
 
 
