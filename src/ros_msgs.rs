@@ -4,8 +4,7 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::{
     clone::Clone, 
     cmp::PartialEq,
-    fmt::Debug,
-    fmt
+    fmt::{self, Debug, Display}
 };
 
 use nalgebra::{
@@ -32,7 +31,7 @@ pub trait RosMsg: Sized + Default{
     fn from_vec(data: Vec<&str>) -> Result<Self, RosError>;
 }
 
-pub trait GeometryMsg: RosMsg + Serialize + DeserializeOwned{}
+pub trait GeometryMsg: RosMsg + Serialize + DeserializeOwned + Display + Debug{}
 
 #[derive(Debug, Serialize, Deserialize, Default)]
 pub struct Header{
@@ -180,6 +179,20 @@ impl RosMsg for Pose{
 }
 impl GeometryMsg for Pose{}
 
+impl fmt::Display for Pose {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // The odometry messages will be printed in the TUM format file
+        write!(f, "{} {} {} {} {} {} {}",
+            self.position[0], 
+            self.position[1], 
+            self.position[2], 
+            self.orientation.coords[0], 
+            self.orientation.coords[1], 
+            self.orientation.coords[2], 
+            self.orientation.coords[3]
+        )
+    }
+}
 
 #[derive(Debug, Serialize, Deserialize, Default)]
 pub struct PoseStamped
@@ -209,6 +222,24 @@ impl RosMsg for PoseStamped{
     }
 }
 impl GeometryMsg for PoseStamped{}
+
+impl fmt::Display for PoseStamped {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // The odometry messages will be printed in the TUM format file
+        write!(f, "{} {} {} {} {} {} {} {}",
+            self.header.time.timestamp_nanos_opt().unwrap() as f64 /f64::powf(10.0,9.0), 
+            self.pose.position[0], 
+            self.pose.position[1], 
+            self.pose.position[2], 
+            self.pose.orientation.coords[0], 
+            self.pose.orientation.coords[1], 
+            self.pose.orientation.coords[2], 
+            self.pose.orientation.coords[3]
+        )
+    }
+}
+
+
 
 #[derive(Debug, Serialize, Deserialize, Default)]
 pub struct Twist
@@ -336,7 +367,7 @@ impl GeometryMsg for Odometry { }
 impl fmt::Display for Odometry {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // The odometry messages will be printed in the TUM format file
-        write!(f, "{}, {}, {}, {}, {}, {}, {}, {}",
+        write!(f, "{} {} {} {} {} {} {} {}",
             self.header.time.timestamp_nanos_opt().unwrap() as f64 /f64::powf(10.0,9.0), 
             self.pose.position[0], 
             self.pose.position[1], 

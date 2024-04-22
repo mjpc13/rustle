@@ -213,7 +213,7 @@ impl Config {
     fn get_db(&self) -> &DB {
         &self.config.db
     }
-    fn get_dir(&self) -> &TempDir {
+    pub fn get_dir(&self) -> &TempDir {
         &self.config.dir
     }
     fn get_topics(&self) -> Vec<String> {
@@ -286,8 +286,8 @@ impl Task {
 
         let commands: Vec<_> = vec![
             "roslaunch rustle rustle.launch --wait",
-            "rosbag play --clock /rustle/dataset/*.bag"
-            //"rosbag play -d 0 --clock -u 20 /rustle/dataset/*.bag"
+            //"rosbag play --clock /rustle/dataset/*.bag"
+            "rosbag play -d 0 --clock -u 20 /rustle/dataset/*.bag"
         ];
 
         let execs: Vec<_> = future::try_join_all(commands

@@ -4,7 +4,13 @@ use std::fmt;
 use log::{warn, trace};
 use struct_iterable::Iterable;
 
-use crate::{errors::{EvoError, RosError}, metrics::Metrics};
+use crate::errors::{EvoError, RosError};
+
+
+
+pub trait EvoArg {
+    fn compute<'a>(&self, groundtruth: &str, data: &str) -> Result<String, EvoError>;
+}
 
 enum AngleUnit{
     Degree,
@@ -20,7 +26,7 @@ enum PoseRelation{
 }
 
 #[derive(Iterable)]
-pub struct EvoArgs{
+pub struct EvoApeArg{
     t_max_diff: Option<f32>,
     t_offset: Option<f32>,
     t_start: Option<f32>,
@@ -33,7 +39,7 @@ pub struct EvoArgs{
     plot: Option<PlotArg>
 }
 
-impl EvoArgs {
+impl EvoApeArg {
     fn get_commands(&self) -> Vec<String>{
         
         let mut commands: Vec<String> = Vec::new();
@@ -89,9 +95,9 @@ impl EvoArgs {
     }
 }
 
-impl Default for EvoArgs {
-    fn default() -> EvoArgs {
-        EvoArgs{
+impl Default for EvoApeArg {
+    fn default() -> EvoApeArg {
+        EvoApeArg{
             t_max_diff: None,
             t_offset: None,
             t_start: None,
@@ -106,7 +112,7 @@ impl Default for EvoArgs {
     }
 }
 
-impl fmt::Display for EvoArgs {
+impl fmt::Display for EvoApeArg {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 
         let mut string = String::new();
@@ -237,9 +243,158 @@ impl Default for PlotArg {
     }
 }
 
+impl EvoArg for EvoApeArg{
+    fn compute<'a>(&self, groundtruth: &str, data: &str) -> Result<String, EvoError>{
+        let output = Command::new("evo_ape")
+            .arg("tum")
+            .arg(groundtruth)
+            .arg(data)
+            .args(self.get_commands())
+            .output()
+            .unwrap();
+        println!("MY FILES: {}, {}", groundtruth, data);
 
-pub fn evo_ape<'a>(groundtruth: &str, data: &str, args: EvoArgs) -> Result<String, EvoError>{
-    let output = Command::new("evo_ape")
+    
+        let stdout = std::str::from_utf8(&output.stdout).unwrap();
+        let stderr = std::str::from_utf8(&output.stderr).unwrap();
+        
+        trace!("STDOUT {}", stdout);
+        trace!("STDERR {}", stderr);
+    
+        if stderr.is_empty() && !stdout.is_empty(){
+    
+            return Ok(stdout.to_string());
+    
+            //parse
+        } else{
+            return Err(EvoError::CommandError { stderr: stderr.into() });
+        }
+    }
+    
+}
+
+
+#[derive(Iterable)]
+
+pub struct EvoRpeArg{
+    t_max_diff: Option<f32>,
+    t_offset: Option<f32>,
+    t_start: Option<f32>,
+    t_end: Option<f32>,
+    pose_relation: Option<PoseRelation>,// full,trans_part,rot_part,angle_deg,angle_rad,point_distance
+    align: bool,
+    scale: bool,
+    n_to_align: Option<f32>,
+    align_origin: bool,
+    plot: Option<PlotArg>
+}
+
+
+impl EvoRpeArg {
+    fn get_commands(&self) -> Vec<String>{
+        
+        let mut commands: Vec<String> = Vec::new();
+
+        let test: Vec<_> = self
+            .iter()
+            .map( | (s, o) | {
+                
+                //This handles all the Option<f32>
+                if o.is::<Option<f32>>(){
+                    match o.downcast_ref::<Option<f32>>().unwrap(){
+                        Some(val) => commands.push(format!("--{s} {val}")),
+                        None => (),
+                    }
+                } else if o.is::<bool>(){ //This handles all the bools
+                    let val = o.downcast_ref::<bool>().unwrap();
+                    if *val{
+                        match s{
+                            "align" => commands.push("-a".to_string()),
+                            "scale" => commands.push("-s".to_string()),
+                            "align_origin" => commands.push("--align_origin".to_string()),
+                            _ => (),
+                        }
+                    }
+                } else if o.is::<Option<PoseRelation>>(){ 
+                    match o.downcast_ref::<Option<PoseRelation>>().unwrap(){
+                        Some(val) => {
+                            match val{
+                                PoseRelation::Full => commands.push("-r full".to_string()),
+                                PoseRelation::TransPart => commands.push("-r trans_part".to_string()),
+                                PoseRelation::RotPart => commands.push("-r rot_part".to_string()),
+                                PoseRelation::Angle(AngleUnit::Degree) => commands.push("-r angle_deg".to_string()),
+                                PoseRelation::Angle(AngleUnit::Radian) => commands.push("-r angle_rad".to_string()),
+                                PoseRelation::PointDistance => commands.push("-r point_distance".to_string())                            }
+                        },
+                        None => (),
+                    }
+
+                } else{
+                    println!("{s:}");
+                }
+            }).collect();
+        
+        match &self.plot{
+            Some(p) =>{
+                let plot_cmd: Vec<String> = p.get_commands();
+                commands.extend(plot_cmd);
+            },
+            None => ()
+        }
+
+        return commands;
+    }
+}
+
+impl Default for EvoRpeArg {
+    fn default() -> EvoRpeArg {
+        EvoRpeArg{
+            t_max_diff: None,
+            t_offset: None,
+            t_start: None,
+            t_end: None,
+            pose_relation: None,// full,trans_part,rot_part,angle_deg,angle_rad,point_distance
+            align: true,
+            scale: true,
+            n_to_align: None,
+            align_origin: true,
+            plot: None
+        }
+    }
+}
+
+impl EvoArg for EvoRpeArg{
+    fn compute<'a>(&self, groundtruth: &str, data: &str) -> Result<String, EvoError>{        
+        let output = Command::new("evo_rpe")
+            .arg("tum")
+            .arg(groundtruth)
+            .arg(data)
+            .args(self.get_commands())
+            .output()
+            .unwrap();
+    
+        let stdout = std::str::from_utf8(&output.stdout).unwrap();
+        let stderr = std::str::from_utf8(&output.stderr).unwrap();
+        
+        trace!("STDOUT {}", stdout);
+        trace!("STDERR {}", stderr);
+    
+        if stderr.is_empty() && !stdout.is_empty(){
+    
+            return Ok(stdout.to_string());
+    
+            //parse
+        } else{
+            return Err(EvoError::CommandError { stderr: stderr.into() });
+        }
+    }
+    
+}
+
+
+pub fn evo_rpe<'a>(groundtruth: &str, data: &str, args: EvoRpeArg) -> Result<String, EvoError>{
+
+    let output = Command::new("evo_rpe")
         .arg("tum")
         .arg(groundtruth)
         .arg(data)

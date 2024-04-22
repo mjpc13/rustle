@@ -4,8 +4,8 @@ use plotters::prelude::*;
 use rustle::db::DB;
 use rustle::evo_wrapper;
 
-use rustle::evo_wrapper::EvoArgs;
-use rustle::metrics::Metrics;
+use rustle::evo_wrapper::EvoApeArg;
+use rustle::metrics::Metric;
 use rustle::metrics::ContainerStats;
 use rustle::task::AdvancedConfig;
 use tokio;
@@ -38,7 +38,7 @@ async fn main() {
     let gt_topic: String = String::from("/gt_poses");
 
     let adv = AdvancedConfig{
-        db_endpoint: String::from("file://test/db"),
+       // db_endpoint: String::from("file://test/db"),
         db_database: String::from("ig-lio"),
         ..Default::default()
     };
@@ -55,6 +55,14 @@ async fn main() {
     
     let task1: Task = Task::new(test.unwrap()).await;
     let result = task1.run().await.unwrap();
+
+    let rpe = Metric::compute(
+        result, 
+        EvoApeArg::default(), 
+        Some("/home/mario/Documents/rustle/test/results")
+    );
+
+    println!("{:?}", rpe);
 
 
 
