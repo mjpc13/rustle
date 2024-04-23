@@ -221,6 +221,7 @@ impl RosMsg for PoseStamped{
         });
     }
 }
+
 impl GeometryMsg for PoseStamped{}
 
 impl fmt::Display for PoseStamped {
@@ -236,6 +237,42 @@ impl fmt::Display for PoseStamped {
             self.pose.orientation.coords[2], 
             self.pose.orientation.coords[3]
         )
+    }
+}
+
+
+#[derive(Debug, Serialize, Deserialize, Default, Clone)]
+pub struct Path
+{
+    pub pose_stamped: PoseStamped
+}
+impl RosMsg for Path{
+    fn echo(&self) -> String{
+        todo!()
+    }
+    fn get_header(&self) -> Result<&Header, RosError>{
+        Ok(&self.pose_stamped.header)
+    }
+    fn from_vec(data: Vec<&str>) -> Result<Path, RosError>{
+
+        //println!("MY FUCKING MESSAGE: {:?}", data);
+        //let header_data = vec!["0", data[0], "", ""];
+        //let header: Header = Header::from_vec(header_data)?;
+        let pose_stamped: PoseStamped = PoseStamped::from_vec(data[4..data.len()].into())?;
+
+
+        return Ok(Path{
+            pose_stamped
+        });
+    }
+}
+
+impl GeometryMsg for Path{}
+
+impl fmt::Display for Path {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // The odometry messages will be printed in the TUM format file
+        write!(f, "{}", self.pose_stamped)
     }
 }
 
