@@ -450,21 +450,6 @@ impl Task {
                 })
             })
             .collect();
-
-
-
-
-        //let write_results: Vec<_> = rec_cmd
-        //    .into_iter()
-        //    .map( |s| {
-        //        let config_clone = self.config.clone();
-        //        tokio::spawn(async move {
-        //            let odoms: Vec<Odometry> = config_clone.get_db().query_odom(s).await.expect("Unable to find odometry data on table!");
-        //            Self::write_result(odoms, s, config_clone.get_dir());
-        //        })
-        //    })
-        //    .collect();
-
         
         self.config.get_docker().remove_container(
             &format!("rustle-{}", self.config.get_algo()), 
@@ -474,7 +459,7 @@ impl Task {
                     ..Default::default()
                 }
             )
-        );
+        ).await;
         
         futures_util::future::join_all(write_results).await;
 
@@ -586,7 +571,7 @@ impl Task {
 
         // let path_name = format!("{}/{}.txt", path, name.replace("/", "-"));
 
-        let f = tmp_dir.child(format!("{}", name.replace("/", "-")));
+        let f = tmp_dir.child(format!("{}", name.replace("/", "_")));
         
         // if Path::new(&path_name).is_file() == false{
         //     File::create(&path_name);

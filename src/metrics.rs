@@ -1,4 +1,5 @@
 use crate::{errors::{EvoError, RosError}, evo_wrapper::EvoArg, ros_msgs::{GeometryMsg, Odometry, RosMsg}, task::{Config, TaskOutput}};
+use plotters::{backend::BitMapBackend, chart::ChartBuilder, drawing::IntoDrawingArea, element::PathElement, series::LineSeries, style::{Color, IntoFont, RGBColor, BLACK, RED, WHITE}};
 use serde::{Deserialize, Serialize};
 use bollard::container::{MemoryStats, CPUStats};
 use chrono::{DateTime, Utc};
@@ -11,7 +12,7 @@ use temp_dir::TempDir;
 use std::{collections::HashMap, env, fs::OpenOptions, io::Write, path::PathBuf, str::FromStr};
 use itertools::Itertools;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ContainerStats {
     pub uid: Option<u32>,
     pub memory_stats: MemoryStats,
@@ -31,7 +32,6 @@ pub struct Metric{
     std: f32
 }
 
-
 impl Metric{
     pub fn compute<T: GeometryMsg, R: EvoArg>(data: TaskOutput<T>, args: R, output_path: Option<&str>) -> Result<Vec<Metric>, EvoError>{
         
@@ -45,6 +45,8 @@ impl Metric{
             }
         };
         let mut path_gt = path.clone();
+
+        println!("{data:?}");
         
         Self::write_file::<T>(data.groundtruth, "groundtruth", &mut path_gt);
 
@@ -62,10 +64,6 @@ impl Metric{
 
         Ok(metric_results)
         
-
-        //println!("{}", &evo_str);
-        //todo!();
-        //Metric::from_str(&evo_str)
     }
 
     fn write_file<'a, T: GeometryMsg>(data: Vec<T>, name: &str, path: &mut PathBuf){
@@ -74,7 +72,7 @@ impl Metric{
 
         let mut file = OpenOptions::new()
             .write(true)
-            .append(true)
+            .append(false)
             .create(true)
             .open(path).unwrap();
         
@@ -95,31 +93,32 @@ impl FromStr for Metric {
         let mut hash: HashMap<&str, f32> = HashMap::new();
 
         let data_vec: Vec<_> = s.split("\n")
-        .filter(|&s| s.contains("\t"))
-        .map(|s| s.split("\t"))
-        .flatten()
-        .map(|s| s.trim())
-        .batching( |it| {
-            match it.next() {
-                None => None,
-                Some(x) => match it.next() {
+            .filter(|&s| s.contains("\t"))
+            .map(|s| s.split("\t"))
+            .flatten()
+            .map(|s| s.trim())
+            .batching( |it| {
+                match it.next() {
                     None => None,
-                    Some(y) => Some((x, y)),
+                    Some(x) => match it.next() {
+                        None => None,
+                        Some(y) => Some((x, y)),
+                    }
                 }
             }
-        })
-        .map(|(k, v)| {
-            let n = v.parse::<f32>().unwrap();
-                //.unwrap_or(
-                //return Err::<(),RosError>(
-                //        RosError::ParseError { 
-                //            name: "asd".into(), 
-                //            value: "dsa".into() 
-                //        }
-                //    )
-                //);
-                hash.insert(k, n);
-        }
+            )
+            .map(|(k, v)| {
+                let n = v.parse::<f32>().unwrap();
+                    //.unwrap_or(
+                    //return Err::<(),RosError>(
+                    //        RosError::ParseError { 
+                    //            name: "asd".into(), 
+                    //            value: "dsa".into() 
+                    //        }
+                    //    )
+                    //);
+                    hash.insert(k, n);
+            }
         )
         .collect();
 
@@ -134,9 +133,104 @@ impl FromStr for Metric {
     }
 }
 
-
-
-
+#[derive(Clone)]
 pub struct ContainerMetrics{
+    stats: Vec<ContainerStats>
+}
 
+pub struct ContainerMemory<'a>{
+    resolution: (u32, u32),
+    bg_color: RGBColor,
+    line_color: RGBColor,
+    border_color: RGBColor,
+    legend: &'a str,
+}
+
+
+
+pub enum ContainerPlot{
+    MemoryUsage,
+    Load,
+    LoadPercentage
+}
+
+pub struct ContainerPlotArg<'a>{
+    resolution: (u32, u32),
+    bg_color: RGBColor,
+    line_color: RGBColor,
+    border_color: RGBColor,
+    caption: &'a str,
+    caption_style: (&'a str, u32),
+    legend: &'a str,
+}
+
+
+impl ContainerPlot {
+    pub fn plot(&self, data: Vec<ContainerStats>, output_path: &str){
+
+        match self {
+            Self::MemoryUsage => {
+                self.plot_memory(data, output_path)
+            },
+            Self::Load => {
+                //self.plot_load(data, output_path)
+            },
+            Self::LoadPercentage => {
+               // self.plot_load_percentage(data, output_path)
+            }
+        }
+
+    }
+
+    fn plot_memory(&self, data: Vec<ContainerStats>, output_path: &str){
+
+        let root = BitMapBackend::new(output_path, (1920, 1080)).into_drawing_area();
+        root.fill(&WHITE).unwrap();
+
+        let x_max = (data.last().unwrap().created_at.unwrap() - data[0].created_at.unwrap()).num_seconds();
+        let y_min = data[0].memory_stats.usage.unwrap() as f64 * 1e-6;
+        let y_max = data.last().unwrap().memory_stats.usage.unwrap() as f64 * 1e-6;
+
+
+        let mut chart = ChartBuilder::on(&root)
+            .caption("Memory Usage (MiB)", ("sans-serif", 50).into_font())
+            .margin(5)
+            .x_label_area_size(50)
+            .y_label_area_size(50)
+            .build_cartesian_2d(0i64..x_max, y_min..y_max).unwrap();
+
+
+    
+
+        chart.configure_mesh().draw().unwrap();
+        
+        chart
+            .draw_series(LineSeries::new(
+                    data.clone().into_iter().map(|s| 
+                        (
+                            //(s.created_at.unwrap() - data[0].created_at.unwrap()).num_seconds(),
+                            s.uid.unwrap() as i64, 
+                            s.memory_stats.usage.unwrap() as f64 * 1e-6
+                        )
+                    ),
+                &RED,
+            )).unwrap()
+            .label("LIO-SAM")
+            .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &RED));
+        
+        chart
+            .configure_series_labels()
+            .background_style(&WHITE.mix(0.8))
+            .border_style(&BLACK)
+            .draw().unwrap();
+        
+        root.present().unwrap();
+    }
+
+    fn plot_load(&self, data: Vec<ContainerStats>, output_path: &str){
+        
+    }
+    fn plot_load_percentage(&self, data: Vec<ContainerStats>, output_path: &str){
+        
+    }
 }

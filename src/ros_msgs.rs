@@ -33,7 +33,7 @@ pub trait RosMsg: Sized + Default{
 
 pub trait GeometryMsg: RosMsg + Serialize + DeserializeOwned + Display + Debug{}
 
-#[derive(Debug, Serialize, Deserialize, Default)]
+#[derive(Debug, Serialize, Deserialize, Default, Clone)]
 pub struct Header{
     pub seq: u32,
     pub time: DateTime<Utc>,
@@ -74,7 +74,7 @@ impl RosMsg for Header{
 
 
 
-#[derive(Debug, Serialize, Deserialize, Default)]
+#[derive(Debug, Serialize, Deserialize, Default, Clone)]
 pub struct Pose
 {
     position: Point3<f64>,
@@ -194,7 +194,7 @@ impl fmt::Display for Pose {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Default)]
+#[derive(Debug, Serialize, Deserialize, Default, Clone)]
 pub struct PoseStamped
 {
     header: Header,
@@ -241,7 +241,7 @@ impl fmt::Display for PoseStamped {
 
 
 
-#[derive(Debug, Serialize, Deserialize, Default)]
+#[derive(Debug, Serialize, Deserialize, Default, Clone)]
 pub struct Twist
 {
     linear: Vector3<f64>,
@@ -324,7 +324,7 @@ impl RosMsg for Twist {
 }
 
 
-#[derive(Debug, Serialize, Deserialize, Default)]
+#[derive(Debug, Serialize, Deserialize, Default, Clone)]
 pub struct Odometry
 {
     pub header: Header,
