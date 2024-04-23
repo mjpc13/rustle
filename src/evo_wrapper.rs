@@ -1,7 +1,7 @@
 use core::f32;
 use std::process::Command;
 use std::fmt;
-use log::{warn, trace};
+use log::{error, trace, warn};
 use struct_iterable::Iterable;
 
 use crate::errors::{EvoError, RosError};
@@ -258,14 +258,19 @@ impl EvoArg for EvoApeArg{
     
         let stdout = std::str::from_utf8(&output.stdout).unwrap();
         let stderr = std::str::from_utf8(&output.stderr).unwrap();
-        
-        trace!("STDOUT {}", stdout);
-        trace!("STDERR {}", stderr);
-    
-        if stderr.is_empty() && !stdout.is_empty(){
-    
+
+        if stdout.contains("[ERROR]"){
+            error!("{}", stdout);
+            return Err(EvoError::CommandError { stderr: stdout.into() });
+            
+        } else if !stderr.is_empty(){
+            error!("{}", stdout);
+            return Err(EvoError::CommandError { stderr: stderr.into() });
+
+        } else if !stdout.is_empty(){
+            
             return Ok(stdout.to_string());
-    
+
         } else{
             return Err(EvoError::CommandError { stderr: stderr.into() });
         }

@@ -44,7 +44,6 @@ impl DB{
             .bind(("table", "stat"))
             .await.unwrap();
 
-
         let stats: Vec<ContainerStats> = groups.take(0)?;
 
         Ok(stats)
@@ -52,20 +51,21 @@ impl DB{
 
     pub async fn add_msg<T: GeometryMsg>(&self, mut data: T, table: &str)
     {
+
         let create: Vec<Record> = self.db.create(table)
             .content(data)
             .await
             .unwrap();
     }
 
-    pub async fn query_msg<T: GeometryMsg>(&self, table: &str) -> Result<Vec<T>, surrealdb::Error> 
+    pub async fn query_msg<T: GeometryMsg>(&self, table: &str) -> Result<Vec<T>, surrealdb::Error>
     {    
         let mut response = self.db
-            .query("SELECT * FROM type::table($table)")
+            .query("SELECT * FROM type::table($table) ORDER BY header")
             .bind(("table", table))
-            .await.unwrap();
+            .await?;
 
-        let odoms: Vec<_> = response.take(0).unwrap();
+        let odoms: Vec<_> = response.take(0)?;
         
         Ok(odoms)
     }

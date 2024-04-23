@@ -33,7 +33,7 @@ pub struct Metric{
 }
 
 impl Metric{
-    pub fn compute<T: GeometryMsg, R: EvoArg>(data: TaskOutput<T>, args: R, output_path: Option<&str>) -> Result<Vec<Metric>, EvoError>{
+    pub fn compute<T: GeometryMsg, R: EvoArg>(data: &TaskOutput<T>, args: R, output_path: Option<&str>) -> Result<Vec<Metric>, EvoError>{
         
         //Write TUM files to temporary directory
         let mut path = match output_path{
@@ -45,13 +45,11 @@ impl Metric{
             }
         };
         let mut path_gt = path.clone();
-
-        println!("{data:?}");
         
-        Self::write_file::<T>(data.groundtruth, "groundtruth", &mut path_gt);
+        Self::write_file::<T>(&data.groundtruth, "groundtruth", &mut path_gt);
 
         let metric_results: Vec<_> = data.odoms
-            .into_iter()
+            .iter()
             .map( |(s, v)| {
                 let mut path_clone = path.clone();
 
@@ -66,15 +64,15 @@ impl Metric{
         
     }
 
-    fn write_file<'a, T: GeometryMsg>(data: Vec<T>, name: &str, path: &mut PathBuf){
+    fn write_file<'a, T: GeometryMsg>(data: &Vec<T>, name: &str, path: &mut PathBuf) -> Result<(), std::io::Error>{
 
-        path.push(name.replace("/", "-"));
+        path.push(name.replace("/", "_"));
 
         let mut file = OpenOptions::new()
             .write(true)
             .append(false)
             .create(true)
-            .open(path).unwrap();
+            .open(path)?;
         
         let _: Vec<_> = data.iter()
             .map(|o|{
@@ -83,7 +81,7 @@ impl Metric{
                 }
             })
             .collect();
-
+        Ok(())
     }
 }
 
@@ -166,11 +164,11 @@ pub struct ContainerPlotArg<'a>{
 
 
 impl ContainerPlot {
-    pub fn plot(&self, data: Vec<ContainerStats>, output_path: &str){
+    pub fn plot(&self, data: Vec<ContainerStats>, output_file: &str){
 
         match self {
             Self::MemoryUsage => {
-                self.plot_memory(data, output_path)
+                self.plot_memory(data, output_file)
             },
             Self::Load => {
                 //self.plot_load(data, output_path)
@@ -182,9 +180,9 @@ impl ContainerPlot {
 
     }
 
-    fn plot_memory(&self, data: Vec<ContainerStats>, output_path: &str){
+    fn plot_memory(&self, data: Vec<ContainerStats>, output_file: &str){
 
-        let root = BitMapBackend::new(output_path, (1920, 1080)).into_drawing_area();
+        let root = BitMapBackend::new(output_file, (1920, 1080)).into_drawing_area();
         root.fill(&WHITE).unwrap();
 
         let x_max = (data.last().unwrap().created_at.unwrap() - data[0].created_at.unwrap()).num_seconds();
@@ -202,7 +200,12 @@ impl ContainerPlot {
 
     
 
-        chart.configure_mesh().draw().unwrap();
+        chart.configure_mesh()
+            .y_desc("Memory Usage (MiB)")
+            .x_desc("Time (s)")
+            .axis_desc_style(("sans-serif", 21))
+            .draw()
+            .unwrap();
         
         chart
             .draw_series(LineSeries::new(

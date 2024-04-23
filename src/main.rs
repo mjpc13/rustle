@@ -1,11 +1,3 @@
-use std::default;
-
-use bollard::{API_DEFAULT_VERSION, Docker};
-use plotters::prelude::*;
-
-use rustle::db::DB;
-use rustle::evo_wrapper;
-
 use rustle::evo_wrapper::EvoApeArg;
 use rustle::evo_wrapper::PlotArg;
 use rustle::metrics::ContainerPlot;
@@ -16,15 +8,6 @@ use tokio;
 
 use rustle::task::Config;
 use rustle::task::Task;
-// Use a connection function described above
-
-use surrealdb::{
-    engine::any
-};
-
-
-use surrealdb::engine::local::File;
-use surrealdb::Surreal;
 
 use env_logger::init;
 
@@ -34,12 +17,15 @@ async fn main() {
     init();
 
     let dataset_path = "/home/mario/Documents/rustle/test/dataset/";
-    let params_path = "/home/mario/Documents/rustle/test/config/iG-LIO/";
-    let topics: Vec<String> = vec![
-       "/lio_odom".to_string(), 
-    ];
-    //let dataset_path = "/home/mario/Documents/rustle/test/dataset-park/";
+    let params_path = "/home/mario/Documents/rustle/test/config/Point-LIO/";
+    //let topics: Vec<String> = vec![
+    //   "/lio_odom".to_string(), 
+    //];
     //let params_path = "/home/mario/Documents/rustle/test/config/LIO-SAM/";
+
+    let topics: Vec<String> = vec![
+        "/Odometry".to_string(), 
+     ];
 
     //let topics: Vec<String> = vec![
     //    "/lio_sam/mapping/odometry".to_string(), 
@@ -49,14 +35,14 @@ async fn main() {
     let gt_topic: String = String::from("/gt_poses");
 
     let adv = AdvancedConfig{
-        db_endpoint: String::from("file://test/db"),
-        db_database: String::from("ig-lio"),
+        //db_endpoint: String::from("file://test/db"),
+        db_database: String::from("point-lio"),
         ..Default::default()
     };
 
     let test = Config::new(
-        "mjpc13/rustle:ig-lio".into(), 
-        "ig-lio".into(), 
+        "mjpc13/rustle:point-lio".into(), 
+        "point-lio".into(), 
         dataset_path.into(), 
         params_path.into(), 
         topics,
@@ -74,15 +60,14 @@ async fn main() {
     };
 
     let rpe = Metric::compute(
-        result, 
+        &result, 
         evo_args, 
         //None
         Some("/home/mario/Documents/rustle/test/results")
     );
-
     println!("{:?}", rpe);
 
-    //ContainerPlot::MemoryUsage.plot(result.stats, "/home/mario/Documents/rustle/test/results");
+    ContainerPlot::MemoryUsage.plot(result.stats, "/home/mario/Documents/rustle/test/results");
 
 
 
