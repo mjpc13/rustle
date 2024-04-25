@@ -1,4 +1,4 @@
-use crate::{errors::{EvoError, RosError}, evo_wrapper::EvoArg, ros_msgs::{GeometryMsg, Odometry, RosMsg}, task::{Config, TaskOutput}};
+use crate::{errors::{EvoError, RosError}, evo_wrapper::EvoArg, ros_msgs::{Odometry, RosMsg}, task::{Config, TaskOutput}};
 use plotters::{backend::BitMapBackend, chart::ChartBuilder, drawing::IntoDrawingArea, element::PathElement, series::LineSeries, style::{Color, IntoFont, RGBColor, BLACK, RED, WHITE}};
 use serde::{Deserialize, Serialize};
 use bollard::container::{MemoryStats, CPUStats};
@@ -33,7 +33,7 @@ pub struct Metric{
 }
 
 impl Metric{
-    pub fn compute<T: GeometryMsg, R: EvoArg>(data: &TaskOutput<T>, args: R, output_path: Option<&str>) -> Result<Vec<Metric>, EvoError>{
+    pub fn compute<R: EvoArg>(data: &TaskOutput, args: R, output_path: Option<&str>) -> Result<Vec<Metric>, EvoError>{
         
         //Write TUM files to temporary directory
         let mut path = match output_path{
@@ -46,7 +46,7 @@ impl Metric{
         };
         let mut path_gt = path.clone();
         
-        Self::write_file::<T>(&data.groundtruth, "groundtruth", &mut path_gt);
+        Self::write_file(&data.groundtruth, "groundtruth", &mut path_gt);
 
         let metric_results: Vec<_> = data.odoms
             .iter()
@@ -64,7 +64,7 @@ impl Metric{
         
     }
 
-    fn write_file<'a, T: GeometryMsg>(data: &Vec<T>, name: &str, path: &mut PathBuf) -> Result<(), std::io::Error>{
+    fn write_file<'a>(data: &Vec<Odometry>, name: &str, path: &mut PathBuf) -> Result<(), std::io::Error>{
 
         path.push(name.replace("/", "_"));
 
@@ -72,6 +72,7 @@ impl Metric{
             .write(true)
             .append(false)
             .create(true)
+            .truncate(true)
             .open(path)?;
         
         let _: Vec<_> = data.iter()

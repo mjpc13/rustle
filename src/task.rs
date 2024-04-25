@@ -1,5 +1,6 @@
 use bollard::{container::{self, RemoveContainerOptions, StatsOptions}, exec::{CreateExecOptions, StartExecResults}, image::CreateImageOptions, models::{HostConfig, ResourcesUlimits}, Docker
 };
+use yaml_rust2::{parser::Parser, YamlLoader};
 
 use std::{
     collections::HashMap, 
@@ -20,7 +21,7 @@ use futures_util::stream::{StreamExt};
 use futures_util::future;
 use temp_dir::TempDir;
 
-use crate::{db::DB, metrics::ContainerStats, ros_msgs::{GeometryMsg, PoseStamped, RosMsg}};
+use crate::{db::DB, metrics::ContainerStats, ros_msgs::{PoseStamped, RosMsg}};
 //use crate::metrics::Stats;
 
 use surrealdb::{
@@ -98,10 +99,10 @@ pub struct Config {
     config: Arc<InnerConfig>
 }
 #[derive(Debug)]
-pub struct TaskOutput<T: GeometryMsg> {
+pub struct TaskOutput{
     pub stats: Vec<ContainerStats>,
     pub odoms: HashMap<String, Vec<Odometry>>,
-    pub groundtruth: Vec<T>
+    pub groundtruth: Vec<Odometry>
 }
 
 impl Config {
@@ -275,7 +276,7 @@ impl Task {
         Task{image_id:id, config}
     }
 
-    pub async fn run(&self) -> Result<TaskOutput<PoseStamped>, RosError>{
+    pub async fn run(&self) -> Result<TaskOutput, RosError>{
         //Start the container
         // let _ = self.config.start_container().await;
         let _ = self.config.get_docker().start_container::<String>(&self.image_id, None).await;
@@ -286,8 +287,8 @@ impl Task {
 
         let commands: Vec<_> = vec![
             "roslaunch rustle rustle.launch --wait",
-            //"rosbag play --clock /rustle/dataset/*.bag"
-            "rosbag play -d 0 --clock -u 20 /rustle/dataset/*.bag"
+            "rosbag play --clock /rustle/dataset/*.bag"
+            //"rosbag play -d 9 --clock -u 20 /rustle/dataset/*.bag"
         ];
 
         let execs: Vec<_> = future::try_join_all(commands
@@ -433,7 +434,7 @@ impl Task {
         let mut odoms_result = Arc::new(Mutex::new(HashMap::<String, Vec<Odometry>>::new()));
         let stats_result: Vec<ContainerStats> = self.config.get_db().query_stats().await.unwrap();
 
-        let  gt_result: Vec<PoseStamped> = self.config.get_db().query_msg(self.config.get_gt()).await.unwrap();
+        let  gt_result: Vec<Odometry> = self.config.get_db().query_odom(self.config.get_gt()).await.unwrap();
         
         let write_results:Vec<_> = self.config.get_topics()
             .into_iter()
@@ -443,10 +444,15 @@ impl Task {
                 tokio::spawn(async move {
                     let odoms: Vec<Odometry> = config_clone
                         .get_db()
-                        .query_msg(&s)
+                        .query_odom(&s)
                         .await
                         .expect("Unable to find odometry data on table!");
+                    
+                    
+                    
                     let test = odoms_result_clone.lock().unwrap().insert(s.to_string(), odoms);
+                
+                
                 })
             })
             .collect();
@@ -475,7 +481,7 @@ impl Task {
 
     async fn record_task(config: Config, topic: &str, record_token: CancellationToken){
 
-        let cmd = format!("rostopic echo -p {topic}");
+        let cmd = format!("rostopic echo {topic}");
 
         let image_id = format!("rustle-{}", config.get_algo());
 
@@ -498,20 +504,18 @@ impl Task {
                     select!{
                         Some(Ok(msg)) = output.next() => {
 
-                            //TODO: CHECK THIS FUTURE MARIO
-                            match Self::convert_to_ros::<Odometry>(msg.to_string()){
-                                Ok(odom) => {
-                                    config.get_db().add_msg(odom, topic).await;
-                                },
-                                Err(error) => {
-                                    match Self::convert_to_ros::<PoseStamped>(msg.to_string()){
-                                        Ok(pose_stamped) => {
-                                            config.get_db().add_msg(pose_stamped, topic).await;
-                                        },
-                                        Err(e) => warn!("{e:}"),
-                                    }
-                                },
+                            Self::convert_to_ros(msg.to_string());
+
+                            match Self::convert_to_ros(msg.to_string()){
+                                Ok(r) => {
+                                    let odom = r.as_odometry().unwrap();
+                                    config.get_db().add_odom(odom, topic).await;
+                                }
+                                Err(e) => {
+                                    error!("Could not store Odometry data into the database {e:} \n");
+                                }
                             }
+
                         },
                         _ = record_token.cancelled()=>{
                             
@@ -540,57 +544,24 @@ impl Task {
             }
     }
 
-    fn convert_to_ros<T: RosMsg>(msg: String) -> Result<T, RosError> {
+    fn convert_to_ros(msg: String) -> Result<RosMsg, RosError> {
 
-        let ros_msg: Vec<_> = msg.split("\n")
-            // .filter(|&s| s.chars().next().map(char::is_numeric).unwrap_or(false))
-            .collect();
 
-        if !ros_msg.is_empty() {
-            
-            let message_list: Vec<_> = ros_msg
-                .iter()
-                .next().expect("Was empty")
-                .split(",")
-                .collect();
-
-            if message_list.len() >= 3{
-                //TODO: Change this "default stuff"
-                let res: T = T::from_vec(message_list)?;
-                trace!("A valid ROS msg: {}", res.echo());
-
-                return Ok(res)
-            }
-
-        }
-        return Err(RosError::FormatError{name: msg.into()})
-
-    }
-
-    fn write_result(data: Vec<Odometry>, name: &str, tmp_dir: &TempDir){
-
-        // let path_name = format!("{}/{}.txt", path, name.replace("/", "-"));
-
-        let f = tmp_dir.child(format!("{}", name.replace("/", "_")));
+        let yaml = YamlLoader::load_from_str(&msg.replace("\n---\n", "")).unwrap();
         
-        // if Path::new(&path_name).is_file() == false{
-        //     File::create(&path_name);
-        // }
+        let ros_msg = yaml[0].as_hash().unwrap();
 
-        let mut file = OpenOptions::new()
-            .write(true)
-            .append(true)
-            .create(true)
-            .open(&f).unwrap();
+        let top_fields: Vec<_> = ros_msg
+            .keys()
+            .into_iter()
+            .map(|y|{
+                y.as_str().unwrap()
+            }).collect();
 
+        let ros = RosMsg::new(top_fields)?;
+
+        return ros.from_yaml(yaml[0].clone());
         
-        let _: Vec<_> = data.iter()
-            .map(|o|{
-                if let Err(e) = writeln!(file, "{}", o ){
-                    eprintln!("Couldn't write to file: {}", e);
-                }
-            })
-            .collect();
     }
 
 }
