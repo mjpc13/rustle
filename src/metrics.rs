@@ -9,6 +9,7 @@ use surrealdb::{
     engine::any
 };
 use temp_dir::TempDir;
+use core::time;
 use std::{collections::HashMap, env, fs::OpenOptions, io::Write, path::PathBuf, str::FromStr};
 use itertools::Itertools;
 
@@ -145,10 +146,9 @@ pub struct ContainerMemory<'a>{
     legend: &'a str,
 }
 
-
-
 pub enum ContainerPlot{
     MemoryUsage,
+    MemoryUsagePerSec,
     Load,
     LoadPercentage
 }
@@ -165,23 +165,25 @@ pub struct ContainerPlotArg<'a>{
 
 
 impl ContainerPlot {
-    pub fn plot(&self, data: Vec<ContainerStats>, output_file: &str){
+    pub fn plot(&self, data: &Vec<ContainerStats>, output_file: &str){
 
         match self {
             Self::MemoryUsage => {
                 self.plot_memory(data, output_file)
             },
+            Self::MemoryUsagePerSec => {
+                self.plot_memory_per_sec(data, output_file)
+            },
             Self::Load => {
-                //self.plot_load(data, output_path)
+                self.plot_load(data, output_file)
             },
             Self::LoadPercentage => {
-               // self.plot_load_percentage(data, output_path)
+               self.plot_load_percentage(data, output_file)
             }
         }
-
     }
 
-    fn plot_memory(&self, data: Vec<ContainerStats>, output_file: &str){
+    fn plot_memory(&self, data: &Vec<ContainerStats>, output_file: &str){
 
         let root = BitMapBackend::new(output_file, (1920, 1080)).into_drawing_area();
         root.fill(&WHITE).unwrap();
@@ -213,7 +215,7 @@ impl ContainerPlot {
                     data.clone().into_iter().map(|s| 
                         (
                             //(s.created_at.unwrap() - data[0].created_at.unwrap()).num_seconds(),
-                            s.uid.unwrap() as i64, 
+                            (s.created_at.unwrap() - data[0].created_at.unwrap()).num_seconds() as i64, 
                             s.memory_stats.usage.unwrap() as f64 * 1e-6
                         )
                     ),
@@ -231,10 +233,146 @@ impl ContainerPlot {
         root.present().unwrap();
     }
 
-    fn plot_load(&self, data: Vec<ContainerStats>, output_path: &str){
+    fn plot_memory_per_sec(&self, data: &Vec<ContainerStats>, output_file: &str){
+        let root = BitMapBackend::new(output_file, (1920, 1080)).into_drawing_area();
+        root.fill(&WHITE).unwrap();
+
+        let mem_sec: Vec<f64> = data
+            .iter()
+            .tuple_windows()
+            .map(|(m1, m2)| {
+                let memory_diff = (m2.memory_stats.usage.unwrap() as f64 - m1.memory_stats.usage.unwrap() as f64);
+                let time_diff = m2.created_at.unwrap() - m1.created_at.unwrap();
+
+                let usage_per_sec = memory_diff * 1e-6 / (time_diff.num_seconds() as f64);
+
+                usage_per_sec
+
+            })
+            .collect();
+
+        let x_max = (data.last().unwrap().created_at.unwrap() - data[0].created_at.unwrap()).num_seconds();
+        let y_min = *mem_sec.iter().min_by(|a, b| a.partial_cmp(b).unwrap()).unwrap_or(&f64::from(0)); 
+        let y_max = *mem_sec.iter().max_by(|a, b| a.partial_cmp(b).unwrap()).unwrap_or(&f64::from(100));
+
+
+        let mut chart = ChartBuilder::on(&root)
+            .caption("Memory Usage Per Second (MiB/s)", ("sans-serif", 50).into_font())
+            .margin(5)
+            .x_label_area_size(50)
+            .y_label_area_size(50)
+            .build_cartesian_2d(0i64..x_max, y_min..y_max).unwrap();
+
+        chart.configure_mesh()
+            .y_desc("Memory Usage Per Second (MiB/s)")
+            .x_desc("Time (s)")
+            .axis_desc_style(("sans-serif", 21))
+            .draw()
+            .unwrap();
         
+        chart
+            .draw_series(LineSeries::new(
+                    data.clone()
+                    .into_iter()
+                    .step_by(2)
+                    .zip(mem_sec.into_iter())
+                    .map(|(s, m)| 
+                        (
+                            (s.created_at.unwrap() - data[0].created_at.unwrap()).num_seconds() as i64, 
+                            m
+                        )
+                    ),
+                &RED,
+            )).unwrap()
+            .label("LIO-SAM")
+            .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &RED));
+        
+        chart
+            .configure_series_labels()
+            .background_style(&WHITE.mix(0.8))
+            .border_style(&BLACK)
+            .draw().unwrap();
+        
+        root.present().unwrap();
     }
-    fn plot_load_percentage(&self, data: Vec<ContainerStats>, output_path: &str){
+
+    fn plot_load_percentage(&self, data: &Vec<ContainerStats>, output_file: &str){
+        let root = BitMapBackend::new(output_file, (1920, 1080)).into_drawing_area();
+        root.fill(&WHITE).unwrap();
+
+        let load_perc: Vec<f64> = data
+            .iter()
+            .skip(1)
+            .map(|cs| {
+
+                let load_used = (cs.cpu_stats.cpu_usage.total_usage - cs.precpu_stats.cpu_usage.total_usage) as f64;
+                
+                let sys_now = cs.cpu_stats.system_cpu_usage.unwrap() as f64;
+                let sys_prev = cs.precpu_stats.system_cpu_usage.unwrap() as f64;
+
+
+                let available = (cs.cpu_stats.system_cpu_usage.unwrap() - cs.precpu_stats.system_cpu_usage.unwrap()) as f64;
+                
+                
+                let load_perc = load_used / available * 100.0 * cs.cpu_stats.online_cpus.unwrap() as f64; 
+
+                load_perc
+
+            })
+            .collect();
+
+
+
+        let x_max = (data.last().unwrap().created_at.unwrap() - data[0].created_at.unwrap()).num_seconds();
+
+
+        let mut chart = ChartBuilder::on(&root)
+            .caption("Computer CPU", ("sans-serif", 50).into_font())
+            .margin(5)
+            .x_label_area_size(50)
+            .y_label_area_size(50)
+            .build_cartesian_2d(0i64..x_max, 0f64..100f64).unwrap();
+
+
+
+        chart.configure_mesh()
+            .y_desc("CPU Load (%)")
+            .x_desc("Time (s)")
+            .axis_desc_style(("sans-serif", 21))
+            .draw()
+            .unwrap();
         
+        chart
+            .draw_series(LineSeries::new(
+                    data.clone()
+                    .into_iter()
+                    .skip(1)
+                    .zip_eq(load_perc.into_iter())
+                    .map(|(s, l)| 
+                        (
+                            (s.created_at.unwrap() - data[0].created_at.unwrap()).num_seconds() as i64, 
+                            l
+                        )
+                    ),
+                &RED,
+            )).unwrap()
+            .label("LIO-SAM")
+            .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &RED));
+        
+
+
+        chart
+            .configure_series_labels()
+            .background_style(&WHITE.mix(0.8))
+            .border_style(&BLACK)
+            .draw().unwrap();
+        
+        root.present().unwrap();
+    }
+
+
+
+    fn plot_load(&self, data: &Vec<ContainerStats>, output_path: &str){
+        todo!()
     }
 }

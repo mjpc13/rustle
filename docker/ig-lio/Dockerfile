@@ -32,6 +32,7 @@ RUN git clone https://github.com/Livox-SDK/Livox-SDK && cd Livox-SDK \
 
 ### END INSTALL DEPENDENCIES ###
 
+RUN mkdir -p /rustle/dataset/ && mkdir -p /rustle/config/
 SHELL ["/bin/bash", "-l", "-c"]
 WORKDIR ${ROS_WS}
 

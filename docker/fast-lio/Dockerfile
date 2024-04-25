@@ -1,14 +1,13 @@
 # Choose the initial Docker image (noetic base is enough for iG-LIO)
-FROM ros:noetic-ros-base
+FROM ros:melodic-ros-base
 
 ENV DEBIAN_FRONTEND=noninteractive
-ENV ROS_VERSION=noetic
 ENV ROS_WS /rustle/catkin_ws
 
 ### METADATA ###
 LABEL author="Mario Cristovao <mario.cristovao@isr.uc.pt>"
 LABEL maintainer="Mario Cristovao <mario.cristovao@isr.uc.pt>"
-LABEL description="Point-LIO Environment for Rustle"
+LABEL description="iG-LIO Environment for Rustle"
 ### END METADATA ###
 
 
@@ -31,6 +30,7 @@ RUN git clone https://github.com/Livox-SDK/Livox-SDK && cd Livox-SDK \
     && sudo make install
 
 ### END INSTALL DEPENDENCIES ###
+
 RUN mkdir -p /rustle/dataset/ && mkdir -p /rustle/config/
 SHELL ["/bin/bash", "-l", "-c"]
 WORKDIR ${ROS_WS}
@@ -38,7 +38,7 @@ WORKDIR ${ROS_WS}
 
 ### CLONE SLAM ALGORITHM
 #Clone only latest commit, initialize and update nested submodules (if any)
-RUN git clone --depth 1 --recurse-submodules https://github.com/hku-mars/Point-LIO.git src/Point-LIO \
+RUN git clone --depth 1 --recurse-submodules https://github.com/hku-mars/FAST_LIO.git src/FAST_LIO \
     && git clone --depth 1 --recurse-submodules https://github.com/Livox-SDK/livox_ros_driver src/livox_ros_driver
 ### CLONE SLAM ALGORITHM
 

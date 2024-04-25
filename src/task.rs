@@ -241,7 +241,7 @@ impl Task {
         //Set up the binds config to mount these volumes inside our container (needs refactor)
         let hm: HashMap<&str, &str> = HashMap::from([
             ("/rustle/dataset/", config.get_dataset()),
-            ("/rustle/config/", config.get_params()),
+            ("/rustle/config/params.yaml", config.get_params()),
         ]);
         let mut path_mounts = vec![];
         let _: Vec<_> = hm.
@@ -504,15 +504,13 @@ impl Task {
                     select!{
                         Some(Ok(msg)) = output.next() => {
 
-                            Self::convert_to_ros(msg.to_string());
-
                             match Self::convert_to_ros(msg.to_string()){
                                 Ok(r) => {
                                     let odom = r.as_odometry().unwrap();
                                     config.get_db().add_odom(odom, topic).await;
                                 }
                                 Err(e) => {
-                                    error!("Could not store Odometry data into the database {e:} \n");
+                                    warn!("{e:}");
                                 }
                             }
 
@@ -547,7 +545,12 @@ impl Task {
     fn convert_to_ros(msg: String) -> Result<RosMsg, RosError> {
 
 
-        let yaml = YamlLoader::load_from_str(&msg.replace("\n---\n", "")).unwrap();
+        let yaml = match YamlLoader::load_from_str(&msg.replace("\n---\n", "")){
+            Ok(y) => y,
+            Err(e) => {
+                return Err(RosError::FormatError { name: msg.into() })
+            },
+        };
         
         let ros_msg = yaml[0].as_hash().unwrap();
 

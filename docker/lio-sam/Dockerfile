@@ -1,7 +1,6 @@
 FROM ros:kinetic-ros-base
 
 ENV DEBIAN_FRONTEND=noninteractive
-ENV ROS_VERSION=kinetic
 ENV ROS_WS /rustle/catkin_ws
 
 LABEL author="Mario Cristovao <mario.cristovao@isr.uc.pt>"
@@ -12,11 +11,11 @@ LABEL description="LIO-SAM Environment for Rustle"
 RUN apt-get update \
   && apt-get install -y curl git \
   && apt-get update \
-  && apt-get install -y ros-$ROS_VERSION-navigation \
-  ros-$ROS_VERSION-robot-localization \
-  ros-$ROS_VERSION-cv-bridge \
-  ros-$ROS_VERSION-robot-state-publisher \
-  ros-$ROS_VERSION-xacro \
+  && apt-get install -y ros-$ROS_DISTRO-navigation \
+  ros-$ROS_DISTRO-robot-localization \
+  ros-$ROS_DISTRO-cv-bridge \
+  ros-$ROS_DISTRO-robot-state-publisher \
+  ros-$ROS_DISTRO-xacro \
   python-catkin-tools \
   && rm -rf /var/lib/apt/lists/* \
   && mkdir -p /rustle/catkin_ws/src
@@ -29,6 +28,7 @@ RUN apt-get update \
   && apt install -y libgtsam-dev libgtsam-unstable-dev \
   && rm -rf /var/lib/apt/lists/*
 
+RUN mkdir -p /rustle/dataset/ && mkdir -p /rustle/config/
 SHELL ["/bin/bash", "-l", "-c"]
 WORKDIR ${ROS_WS}
 
