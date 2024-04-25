@@ -1,7 +1,7 @@
 use core::f32;
 use std::process::Command;
 use std::fmt;
-use log::{warn, trace};
+use log::{error, trace, warn};
 use struct_iterable::Iterable;
 
 use crate::errors::{EvoError, RosError};
@@ -27,16 +27,16 @@ enum PoseRelation{
 
 #[derive(Iterable)]
 pub struct EvoApeArg{
-    t_max_diff: Option<f32>,
-    t_offset: Option<f32>,
-    t_start: Option<f32>,
-    t_end: Option<f32>,
-    pose_relation: Option<PoseRelation>,// full,trans_part,rot_part,angle_deg,angle_rad,point_distance
-    align: bool,
-    scale: bool,
-    n_to_align: Option<f32>,
-    align_origin: bool,
-    plot: Option<PlotArg>
+    pub t_max_diff: Option<f32>,
+    pub t_offset: Option<f32>,
+    pub t_start: Option<f32>,
+    pub t_end: Option<f32>,
+    pub pose_relation: Option<PoseRelation>,// full,trans_part,rot_part,angle_deg,angle_rad,point_distance
+    pub align: bool,
+    pub scale: bool,
+    pub n_to_align: Option<f32>,
+    pub align_origin: bool,
+    pub plot: Option<PlotArg>
 }
 
 impl EvoApeArg {
@@ -79,7 +79,7 @@ impl EvoApeArg {
                     }
 
                 } else{
-                    println!("{s:}");
+                    //println!("{s:}");
                 }
             }).collect();
         
@@ -187,6 +187,7 @@ impl PlotArg {
     fn get_commands(&self) -> Vec<String>{
         
         let mut commands: Vec<String> = Vec::new();
+        commands.push("-p".to_string());
 
         let test: Vec<_> = self
             .iter()
@@ -195,7 +196,7 @@ impl PlotArg {
                 //This handles all the Option<u32>
                 if o.is::<Option<u32>>(){
                     match o.downcast_ref::<Option<u32>>().unwrap(){
-                        Some(val) => commands.push(format!(" --plot_{s} {val}")),
+                        Some(val) => commands.push(format!("--plot_{s} {val}")),
                         None => (),
                     }
                 } else if o.is::<String>(){ //This handles all the bools
@@ -205,24 +206,26 @@ impl PlotArg {
                     }
                 } else if o.is::<PlotMode>(){ 
                     match o.downcast_ref::<PlotMode>().unwrap(){
-                        PlotMode::XY => commands.push(" --plot_mode=xy".to_string()),
-                        PlotMode::XZ => commands.push(" --plot_mode=xz".to_string()),
-                        PlotMode::YX => commands.push(" --plot_mode=yx".to_string()),
-                        PlotMode::YZ => commands.push(" --plot_mode=yz".to_string()),
-                        PlotMode::ZX => commands.push(" --plot_mode=zx".to_string()),
-                        PlotMode::ZY => commands.push(" --plot_mode=zy".to_string()),
-                        PlotMode::XYZ => commands.push(" --plot_mode=xyz".to_string()),
+                        PlotMode::XY => commands.push("--plot_mode=xy".to_string()),
+                        PlotMode::XZ => commands.push("--plot_mode=xz".to_string()),
+                        PlotMode::YX => commands.push("--plot_mode=yx".to_string()),
+                        PlotMode::YZ => commands.push("--plot_mode=yz".to_string()),
+                        PlotMode::ZX => commands.push("--plot_mode=zx".to_string()),
+                        PlotMode::ZY => commands.push("--plot_mode=zy".to_string()),
+                        PlotMode::XYZ => commands.push("--plot_mode=xyz".to_string()),
                         _ => (),
                     }
-                } else if o.is::<AxisUnit>(){ 
-                    match o.downcast_ref::<AxisUnit>().unwrap(){
-                        AxisUnit::Index => commands.push(" --plot_x_dimention index".to_string()),
-                        AxisUnit::Second => commands.push(" --plot_x_dimention second".to_string()),
-                        AxisUnit::Distance => commands.push(" --plot_x_dimention distance".to_string()),
-                        _ => (),
-                    }
-                } else{
-                    println!("WHAT THE HELLLL")
+                } 
+                //else if o.is::<AxisUnit>(){ 
+                //    match o.downcast_ref::<AxisUnit>().unwrap(){
+                //        AxisUnit::Index => commands.push("--plot_x_dimension=index".to_string()),
+                //        AxisUnit::Second => commands.push("--plot_x_dimension=seconds".to_string()),
+                //        AxisUnit::Distance => commands.push("---plot_x_dimension=distances".to_string()),
+                //        _ => (),
+                //    }
+                //} 
+                else{
+                    //println!("WHAT THE HELLLL")
                 }
             }).collect();
         
@@ -252,20 +255,22 @@ impl EvoArg for EvoApeArg{
             .args(self.get_commands())
             .output()
             .unwrap();
-        println!("MY FILES: {}, {}", groundtruth, data);
-
     
         let stdout = std::str::from_utf8(&output.stdout).unwrap();
         let stderr = std::str::from_utf8(&output.stderr).unwrap();
-        
-        trace!("STDOUT {}", stdout);
-        trace!("STDERR {}", stderr);
-    
-        if stderr.is_empty() && !stdout.is_empty(){
-    
+
+        if stdout.contains("[ERROR]"){
+            error!("{}", stdout);
+            return Err(EvoError::CommandError { stderr: stdout.into() });
+            
+        } else if !stderr.is_empty(){
+            error!("{}", stdout);
+            return Err(EvoError::CommandError { stderr: stderr.into() });
+
+        } else if !stdout.is_empty(){
+            
             return Ok(stdout.to_string());
-    
-            //parse
+
         } else{
             return Err(EvoError::CommandError { stderr: stderr.into() });
         }
