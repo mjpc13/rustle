@@ -1,5 +1,5 @@
 use crate::{errors::{EvoError, RosError}, evo_wrapper::EvoArg, ros_msgs::{Odometry, RosMsg}, task::{Config, TaskOutput}};
-use plotters::{backend::BitMapBackend, chart::ChartBuilder, drawing::IntoDrawingArea, element::PathElement, series::LineSeries, style::{Color, IntoFont, RGBColor, BLACK, RED, WHITE}};
+use plotters::{backend::{BitMapBackend, SVGBackend}, chart::ChartBuilder, drawing::IntoDrawingArea, element::{PathElement, Rectangle}, series::LineSeries, style::{self, Color, IntoFont, Palette, Palette99, RGBColor, BLACK, RED, WHITE}};
 use serde::{Deserialize, Serialize};
 use bollard::container::{MemoryStats, CPUStats};
 use chrono::{DateTime, Utc};
@@ -10,7 +10,7 @@ use surrealdb::{
 };
 use temp_dir::TempDir;
 use core::time;
-use std::{collections::HashMap, env, fs::OpenOptions, io::Write, path::PathBuf, str::FromStr};
+use std::{collections::HashMap, default, env, fs::OpenOptions, io::Write, path::PathBuf, str::FromStr};
 use itertools::Itertools;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -165,7 +165,7 @@ pub struct ContainerPlotArg<'a>{
 
 
 impl ContainerPlot {
-    pub fn plot(&self, data: &Vec<ContainerStats>, output_file: &str){
+    pub fn plot(&self, data: &Vec<&TaskOutput>, output_file: &str){
 
         match self {
             Self::MemoryUsage => {
@@ -175,7 +175,7 @@ impl ContainerPlot {
                 self.plot_memory_per_sec(data, output_file)
             },
             Self::Load => {
-                self.plot_load(data, output_file)
+                //self.plot_load(data, output_file)
             },
             Self::LoadPercentage => {
                self.plot_load_percentage(data, output_file)
@@ -183,22 +183,28 @@ impl ContainerPlot {
         }
     }
 
-    fn plot_memory(&self, data: &Vec<ContainerStats>, output_file: &str){
+    fn plot_memory(&self, data: &Vec<&TaskOutput>, output_file: &str){
 
-        let root = BitMapBackend::new(output_file, (1920, 1080)).into_drawing_area();
+        let root = SVGBackend::new(output_file, (800, 600)).into_drawing_area();
         root.fill(&WHITE).unwrap();
 
-        let x_max = (data.last().unwrap().created_at.unwrap() - data[0].created_at.unwrap()).num_seconds();
-        let y_min = data[0].memory_stats.usage.unwrap() as f64 * 1e-6;
-        let y_max = data.last().unwrap().memory_stats.usage.unwrap() as f64 * 1e-6;
+        let x_max = (data[0].stats.last().unwrap().created_at.unwrap() - data[0].stats[0].created_at.unwrap()).num_seconds();
 
+        //Get maximum value for Memory usage
+        let y_max = data.iter()
+            .map(|d| {
+                d.stats.iter()
+                .fold(std::f64::MIN, |a,b| a.max(b.memory_stats.usage.unwrap() as f64 * 1e-6))
+            })
+            .fold(std::f64::MIN, |a,b| a.max(b));
+        let starting_time = data[0].stats[0].created_at.unwrap().clone();
 
         let mut chart = ChartBuilder::on(&root)
             .caption("Memory Usage (MiB)", ("sans-serif", 50).into_font())
             .margin(5)
             .x_label_area_size(50)
             .y_label_area_size(50)
-            .build_cartesian_2d(0i64..x_max, y_min..y_max).unwrap();
+            .build_cartesian_2d(0i64..x_max, 0f64..y_max).unwrap();
 
 
     
@@ -210,19 +216,27 @@ impl ContainerPlot {
             .draw()
             .unwrap();
         
-        chart
-            .draw_series(LineSeries::new(
-                    data.clone().into_iter().map(|s| 
-                        (
-                            //(s.created_at.unwrap() - data[0].created_at.unwrap()).num_seconds(),
-                            (s.created_at.unwrap() - data[0].created_at.unwrap()).num_seconds() as i64, 
-                            s.memory_stats.usage.unwrap() as f64 * 1e-6
-                        )
-                    ),
-                &RED,
-            )).unwrap()
-            .label("LIO-SAM")
-            .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &RED));
+
+        let _: Vec<_> = data
+            .iter()
+            .enumerate()
+            .map(|(idx, d)|{
+                let color = Palette99::pick(idx).mix(0.9);
+
+                chart
+                .draw_series(LineSeries::new(
+                        d.stats.iter().map(|s| 
+                            (
+                                (s.created_at.unwrap() - starting_time).num_seconds() as i64, 
+                                s.memory_stats.usage.unwrap() as f64 * 1e-6
+                            )
+                        ),
+                        color.stroke_width(3)
+                )).unwrap()
+                .label(d.name)
+                .legend(move |(x, y)| Rectangle::new([(x, y - 5), (x + 10, y + 5)], color.filled()));
+            })
+            .collect();
         
         chart
             .configure_series_labels()
@@ -233,28 +247,53 @@ impl ContainerPlot {
         root.present().unwrap();
     }
 
-    fn plot_memory_per_sec(&self, data: &Vec<ContainerStats>, output_file: &str){
-        let root = BitMapBackend::new(output_file, (1920, 1080)).into_drawing_area();
+    fn plot_memory_per_sec(&self, data: &Vec<&TaskOutput>, output_file: &str){
+        let root = SVGBackend::new(output_file, (800, 600)).into_drawing_area();
         root.fill(&WHITE).unwrap();
-
-        let mem_sec: Vec<f64> = data
+        
+        let mem_sec: Vec<Vec<f64>> = data
             .iter()
-            .tuple_windows()
-            .map(|(m1, m2)| {
-                let memory_diff = (m2.memory_stats.usage.unwrap() as f64 - m1.memory_stats.usage.unwrap() as f64);
-                let time_diff = m2.created_at.unwrap() - m1.created_at.unwrap();
-
-                let usage_per_sec = memory_diff * 1e-6 / (time_diff.num_seconds() as f64);
-
-                usage_per_sec
-
+            .map(|to|{
+                to.stats
+                    .iter()
+                    .tuple_windows()
+                    .map(|(m1, m2)| {
+                        let memory_diff = (m2.memory_stats.usage.unwrap() as f64 - m1.memory_stats.usage.unwrap() as f64);
+                        let time_diff = m2.created_at.unwrap() - m1.created_at.unwrap();
+        
+                        let usage_per_sec = memory_diff * 1e-6 / (time_diff.num_seconds() as f64);
+        
+                        usage_per_sec
+        
+                    })
+                    .collect()
             })
             .collect();
 
-        let x_max = (data.last().unwrap().created_at.unwrap() - data[0].created_at.unwrap()).num_seconds();
-        let y_min = *mem_sec.iter().min_by(|a, b| a.partial_cmp(b).unwrap()).unwrap_or(&f64::from(0)); 
-        let y_max = *mem_sec.iter().max_by(|a, b| a.partial_cmp(b).unwrap()).unwrap_or(&f64::from(100));
 
+        //Get the maximum memory per second
+        let y_max = mem_sec.iter()
+            .map(|d| {
+                d.iter()
+                .fold(std::f64::MIN, |a,b| a.max(*b))
+            })
+            .fold(std::f64::MIN, |a,b| a.max(b));
+
+        //Get the maximum memory per second
+        let y_min = mem_sec.iter()
+        .map(|d| {
+            d.iter()
+            .fold(std::f64::MAX, |a,b| a.min(*b))
+        })
+        .fold(std::f64::MAX, |a,b| a.min(b));
+
+
+        let x_max = (data[0].stats.last().unwrap().created_at.unwrap() - data[0].stats[0].created_at.unwrap()).num_seconds();
+        //Get starting time of each Task
+        
+        let starting_time: Vec<DateTime<Utc>> = data.iter().map(|d| {    
+            d.stats[0].created_at.unwrap()
+        }).collect();
 
         let mut chart = ChartBuilder::on(&root)
             .caption("Memory Usage Per Second (MiB/s)", ("sans-serif", 50).into_font())
@@ -264,29 +303,42 @@ impl ContainerPlot {
             .build_cartesian_2d(0i64..x_max, y_min..y_max).unwrap();
 
         chart.configure_mesh()
-            .y_desc("Memory Usage Per Second (MiB/s)")
+            .y_desc("MiB/s")
             .x_desc("Time (s)")
             .axis_desc_style(("sans-serif", 21))
             .draw()
             .unwrap();
         
-        chart
-            .draw_series(LineSeries::new(
-                    data.clone()
-                    .into_iter()
-                    .step_by(2)
-                    .zip(mem_sec.into_iter())
-                    .map(|(s, m)| 
-                        (
-                            (s.created_at.unwrap() - data[0].created_at.unwrap()).num_seconds() as i64, 
-                            m
-                        )
-                    ),
-                &RED,
-            )).unwrap()
-            .label("LIO-SAM")
-            .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &RED));
-        
+
+
+            let _: Vec<_> = data
+            .iter()
+            .zip_eq(mem_sec.into_iter())
+            .enumerate()
+            .map(|(idx, (d, m))|{
+                let color = Palette99::pick(idx).mix(0.9);
+                chart
+                .draw_series(
+                    LineSeries::new(
+                        d.stats
+                            .iter()
+                            .skip(1)
+                            .zip_eq(m.into_iter())
+                            .map(|(s, l)| 
+                                (
+                                    (s.created_at.unwrap() - starting_time[idx]).num_seconds() as i64, 
+                                    l
+                                )
+                            ), 
+                        color.stroke_width(3)
+                )).unwrap()
+                .label(d.name)
+                .legend(move |(x, y)| Rectangle::new([(x, y - 5), (x + 10, y + 5)], color.filled()));
+            })
+            .collect();
+
+
+
         chart
             .configure_series_labels()
             .background_style(&WHITE.mix(0.8))
@@ -296,34 +348,56 @@ impl ContainerPlot {
         root.present().unwrap();
     }
 
-    fn plot_load_percentage(&self, data: &Vec<ContainerStats>, output_file: &str){
-        let root = BitMapBackend::new(output_file, (1920, 1080)).into_drawing_area();
+
+    fn plot_load_percentage(&self, data: &Vec<&TaskOutput>, output_file: &str){
+        let root = SVGBackend::new(output_file, (800, 600)).into_drawing_area();
         root.fill(&WHITE).unwrap();
 
-        let load_perc: Vec<f64> = data
+
+        let load_perc: Vec<Vec<f64>> = data
             .iter()
-            .skip(1)
-            .map(|cs| {
-
-                let load_used = (cs.cpu_stats.cpu_usage.total_usage - cs.precpu_stats.cpu_usage.total_usage) as f64;
+            .map(|to|{
+                to.stats
+                    .iter()
+                    .skip(1)
+                    .map(|cs|{
+                        let load_used = (cs.cpu_stats.cpu_usage.total_usage - cs.precpu_stats.cpu_usage.total_usage) as f64;
                 
-                let sys_now = cs.cpu_stats.system_cpu_usage.unwrap() as f64;
-                let sys_prev = cs.precpu_stats.system_cpu_usage.unwrap() as f64;
-
-
-                let available = (cs.cpu_stats.system_cpu_usage.unwrap() - cs.precpu_stats.system_cpu_usage.unwrap()) as f64;
-                
-                
-                let load_perc = load_used / available * 100.0 * cs.cpu_stats.online_cpus.unwrap() as f64; 
-
-                load_perc
-
+                        let sys_now = cs.cpu_stats.system_cpu_usage.unwrap() as f64;
+                        let sys_prev = cs.precpu_stats.system_cpu_usage.unwrap() as f64;
+        
+        
+                        let available = (cs.cpu_stats.system_cpu_usage.unwrap() - cs.precpu_stats.system_cpu_usage.unwrap()) as f64;
+                        
+                        
+                        let load_perc = load_used / available * 100.0 * cs.cpu_stats.online_cpus.unwrap() as f64; 
+        
+                        load_perc
+                    })
+                    .collect()
             })
             .collect();
 
+        //Get the maximum percentage (if it lower than 100%, use 100% as the maximum value)
+        let y_max = load_perc.iter()
+            .map(|d| {
+                d.iter()
+                .fold(std::f64::MIN, |a,b| a.max(*b))
+            })
+            .fold(std::f64::MIN, |a,b| a.max(b));
 
+        let y_max: f64 = match y_max >= 100.0{
+            true => y_max,
+            false => 100.0
+        };
 
-        let x_max = (data.last().unwrap().created_at.unwrap() - data[0].created_at.unwrap()).num_seconds();
+        //Get the max time
+        let x_max = (data[0].stats.last().unwrap().created_at.unwrap() - data[0].stats[0].created_at.unwrap()).num_seconds();
+        
+        //Get starting time of each Task
+        let starting_time: Vec<DateTime<Utc>> = data.iter().map(|d| {    
+            d.stats[0].created_at.unwrap()
+        }).collect();
 
 
         let mut chart = ChartBuilder::on(&root)
@@ -331,33 +405,43 @@ impl ContainerPlot {
             .margin(5)
             .x_label_area_size(50)
             .y_label_area_size(50)
-            .build_cartesian_2d(0i64..x_max, 0f64..100f64).unwrap();
+            .build_cartesian_2d(0i64..x_max, 0f64..y_max).unwrap();
 
 
 
         chart.configure_mesh()
             .y_desc("CPU Load (%)")
             .x_desc("Time (s)")
-            .axis_desc_style(("sans-serif", 21))
+            .axis_desc_style(("sans-serif", 18))
             .draw()
             .unwrap();
         
-        chart
-            .draw_series(LineSeries::new(
-                    data.clone()
-                    .into_iter()
-                    .skip(1)
-                    .zip_eq(load_perc.into_iter())
-                    .map(|(s, l)| 
-                        (
-                            (s.created_at.unwrap() - data[0].created_at.unwrap()).num_seconds() as i64, 
-                            l
-                        )
-                    ),
-                &RED,
-            )).unwrap()
-            .label("LIO-SAM")
-            .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &RED));
+
+        let _: Vec<_> = data
+            .iter()
+            .zip_eq(load_perc.into_iter())
+            .enumerate()
+            .map(|(idx, (d, l))|{
+                let color = Palette99::pick(idx).mix(0.9);
+                chart
+                .draw_series(
+                    LineSeries::new(
+                        d.stats
+                            .iter()
+                            .skip(1)
+                            .zip_eq(l.into_iter())
+                            .map(|(s, l)| 
+                                (
+                                    (s.created_at.unwrap() - starting_time[idx]).num_seconds() as i64, 
+                                    l
+                                )
+                            ), 
+                        color.stroke_width(3)
+                )).unwrap()
+                .label(d.name)
+                .legend(move |(x, y)| Rectangle::new([(x, y - 5), (x + 10, y + 5)], color.filled()));
+            })
+            .collect();
         
 
 

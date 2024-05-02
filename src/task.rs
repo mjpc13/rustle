@@ -99,10 +99,11 @@ pub struct Config {
     config: Arc<InnerConfig>
 }
 #[derive(Debug)]
-pub struct TaskOutput{
+pub struct TaskOutput<'a>{
     pub stats: Vec<ContainerStats>,
     pub odoms: HashMap<String, Vec<Odometry>>,
-    pub groundtruth: Vec<Odometry>
+    pub groundtruth: Vec<Odometry>,
+    pub name: &'a str
 }
 
 impl Config {
@@ -129,7 +130,7 @@ impl Config {
     ///        Some("file://path/to/database") //custom endpoint, this will write a persistent database
     ///    ).await;
     /// ```
-    pub async fn new (img_name: String, algo_name: String, dataset_path: String, params_path: String, topics: Vec<String>, gt_topic: String, advanced_args: Option<AdvancedConfig>) -> Result<Config, &'static str> {
+    pub async fn new (img_name: &str, algo_name: &str, dataset_path: &str, params_path: &str, topics: Vec<&str>, gt_topic: &str, advanced_args: Option<AdvancedConfig>) -> Result<Config, &'static str> {
         // TODO: Change the return to Result<Config, RosError>
 
         //Creates the DB
@@ -142,7 +143,7 @@ impl Config {
             None => {
                 let endpoint = std::env::var("SURREALDB_ENDPOINT").unwrap_or_else(|_| "memory".to_owned());
                 let connection = any::connect(endpoint).await.unwrap();
-                connection.use_ns("namespace").use_db(&algo_name).await.unwrap();
+                connection.use_ns("namespace").use_db(algo_name).await.unwrap();
                 connection
             }
         };
@@ -154,6 +155,8 @@ impl Config {
             Some(val) => val.docker_socket,
             None => Docker::connect_with_local_defaults().unwrap()
         };
+
+        let topics: Vec<String> = topics.into_iter().map(|s| s.to_string()).collect();
 
         //Check if Docker Image is in the system, if not pull it from a Docker repository
         match docker.inspect_image(&img_name).await {
@@ -172,12 +175,12 @@ impl Config {
         let dir = TempDir::new().unwrap();
 
         let config: InnerConfig = InnerConfig{
-            img_name, 
-            algo_name, 
-            dataset_path, 
-            params_path, 
+            img_name: img_name.into(), 
+            algo_name: algo_name.into(), 
+            dataset_path: dataset_path.into(), 
+            params_path: params_path.into(), 
             topics, 
-            groundtruth: gt_topic, 
+            groundtruth: gt_topic.into(), 
             docker: docker, 
             db, 
             dir
@@ -230,7 +233,7 @@ pub struct Task{
 impl Task {
     // add code here
     // pub async fn new (config: Config) -> Result<Task, &'static str> {
-    pub async fn new (config: Config) -> Task {
+    pub async fn new(config: Config) -> Task {
         
         //TODO Parse the parameters of yaml? Or mount the YAML file into Docker container 
         let options = Some(container::CreateContainerOptions{
@@ -474,7 +477,8 @@ impl Task {
         Ok(TaskOutput{
             stats: stats_result,
             odoms: odoms_result,
-            groundtruth: gt_result
+            groundtruth: gt_result,
+            name: self.config.get_algo()
         })
 
     }
