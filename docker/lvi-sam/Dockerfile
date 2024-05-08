@@ -22,6 +22,7 @@ RUN apt-get update \
   libsuitesparse-dev \
   libtbb-dev \
   libglew-dev \
+  python-opencv \
   python-catkin-tools \
   ros-$ROS_DISTRO-pcl-ros \
   ros-$ROS_DISTRO-pcl-conversions \

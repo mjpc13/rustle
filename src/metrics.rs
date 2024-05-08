@@ -1,5 +1,5 @@
 use crate::{errors::{EvoError, RosError}, evo_wrapper::EvoArg, ros_msgs::{Odometry, RosMsg}, task::{Config, TaskOutput}};
-use plotters::{backend::{BitMapBackend, SVGBackend}, chart::ChartBuilder, drawing::IntoDrawingArea, element::{PathElement, Rectangle}, series::LineSeries, style::{self, Color, IntoFont, Palette, Palette99, RGBColor, BLACK, RED, WHITE}};
+use plotters::{backend::{BitMapBackend, SVGBackend}, chart::{ChartBuilder, SeriesLabelPosition}, drawing::IntoDrawingArea, element::{PathElement, Rectangle}, series::LineSeries, style::{self, Color, IntoFont, Palette, Palette99, RGBColor, BLACK, RED, WHITE}};
 use serde::{Deserialize, Serialize};
 use bollard::container::{MemoryStats, CPUStats};
 use chrono::{DateTime, Utc};
@@ -85,6 +85,13 @@ impl Metric{
             .collect();
         Ok(())
     }
+
+    pub fn to_md(&self, name: &str) -> String {
+        let s = format!("| {} | {} | {} | {} | {} | {} | {} |\n", name, self.max, self.median, self.min, self.rmse, self.sse, self.std);
+        return s
+    }
+
+
 }
 
 impl FromStr for Metric {
@@ -133,6 +140,10 @@ impl FromStr for Metric {
     }
 }
 
+
+
+
+
 #[derive(Clone)]
 pub struct ContainerMetrics{
     stats: Vec<ContainerStats>
@@ -165,7 +176,7 @@ pub struct ContainerPlotArg<'a>{
 
 
 impl ContainerPlot {
-    pub fn plot(&self, data: &Vec<&TaskOutput>, output_file: &str){
+    pub fn plot(&self, data: &Vec<TaskOutput>, output_file: &str){
 
         match self {
             Self::MemoryUsage => {
@@ -183,7 +194,7 @@ impl ContainerPlot {
         }
     }
 
-    fn plot_memory(&self, data: &Vec<&TaskOutput>, output_file: &str){
+    fn plot_memory(&self, data: &Vec<TaskOutput>, output_file: &str){
 
         let root = SVGBackend::new(output_file, (800, 600)).into_drawing_area();
         root.fill(&WHITE).unwrap();
@@ -197,10 +208,13 @@ impl ContainerPlot {
                 .fold(std::f64::MIN, |a,b| a.max(b.memory_stats.usage.unwrap() as f64 * 1e-6))
             })
             .fold(std::f64::MIN, |a,b| a.max(b));
-        let starting_time = data[0].stats[0].created_at.unwrap().clone();
+
+        let starting_time: Vec<DateTime<Utc>> = data.iter().map(|d| {    
+            d.stats[0].created_at.unwrap()
+        }).collect();
 
         let mut chart = ChartBuilder::on(&root)
-            .caption("Memory Usage (MiB)", ("sans-serif", 50).into_font())
+            .caption("Memory Usage (MiB)", ("sans-serif", 24).into_font())
             .margin(5)
             .x_label_area_size(50)
             .y_label_area_size(50)
@@ -212,7 +226,7 @@ impl ContainerPlot {
         chart.configure_mesh()
             .y_desc("Memory Usage (MiB)")
             .x_desc("Time (s)")
-            .axis_desc_style(("sans-serif", 21))
+            .axis_desc_style(("sans-serif", 18))
             .draw()
             .unwrap();
         
@@ -227,19 +241,20 @@ impl ContainerPlot {
                 .draw_series(LineSeries::new(
                         d.stats.iter().map(|s| 
                             (
-                                (s.created_at.unwrap() - starting_time).num_seconds() as i64, 
+                                (s.created_at.unwrap() - starting_time[idx]).num_seconds() as i64, 
                                 s.memory_stats.usage.unwrap() as f64 * 1e-6
                             )
                         ),
                         color.stroke_width(3)
                 )).unwrap()
-                .label(d.name)
+                .label(&d.name)
                 .legend(move |(x, y)| Rectangle::new([(x, y - 5), (x + 10, y + 5)], color.filled()));
             })
             .collect();
         
         chart
             .configure_series_labels()
+            .position(SeriesLabelPosition::UpperRight)
             .background_style(&WHITE.mix(0.8))
             .border_style(&BLACK)
             .draw().unwrap();
@@ -247,7 +262,7 @@ impl ContainerPlot {
         root.present().unwrap();
     }
 
-    fn plot_memory_per_sec(&self, data: &Vec<&TaskOutput>, output_file: &str){
+    fn plot_memory_per_sec(&self, data: &Vec<TaskOutput>, output_file: &str){
         let root = SVGBackend::new(output_file, (800, 600)).into_drawing_area();
         root.fill(&WHITE).unwrap();
         
@@ -275,6 +290,7 @@ impl ContainerPlot {
         let y_max = mem_sec.iter()
             .map(|d| {
                 d.iter()
+                .filter(|&&a| a < 100.0)
                 .fold(std::f64::MIN, |a,b| a.max(*b))
             })
             .fold(std::f64::MIN, |a,b| a.max(b));
@@ -296,7 +312,7 @@ impl ContainerPlot {
         }).collect();
 
         let mut chart = ChartBuilder::on(&root)
-            .caption("Memory Usage Per Second (MiB/s)", ("sans-serif", 50).into_font())
+            .caption("Memory Usage Per Second (MiB/s)", ("sans-serif", 24).into_font())
             .margin(5)
             .x_label_area_size(50)
             .y_label_area_size(50)
@@ -305,7 +321,7 @@ impl ContainerPlot {
         chart.configure_mesh()
             .y_desc("MiB/s")
             .x_desc("Time (s)")
-            .axis_desc_style(("sans-serif", 21))
+            .axis_desc_style(("sans-serif", 18))
             .draw()
             .unwrap();
         
@@ -332,7 +348,7 @@ impl ContainerPlot {
                             ), 
                         color.stroke_width(3)
                 )).unwrap()
-                .label(d.name)
+                .label(&d.name)
                 .legend(move |(x, y)| Rectangle::new([(x, y - 5), (x + 10, y + 5)], color.filled()));
             })
             .collect();
@@ -341,6 +357,7 @@ impl ContainerPlot {
 
         chart
             .configure_series_labels()
+            .position(SeriesLabelPosition::UpperRight)
             .background_style(&WHITE.mix(0.8))
             .border_style(&BLACK)
             .draw().unwrap();
@@ -348,8 +365,7 @@ impl ContainerPlot {
         root.present().unwrap();
     }
 
-
-    fn plot_load_percentage(&self, data: &Vec<&TaskOutput>, output_file: &str){
+    fn plot_load_percentage(&self, data: &Vec<TaskOutput>, output_file: &str){
         let root = SVGBackend::new(output_file, (800, 600)).into_drawing_area();
         root.fill(&WHITE).unwrap();
 
@@ -401,15 +417,18 @@ impl ContainerPlot {
 
 
         let mut chart = ChartBuilder::on(&root)
-            .caption("Computer CPU", ("sans-serif", 50).into_font())
+            .caption("Computer CPU", ("sans-serif", 24).into_font())
             .margin(5)
             .x_label_area_size(50)
             .y_label_area_size(50)
-            .build_cartesian_2d(0i64..x_max, 0f64..y_max).unwrap();
+            .build_cartesian_2d(0i64..x_max, 0f64..y_max)
+            .unwrap();
 
+        chart.configure_series_labels()
+             .position(SeriesLabelPosition::UpperRight);
 
-
-        chart.configure_mesh()
+        chart
+            .configure_mesh()
             .y_desc("CPU Load (%)")
             .x_desc("Time (s)")
             .axis_desc_style(("sans-serif", 18))
@@ -438,7 +457,7 @@ impl ContainerPlot {
                             ), 
                         color.stroke_width(3)
                 )).unwrap()
-                .label(d.name)
+                .label(&d.name)
                 .legend(move |(x, y)| Rectangle::new([(x, y - 5), (x + 10, y + 5)], color.filled()));
             })
             .collect();
@@ -447,13 +466,13 @@ impl ContainerPlot {
 
         chart
             .configure_series_labels()
+            .position(SeriesLabelPosition::UpperRight)
             .background_style(&WHITE.mix(0.8))
             .border_style(&BLACK)
             .draw().unwrap();
         
         root.present().unwrap();
     }
-
 
 
     fn plot_load(&self, data: &Vec<ContainerStats>, output_path: &str){

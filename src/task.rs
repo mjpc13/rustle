@@ -98,12 +98,12 @@ struct InnerConfig {
 pub struct Config {
     config: Arc<InnerConfig>
 }
-#[derive(Debug)]
-pub struct TaskOutput<'a>{
+#[derive(Debug, Clone)]
+pub struct TaskOutput{
     pub stats: Vec<ContainerStats>,
     pub odoms: HashMap<String, Vec<Odometry>>,
     pub groundtruth: Vec<Odometry>,
-    pub name: &'a str
+    pub name: String
 }
 
 impl Config {
@@ -130,16 +130,16 @@ impl Config {
     ///        Some("file://path/to/database") //custom endpoint, this will write a persistent database
     ///    ).await;
     /// ```
-    pub async fn new (img_name: &str, algo_name: &str, dataset_path: &str, params_path: &str, topics: Vec<&str>, gt_topic: &str, advanced_args: Option<AdvancedConfig>) -> Result<Config, &'static str> {
+    pub async fn new (img_name: &str, algo_name: &str, dataset_path: &str, params_path: &str, topics: Vec<&str>, gt_topic: &str, advanced_args: Option<&AdvancedConfig>) -> Result<Config, &'static str> {
         // TODO: Change the return to Result<Config, RosError>
 
         //Creates the DB
         let connection = match advanced_args{
-            Some(ref val) => {
+            Some(val) => {
                 let connection = any::connect(&val.db_endpoint).await.unwrap();
                 connection.use_ns(&val.db_namespace).use_db(&val.db_database).await.unwrap();
                 connection
-            } ,
+            },
             None => {
                 let endpoint = std::env::var("SURREALDB_ENDPOINT").unwrap_or_else(|_| "memory".to_owned());
                 let connection = any::connect(endpoint).await.unwrap();
@@ -152,7 +152,7 @@ impl Config {
 
         //TODO: Check if img_name//dataset_path//params_path are valid.
         let docker = match advanced_args{
-            Some(val) => val.docker_socket,
+            Some(val) => val.docker_socket.clone(),
             None => Docker::connect_with_local_defaults().unwrap()
         };
 
@@ -246,6 +246,11 @@ impl Task {
             ("/rustle/dataset/", config.get_dataset()),
             ("/rustle/config/params.yaml", config.get_params()),
         ]);
+
+
+
+
+
         let mut path_mounts = vec![];
         let _: Vec<_> = hm.
             iter().
@@ -285,8 +290,8 @@ impl Task {
         let _ = self.config.get_docker().start_container::<String>(&self.image_id, None).await;
 
         //Wait 1s for roscore to start
-        let ten_sec = time::Duration::from_secs(1);
-        thread::sleep(ten_sec);
+        //let ten_sec = time::Duration::from_secs(1);
+        //thread::sleep(ten_sec);
 
         let commands: Vec<_> = vec![
             "roslaunch rustle rustle.launch --wait",
@@ -310,6 +315,72 @@ impl Task {
             })).await.unwrap();
 
         let token = CancellationToken::new();
+
+
+        let ten_sec = time::Duration::from_secs(1);
+        thread::sleep(ten_sec);
+
+        let config_clone = self.config.clone();
+        let roslaunch_id = execs[0].id.clone();
+        let task_token = token.clone();
+        let id = self.image_id.clone();
+        //spawn a task for roslaunch
+        let roslaunch_task = tokio::spawn(async move {
+            if let StartExecResults::Attached { mut output, mut input } = config_clone.get_docker().start_exec(&roslaunch_id, None).await.unwrap() {
+                loop{
+                    select!{
+                        Some(Ok(msg)) = output.next() => {
+                            trace!("RUSTLE TASK: {msg}");
+                        },
+                        _ = task_token.cancelled()=>{
+                            info!("Roslaunch was asked to stop");
+                            //logic to cancel this task
+
+                            let record_options_future = config_clone.get_docker()
+                                .create_exec(
+                                &id,
+                                CreateExecOptions {
+                                    attach_stdout: Some(true),
+                                    attach_stderr: Some(true),
+                                    cmd: Some(vec!["killall", "-SIGINT", "record"]),
+                                    ..Default::default()
+                                },
+                            ).await.unwrap();
+
+                            config_clone.get_docker().start_exec(&record_options_future.id, None).await.unwrap(); //kill
+                            //the record command
+
+                            //let ten_sec = time::Duration::from_secs(1);
+                            //thread::sleep(ten_sec);
+
+                            break;
+                        }
+                    }
+                }
+            } else {
+                warn!("STREAM ENDED");
+                unreachable!();
+            }
+        });
+
+        //Add the ground truth as a topic
+        let mut topics = self.config.get_topics();
+        topics.push(self.config.get_gt().to_string());
+        
+        let res_tasks: Vec<_> = topics
+            .into_iter()
+            .map( |s| {
+                let config_clone = self.config.clone();
+                let token = token.clone();
+                tokio::spawn(async move {
+                    Self::record_task(config_clone, &s, token).await;
+                })
+            })
+            .collect();
+
+        // Wait a certain number of seconds for the algorithm to init, PARAMETER
+        let ten_sec = time::Duration::from_secs(5);
+        thread::sleep(ten_sec);
 
         let image_id = self.image_id.clone();
         let stream_token = token.clone();
@@ -350,67 +421,6 @@ impl Task {
             }
         });
 
-        let config_clone = self.config.clone();
-        let roslaunch_id = execs[0].id.clone();
-        let task_token = token.clone();
-        let id = self.image_id.clone();
-        //spawn a task for roslaunch
-        let roslaunch_task = tokio::spawn(async move {
-            if let StartExecResults::Attached { mut output, mut input } = config_clone.get_docker().start_exec(&roslaunch_id, None).await.unwrap() {
-                loop{
-                    select!{
-                        Some(Ok(msg)) = output.next() => {
-                            trace!("RUSTLE TASK: {msg}");
-                        },
-                        _ = task_token.cancelled()=>{
-                            info!("Roslaunch was asked to stop");
-                            //logic to cancel this task
-
-                            let record_options_future = config_clone.get_docker()
-                                .create_exec(
-                                &id,
-                                CreateExecOptions {
-                                    attach_stdout: Some(true),
-                                    attach_stderr: Some(true),
-                                    cmd: Some(vec!["killall", "-SIGINT", "record"]),
-                                    ..Default::default()
-                                },
-                            ).await.unwrap();
-
-                            config_clone.get_docker().start_exec(&record_options_future.id, None).await.unwrap(); //kill
-                            //the record command
-
-                            let ten_sec = time::Duration::from_secs(1);
-                            thread::sleep(ten_sec);
-
-                            break;
-                        }
-                    }
-                }
-            } else {
-                warn!("STREAM ENDED");
-                unreachable!();
-            }
-        });
-
-        //Add the ground truth as a topic
-        let mut topics = self.config.get_topics();
-        topics.push(self.config.get_gt().to_string());
-        
-        let res_tasks: Vec<_> = topics
-            .into_iter()
-            .map( |s| {
-                let config_clone = self.config.clone();
-                let token = token.clone();
-                tokio::spawn(async move {
-                    Self::record_task(config_clone, &s, token).await;
-                })
-            })
-            .collect();
-
-        // Wait a certain number of seconds for the algorithm to init, PARAMETER
-        let ten_sec = time::Duration::from_secs(5);
-        thread::sleep(ten_sec);
 
         let rosplay_id = execs[1].id.clone();
         let config_clone = self.config.clone();
@@ -474,11 +484,13 @@ impl Task {
 
         let odoms_result = Arc::into_inner(odoms_result).unwrap().into_inner().unwrap();
 
+        let name = String::from(self.config.get_algo());
+
         Ok(TaskOutput{
             stats: stats_result,
             odoms: odoms_result,
             groundtruth: gt_result,
-            name: self.config.get_algo()
+            name: name
         })
 
     }
