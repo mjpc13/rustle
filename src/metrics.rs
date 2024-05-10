@@ -1,5 +1,5 @@
 use crate::{errors::{EvoError, RosError}, evo_wrapper::EvoArg, ros_msgs::{Odometry, RosMsg}, task::{Config, TaskOutput}};
-use plotters::{backend::{BitMapBackend, SVGBackend}, chart::{ChartBuilder, SeriesLabelPosition}, drawing::IntoDrawingArea, element::{PathElement, Rectangle}, series::LineSeries, style::{self, Color, IntoFont, Palette, Palette99, RGBColor, BLACK, RED, WHITE}};
+use plotters::{backend::{BitMapBackend, SVGBackend}, chart::{ChartBuilder, SeriesLabelPosition}, coord::ranged1d::{IntoSegmentedCoord, SegmentValue}, data::{fitting_range, Quartiles}, drawing::IntoDrawingArea, element::{Boxplot, PathElement, Rectangle}, series::LineSeries, style::{self, Color, IntoFont, Palette, Palette99, RGBColor, BLACK, RED, WHITE}};
 use serde::{Deserialize, Serialize};
 use bollard::container::{MemoryStats, CPUStats};
 use chrono::{DateTime, Utc};
@@ -23,7 +23,7 @@ pub struct ContainerStats {
     pub created_at: Option<DateTime<Utc>>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub struct Metric{
     max: f32,
     median: f32,
@@ -91,6 +91,60 @@ impl Metric{
         return s
     }
 
+    fn get_rmse(data: &Vec<Metric>) -> Vec<f32> {
+        let res = data.iter().map(|m| (m.rmse)).collect();
+        return res;
+    }
+
+    pub fn box_plot<'a>(data: Vec<Vec<Metric>>, output_file: &'a str, names: Vec<&'a str>){
+
+        let root = SVGBackend::new(output_file, (800, 600)).into_drawing_area();
+        root.fill(&WHITE).unwrap();
+
+        let quartiles: Vec<Quartiles> = data
+            .iter()
+            .map(|v| {
+                Quartiles::new(&Metric::get_rmse(v))
+            })
+            .collect();
+
+        let y_min = quartiles.iter()
+            .map(|q| q.values()[0])
+            .fold(std::f32::MAX, |a,b| a.min(b));
+
+        let y_max = quartiles.iter()
+            .map(|q| q.values()[0])
+            .fold(std::f32::MIN, |a,b| a.max(b));
+
+        let mut chart = ChartBuilder::on(&root)
+            .x_label_area_size(50)
+            .y_label_area_size(50)
+            .caption("Boxplot of RMSE", ("sans-serif", 24).into_font())
+            .build_cartesian_2d(
+                names[..].into_segmented(),
+                y_min..y_max,
+            ).unwrap();
+
+        //chart.configure_mesh().light_line_style(WHITE).draw().unwrap();
+
+        chart.configure_mesh()
+            .y_desc("APE RMSE")
+            .axis_desc_style(("sans-serif", 18))
+            .draw()
+            .unwrap();
+
+        let boxplot: Vec<Boxplot<_,_>> = quartiles
+            .iter()
+            .zip_eq(names.iter())
+            .map(|(q, n)| {
+                Boxplot::new_vertical(SegmentValue::CenterOf(n), q)
+            })
+            .collect();
+
+        chart.draw_series(boxplot).unwrap();
+        
+        root.present().unwrap();
+    }
 
 }
 

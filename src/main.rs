@@ -59,16 +59,10 @@ async fn main() {
             Some(&adv) //Advanced arguments (database and docker stuff) replace with None for default config
         ).await.unwrap()
     );
-    
-    //let topics: Vec<String> = vec![
-    //   "/lio_sam_6axis/mapping/odometry".to_string(), 
-    //   "/lio_sam_6axis/mapping/odometry_incremental".to_string(), 
-    //];
 
     //=============================//
 
     // FAST-LIO //
-
     configs.push(
         Config::new(
             "mjpc13/rustle:fast-lio",
@@ -84,7 +78,6 @@ async fn main() {
     //===============================//
 
     // POINT-LIO //
-
     configs.push(
         Config::new(
             "mjpc13/rustle:point-lio", //docker image name
@@ -111,32 +104,68 @@ async fn main() {
 
     //===============================//
     
-    //Creates a new task
+    // Run TASK in an Async way (all running at the same time)
     //let results = configs
     //    .into_iter()
     //    .map(|c| async  {
     //        let task: Task = Task::new(c).await;
     //        let res = task.run().await.unwrap();
+    //        res
     //    });
-    //let results = futures_util::future::join_all(results).await;
+    //let results: Vec<TaskOutput> = futures_util::future::join_all(results).await;
 
+
+
+    // Run 1 time for each algorithm at once:
     let mut results: Vec<TaskOutput> = Vec::<TaskOutput>::new();
-
     for c in configs{
         let task = Task::new(c.clone()).await;
         let res = task.run().await.unwrap();
         results.push(res);
-
     }
+
+    //Run multiple times for the same algorithm with the same configs
+    //let mut results_ig_lio: Vec<TaskOutput> = Vec::<TaskOutput>::new();
+    //for _ in 0..2{
+    //    let task = Task::new(configs[0].clone()).await;
+    //    let res = task.run().await.unwrap();
+    //    results_ig_lio.push(res);
+    //}
+
+    //let mut results_lio_sam: Vec<TaskOutput> = Vec::<TaskOutput>::new();
+    //for _ in 0..2{
+    //    let task = Task::new(configs[1].clone()).await;
+    //    let res = task.run().await.unwrap();
+    //    results_lio_sam.push(res);
+    //}
+    //let results = vec![results_ig_lio, results_lio_sam];
+
+    //let metrics_vec: Vec<Vec<Metric>> = results.iter()
+    //    .map(|vec| {
+    //
+    //        let res = vec.iter().map(|to|{
+    //            let evo_res = Metric::compute(
+    //                to,
+    //                EvoApeArg{
+    //                    plot: None,
+    //                    ..Default::default()
+    //                },
+    //                None
+    //                ).unwrap();
+    //            evo_res[0]
+    //        }).collect();
+    //        res
+    //    }).collect();
 
 
     //let lvi_sam_task: Task = Task::new(lvi_sam_config).await;
 
-    //EVALUATE RESULTS//
-    
-    let mut evo_md = String::from("| Name | Max | Median | Min | RMSE | SSE | Std |\n|--------|-------|--------|-------|-------|-------|-------|\n");
-    let names = vec!["ig-lio", "lio-sam", "fast-lio", "point-lio"];
+    //EVALUATE RESULTS EVO//
 
+    let mut evo_md = String::from("| Name | Max | Median | Min | RMSE | SSE | Std |\n|--------|-------|--------|-------|-------|-------|-------|\n");
+    
+    let names = vec!["ig-lio", "lio-sam", "fast-lio", "point-lio"];
+    
     for (r, n) in results.iter().zip(names.iter()){
         let evo_res = Metric::compute(
             r,
@@ -146,23 +175,17 @@ async fn main() {
             },
             None
         ).unwrap();
-
         evo_md = evo_md + &evo_res[0].to_md(n);
-
     }
     println!("{}", evo_md);
 
 
-
-
+    //let names = vec!["ig-lio", "lio-sam"];
+    //Metric::box_plot(metrics_vec, "/home/mario/Documents/rustle/test/results/box_plot.svg", names)
 
     //Plots for CPU Load and Memory Usage
     ContainerPlot::MemoryUsage.plot(&results, "/home/mario/Documents/rustle/test/results/memory_usage.svg");
     ContainerPlot::LoadPercentage.plot(&results, "/home/mario/Documents/rustle/test/results/load_percentage.svg");
     ContainerPlot::MemoryUsagePerSec.plot(&results, "/home/mario/Documents/rustle/test/results/memory_usage_per_sec.svg");
-
-    //ContainerPlot::MemoryUsagePerSec.plot(&vec![&ig_lio_result, &fast_lio_result, &point_lio_result], "/home/mario/Documents/rustle/test/results/memory_usage_per_sec.svg");
-    //ContainerPlot::MemoryUsage.plot(&vec![&ig_lio_result, &fast_lio_result, &point_lio_result], "/home/mario/Documents/rustle/test/results/memory_usage.svg");
-    //ContainerPlot::LoadPercentage.plot(&vec![&ig_lio_result, &fast_lio_result, &point_lio_result], "/home/mario/Documents/rustle/test/results/load_percentage.svg");
 
 }

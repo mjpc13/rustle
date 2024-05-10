@@ -1,5 +1,5 @@
-%YAML 1.0
----
+%YAML:1.0
+
 # Project
 project_name: "lvi_sam"
 
@@ -45,19 +45,19 @@ estimate_extrinsic: 0   # 0  Have an accurate extrinsic parameters. We will trus
                         # 1  Have an initial guess about extrinsic parameters. We will optimize around your initial guess.
                         # 2  Don't know anything about extrinsic parameters. You don't need to give R,T. We will try to calibrate it. Do some rotation movement at beginning. 
 #Rotation from camera frame to imu frame, imu^R_cam
-#extrinsicRotation: !!opencv-matrix
-#   rows: 3
-#   cols: 3
-#   dt: d
-#   data: [ -0.00140533, -0.00896721,  0.99995881,
-#          -0.99999022,  0.0042065,  -0.00136765, 
-#           -0.00419407, -0.99995095, -0.00897304]
-##Translation from camera frame to imu frame, imu^T_cam
-#extrinsicTranslation: !!opencv-matrix
-#   rows: 3
-#   cols: 1
-#   dt: d
-#   data: [0.18377395, 0.14789743, -0.0087318]
+extrinsicRotation: !!opencv-matrix
+   rows: 3
+   cols: 3
+   dt: d
+   data: [ -0.00140533, -0.00896721,  0.99995881,
+          -0.99999022,  0.0042065,  -0.00136765, 
+           -0.00419407, -0.99995095, -0.00897304]
+#Translation from camera frame to imu frame, imu^T_cam
+extrinsicTranslation: !!opencv-matrix
+   rows: 3
+   cols: 1
+   dt: d
+   data: [0.18377395, 0.14789743, -0.0087318]
 
 
 #feature traker paprameters

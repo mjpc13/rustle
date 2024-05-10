@@ -72,7 +72,7 @@ lio_sam_6axis:
   rotation_tollerance: 1000                     # radians
 
   # CPU Params
-  numberOfCores: 8                              # number of cores for mapping optimization
+  numberOfCores: 1                              # number of cores for mapping optimization
   mappingProcessInterval: 0.15                  # seconds, regulate mapping frequency
 
   # Surrounding map
@@ -91,9 +91,9 @@ lio_sam_6axis:
   historyKeyframeFitnessScore: 0.9              # icp threshold, the smaller the better alignment
 
   # Visualization
-  globalMapVisualizationSearchRadius: 1000.0    # meters, global map visualization radius
-  globalMapVisualizationPoseDensity: 10.0       # meters, global map visualization keyframe density
-  globalMapVisualizationLeafSize: 0.5           # meters, global map visualization cloud density
+  globalMapVisualizationSearchRadius: 1.0    # meters, global map visualization radius
+  globalMapVisualizationPoseDensity: 1.0       # meters, global map visualization keyframe density
+  globalMapVisualizationLeafSize: 1          # meters, global map visualization cloud density
 
   # mapping
   globalMapLeafSize: 0.5                        # saved map voxgrid size
