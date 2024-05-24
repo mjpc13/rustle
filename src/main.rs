@@ -7,6 +7,7 @@ use rustle::metrics::ContainerPlot;
 use rustle::metrics::Metric;
 use rustle::metrics::ContainerStats;
 use rustle::task::AdvancedConfig;
+use rustle::task::TaskBatch;
 use rustle::task::TaskOutput;
 use tokio;
 
@@ -31,7 +32,9 @@ async fn main() {
 
     //Put algorithms I want to run in a Vector
     let mut configs: Vec<Config> = Vec::new();
-    
+
+    //====ALGORITHMS=CONFIGS======//
+
     // iG-LIO //
     configs.push(
         Config::new(
@@ -45,22 +48,22 @@ async fn main() {
         ).await.unwrap()
     );
 
-    //=============================//
+    //----------------//
 
     // LIO-SAM-6AXIS //
     configs.push(
         Config::new(
-            "mjpc13/rustle:lio-sam-6axis", //docker image name
-            "lio-sam-6axis", //algorithm name
-            dataset_path, // path to the directory of the rosbag
-            "/home/mario/Documents/rustle/test/config/lio-sam-6axis/params.yaml",  //Yaml config file for the algorithm 
-            vec!["/lio_sam_6axis/mapping/odometry_incremental"], //Vector of topics to record
-            gt_topic, //topic of the ground truth
-            Some(&adv) //Advanced arguments (database and docker stuff) replace with None for default config
+            "mjpc13/rustle:lio-sam-6axis", 
+            "lio-sam-6axis", 
+            dataset_path, 
+            "/home/mario/Documents/rustle/test/config/lio-sam-6axis/params.yaml",   
+            vec!["/lio_sam_6axis/mapping/odometry_incremental"], 
+            gt_topic,  
+            Some(&adv) 
         ).await.unwrap()
     );
 
-    //=============================//
+    //----------------//
 
     // FAST-LIO //
     configs.push(
@@ -75,117 +78,124 @@ async fn main() {
         ).await.unwrap()
     );
 
-    //===============================//
+    //----------------//
 
     // POINT-LIO //
     configs.push(
         Config::new(
-            "mjpc13/rustle:point-lio", //docker image name
-            "point-lio", //algorithm name
+            "mjpc13/rustle:point-lio", 
+            "point-lio", 
+            dataset_path, 
+            "/home/mario/Documents/rustle/test/config/point-lio/params.yaml", 
+            vec!["/aft_mapped_to_init"], 
+            gt_topic,  
+            None 
+        ).await.unwrap()
+    );
+
+    // DLO //
+        configs.push(Config::new(
+            "mjpc13/rustle:dlo", //docker image name
+            "dlo", //algorithm name
             dataset_path, // path to the directory of the rosbag
-            "/home/mario/Documents/rustle/test/config/point-lio/params.yaml",  //Yaml config file for the algorithm 
+            "/home/mario/Documents/rustle/test/config/dlo/params.yaml",  //Yaml config file for the algorithm 
+            vec!["/dlo/odom_node/odom"], //Vector of topics to record
+            gt_topic, //topic of the ground truth
+            None //Advanced arguments (database and docker stuff) replace with None for default config
+        ).await.unwrap()
+    );
+
+
+    // SR-LIVO //
+    configs.push(Config::new(
+            "mjpc13/rustle:sr-livo", //docker image name
+            "sr-livo", //algorithm name
+            dataset_path, // path to the directory of the rosbag
+            "/home/mario/Documents/rustle/test/config/sr-livo/params.yaml",  //Yaml config file for the algorithm 
+            vec!["/Odometry_after_opt"], //Vector of topics to record
+            gt_topic, //topic of the ground truth
+            None //Advanced arguments (database and docker stuff) replace with None for default config
+        ).await.unwrap()
+    );
+
+    // A-LOAM //
+    configs.push(Config::new(
+            "mjpc13/rustle:a-loam", //docker image name
+            "a-loam", //algorithm name
+            dataset_path, // path to the directory of the rosbag
+            "/home/mario/Documents/rustle/test/config/a-loam/params.yaml",  //Yaml config file for the algorithm 
             vec!["/aft_mapped_to_init"], //Vector of topics to record
             gt_topic, //topic of the ground truth
             None //Advanced arguments (database and docker stuff) replace with None for default config
         ).await.unwrap()
     );
 
-    // LVI-SAM //
-    //configs.push(Config::new(
-    //        "mjpc13/rustle:lvi-sam", //docker image name
-    //        "lvi-sam", //algorithm name
-    //        dataset_path, // path to the directory of the rosbag
-    //        "/home/mario/Documents/rustle/test/config/lvi-sam/camera_params.yaml",  //Yaml config file for the algorithm 
-    //        vec!["/Odometry"], //Vector of topics to record
-    //        gt_topic, //topic of the ground truth
-    //        None //Advanced arguments (database and docker stuff) replace with None for default config
-    //    ).await.unwrap()
-    //);
+    // Faster-LIO //
+    configs.push(Config::new(
+            "mjpc13/rustle:faster-lio", //docker image name
+            "faster-lio", //algorithm name
+            dataset_path, // path to the directory of the rosbag
+            "/home/mario/Documents/rustle/test/config/faster-lio/params.yaml",  //Yaml config file for the algorithm 
+            vec!["/Odometry"], //Vector of topics to record
+            gt_topic, //topic of the ground truth
+            None //Advanced arguments (database and docker stuff) replace with None for default config
+        ).await.unwrap()
+    );
 
-    //===============================//
+    //----------------//
     
-    // Run TASK in an Async way (all running at the same time)
-    //let results = configs
-    //    .into_iter()
-    //    .map(|c| async  {
-    //        let task: Task = Task::new(c).await;
-    //        let res = task.run().await.unwrap();
-    //        res
-    //    });
-    //let results: Vec<TaskOutput> = futures_util::future::join_all(results).await;
+    //========RUN=THE=ALGORITHMS=========//
+
+    //------ASYNC-BATCH------// (all running at the same time multiple times)
+
+    let batch_task = TaskBatch{ configs: configs.clone(), batch_size: 50, run_async: true };
+    let batch_output = batch_task.run().await.unwrap();
+    let batch_res = Metric::compute_batch(
+        &batch_output, 
+        EvoApeArg{
+            plot: None,
+            ..Default::default()
+        }
+    );
+    println!("Finished batch:\n {:#?}", batch_res);
+    //__PRINT_IN_MD_TABLE___
+    let md_batch = Metric::print_batch(&batch_res);
+    println!("{}", md_batch);
+    //______________________
+    //_____PLOT_BOXPLOT_____
+    //Metric::box_plot(&batch_res, "/home/mario/Documents/rustle/test/results/box_plot.svg");
+    //______________________
 
 
 
-    // Run 1 time for each algorithm at once:
-    let mut results: Vec<TaskOutput> = Vec::<TaskOutput>::new();
-    for c in configs{
-        let task = Task::new(c.clone()).await;
-        let res = task.run().await.unwrap();
-        results.push(res);
-    }
-
-    //Run multiple times for the same algorithm with the same configs
-    //let mut results_ig_lio: Vec<TaskOutput> = Vec::<TaskOutput>::new();
-    //for _ in 0..2{
-    //    let task = Task::new(configs[0].clone()).await;
-    //    let res = task.run().await.unwrap();
-    //    results_ig_lio.push(res);
-    //}
-
-    //let mut results_lio_sam: Vec<TaskOutput> = Vec::<TaskOutput>::new();
-    //for _ in 0..2{
-    //    let task = Task::new(configs[1].clone()).await;
-    //    let res = task.run().await.unwrap();
-    //    results_lio_sam.push(res);
-    //}
-    //let results = vec![results_ig_lio, results_lio_sam];
-
-    //let metrics_vec: Vec<Vec<Metric>> = results.iter()
-    //    .map(|vec| {
-    //
-    //        let res = vec.iter().map(|to|{
-    //            let evo_res = Metric::compute(
-    //                to,
-    //                EvoApeArg{
-    //                    plot: None,
-    //                    ..Default::default()
-    //                },
-    //                None
-    //                ).unwrap();
-    //            evo_res[0]
-    //        }).collect();
-    //        res
-    //    }).collect();
-
-
-    //let lvi_sam_task: Task = Task::new(lvi_sam_config).await;
-
-    //EVALUATE RESULTS EVO//
-
-    let mut evo_md = String::from("| Name | Max | Median | Min | RMSE | SSE | Std |\n|--------|-------|--------|-------|-------|-------|-------|\n");
-    
-    let names = vec!["ig-lio", "lio-sam", "fast-lio", "point-lio"];
-    
-    for (r, n) in results.iter().zip(names.iter()){
-        let evo_res = Metric::compute(
-            r,
-            EvoApeArg{
-                plot: Some(PlotArg::default()),
-                ..Default::default()
-            },
-            None
-        ).unwrap();
-        evo_md = evo_md + &evo_res[0].to_md(n);
-    }
-    println!("{}", evo_md);
-
-
-    //let names = vec!["ig-lio", "lio-sam"];
-    //Metric::box_plot(metrics_vec, "/home/mario/Documents/rustle/test/results/box_plot.svg", names)
-
-    //Plots for CPU Load and Memory Usage
-    ContainerPlot::MemoryUsage.plot(&results, "/home/mario/Documents/rustle/test/results/memory_usage.svg");
-    ContainerPlot::LoadPercentage.plot(&results, "/home/mario/Documents/rustle/test/results/load_percentage.svg");
-    ContainerPlot::MemoryUsagePerSec.plot(&results, "/home/mario/Documents/rustle/test/results/memory_usage_per_sec.svg");
+    //------SYNC-SINGLE------// (running 1 algo at a time only 1 time)
+//    let mut single_to: Vec<TaskOutput> = Vec::<TaskOutput>::new();
+//    for c in configs{
+//        let task = Task::new(c.clone()).await;
+//        let res = task.run().await.unwrap();
+//        single_to.push(res);
+//    }
+//
+//    //--COMPUTE-APE--
+//    let evo_args = EvoApeArg{
+//        //plot: Some(PlotArg::default()),
+//        plot: None,
+//        ..Default::default()
+//    };
+//
+//    for to in single_to.clone(){
+//        let ape = Metric::compute(
+//            &to, 
+//            &evo_args, 
+//            None
+//            //Some("/home/mario/Documents/rustle/test/results")
+//        );
+//        println!("APE: {:?}", ape);
+//    }
+//
+//    //__PLOT_COMPUTER_STATS__
+//    ContainerPlot::MemoryUsage.plot(&single_to, "/home/mario/Documents/rustle/test/results/memory_usage.svg");
+//    ContainerPlot::LoadPercentage.plot(&single_to, "/home/mario/Documents/rustle/test/results/load_percentage.svg");
+//    ContainerPlot::MemoryUsagePerSec.plot(&single_to, "/home/mario/Documents/rustle/test/results/memory_usage_per_sec.svg");
 
 }

@@ -1,4 +1,5 @@
 use crate::{errors::{EvoError, RosError}, evo_wrapper::EvoArg, ros_msgs::{Odometry, RosMsg}, task::{Config, TaskOutput}};
+//use anyhow::Ok;
 use plotters::{backend::{BitMapBackend, SVGBackend}, chart::{ChartBuilder, SeriesLabelPosition}, coord::ranged1d::{IntoSegmentedCoord, SegmentValue}, data::{fitting_range, Quartiles}, drawing::IntoDrawingArea, element::{Boxplot, PathElement, Rectangle}, series::LineSeries, style::{self, Color, IntoFont, Palette, Palette99, RGBColor, BLACK, RED, WHITE}};
 use serde::{Deserialize, Serialize};
 use bollard::container::{MemoryStats, CPUStats};
@@ -10,8 +11,10 @@ use surrealdb::{
 };
 use temp_dir::TempDir;
 use core::time;
-use std::{collections::HashMap, default, env, fs::OpenOptions, io::Write, path::PathBuf, str::FromStr};
+use std::{collections::{hash_map::Entry, HashMap}, default, env, fs::OpenOptions, io::Write, path::PathBuf, str::FromStr};
 use itertools::Itertools;
+use std::fmt;
+
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ContainerStats {
@@ -34,7 +37,7 @@ pub struct Metric{
 }
 
 impl Metric{
-    pub fn compute<R: EvoArg>(data: &TaskOutput, args: R, output_path: Option<&str>) -> Result<Vec<Metric>, EvoError>{
+    pub fn compute<R: EvoArg>(data: &TaskOutput, args: &R, output_path: Option<&str>) -> Vec<Result<Metric, EvoError>>{
         
         //Write TUM files to temporary directory
         let mut path = match output_path{
@@ -55,15 +58,162 @@ impl Metric{
                 let mut path_clone = path.clone();
 
                 Self::write_file(v, &s, &mut path_clone);
-                let evo_str = args.compute(path_gt.to_str().unwrap(), path_clone.to_str().unwrap()).unwrap();
-                Metric::from_str(&evo_str).unwrap()
+                let evo_str = args.compute(
+                    path_gt.to_str().unwrap(), 
+                    path_clone.to_str().unwrap())?;
+                
+                Metric::from_str(&evo_str)
 
             })
             .collect();
 
-        Ok(metric_results)
+        metric_results
         
     }
+
+
+    pub fn compute_batch<R: EvoArg>(data: &HashMap<&str, Vec<TaskOutput>>, args: R) -> HashMap<String, Vec<Result<Metric, EvoError>>>{
+        
+        let mut metric_hash: HashMap<String, Vec<Result<Metric, EvoError>>> = HashMap::new();
+
+        for (k, v) in data{
+            
+            //let mut vec_mec_hash: HashMap<String, Vec<Metric>> = HashMap::new();
+
+            for to in v {
+                
+                let vec_metric = Metric::compute(to, &args, None);
+
+                if vec_metric.len() == 1{
+                    match metric_hash.entry(k.to_string()) {
+                        Entry::Vacant(e) => { e.insert(vec_metric); },
+                        Entry::Occupied(mut e) => { e.get_mut().push(vec_metric.into_iter().nth(0).unwrap()); }
+                    }
+
+                }else{
+
+                    for (m,n) in vec_metric.into_iter().zip(to.odoms.keys().into_iter()){
+                        let n1 = n.split("/").last().unwrap();
+                        let name = format!("{k} - {n1}");
+
+                        match metric_hash.entry(name) {
+                            Entry::Vacant(e) => { e.insert(vec![m]); },
+                            Entry::Occupied(mut e) => { e.get_mut().push(m); }
+                        }
+                    }
+                }
+            }
+        }
+
+        return metric_hash;
+    }
+
+    //USE From keyword maybe
+    fn average_metric(data: &Vec<Result<Metric, EvoError>>) -> Result<Metric, EvoError> {
+        
+        let metrics: Vec<&Metric> = data
+            .into_iter()
+            .filter(|m| m.is_ok())
+            .map(|m| m.as_ref().unwrap())
+            .collect();
+
+        let size = metrics.len(); //use the filter option
+
+
+        if size == 0 {
+            todo!()
+        } else{
+            let max: f32 = metrics.iter()
+                .map(|m| {
+                    m.max
+                })
+                .sum();
+            let max = max / size as f32;
+
+            let median: f32 = metrics.iter()
+                .map(|m| {
+                    m.median
+                })
+                .sum();
+            let median: f32 = median / size as f32;
+            
+            let min: f32 = metrics.iter()
+            .map(|m| {
+                m.min
+            })
+            .sum();
+            let min = min / size as f32;
+
+            let rmse: f32 = metrics.iter()
+                .map(|m| {
+                    m.rmse
+                })
+                .sum();
+            let rmse = rmse / size as f32;
+
+            let sse: f32 = metrics.iter()
+                .map(|m| {
+                    m.sse
+                })
+                .sum();
+            let sse = sse / size as f32;
+
+            let std: f32 = metrics.iter()
+                .map(|m| {
+                    m.std
+                })
+                .sum();
+            let std = std / size as f32;
+            
+            Ok(Metric { max, median, min, rmse, sse, std})
+        }
+
+    }
+
+    fn max_metric(data: Vec<Metric>) -> Metric {
+
+        //TODO: Find a better way to do this!!!
+        let max = data.iter()
+            .map(|m| {
+                m.max
+            })
+            .fold(std::f32::MIN, |a,b| a.max(b));
+        
+        let median = data.iter()
+            .map(|m| {
+                m.median
+            })
+            .fold(std::f32::MIN, |a,b| a.max(b));
+        
+        let min = data.iter()
+            .map(|m| {
+                m.min
+            })
+            .fold(std::f32::MIN, |a,b| a.max(b));
+        
+        let rmse = data.iter()
+            .map(|m| {
+                m.rmse
+            })
+            .fold(std::f32::MIN, |a,b| a.max(b));
+
+        let sse = data.iter()
+            .map(|m| {
+                m.sse
+            })
+            .fold(std::f32::MIN, |a,b| a.max(b));
+
+        let std = data.iter()
+            .map(|m| {
+                m.std
+            })
+            .fold(std::f32::MIN, |a,b| a.max(b));
+
+        Metric { max, median, min, rmse, sse, std}
+
+
+    }
+
 
     fn write_file<'a>(data: &Vec<Odometry>, name: &str, path: &mut PathBuf) -> Result<(), std::io::Error>{
 
@@ -86,24 +236,65 @@ impl Metric{
         Ok(())
     }
 
-    pub fn to_md(&self, name: &str) -> String {
+    fn to_md(&self, name: &str) -> String {
         let s = format!("| {} | {} | {} | {} | {} | {} | {} |\n", name, self.max, self.median, self.min, self.rmse, self.sse, self.std);
         return s
     }
+
+
+    pub fn print_batch(data: &HashMap<String, Vec<Result<Metric, EvoError>>>) -> String {
+        
+        //Computes the average for every run!
+        let mut metric_hash: HashMap<String, Result<Metric, EvoError>> = HashMap::new();
+        for (name, v) in data{
+            let average_metric = Metric::average_metric(v);
+            metric_hash.insert(name.to_string(), average_metric);
+        }
+
+        let mut evo_md = String::from("| Name | Max | Median | Min | RMSE | SSE | Std |\n|--------|-------|--------|-------|-------|-------|-------|\n");
+
+        for (k, v) in metric_hash{
+
+            evo_md = match v{
+                Ok(ve) => evo_md + &ve.to_md(&k),
+                Err(e) => evo_md + &format!("| {}ks | - | - | - | - | - | - |\n", &k)
+            }
+        }
+
+        return evo_md;
+    }
+
+    pub fn print(data: &HashMap<String, Result<Metric, EvoError>>) -> String {
+
+        let mut evo_md = String::from("| Name | Max | Median | Min | RMSE | SSE | Std |\n|--------|-------|--------|-------|-------|-------|-------|\n");
+
+        for (k, v) in data{
+            evo_md = match v{
+                Ok(ve) => evo_md + &ve.to_md(&k),
+                Err(e) => evo_md + &format!("| {}ks | - | - | - | - | - | - |\n", &k)
+            }
+        }
+
+        return evo_md;
+    }
+
+
 
     fn get_rmse(data: &Vec<Metric>) -> Vec<f32> {
         let res = data.iter().map(|m| (m.rmse)).collect();
         return res;
     }
 
-    pub fn box_plot<'a>(data: Vec<Vec<Metric>>, output_file: &'a str, names: Vec<&'a str>){
+    pub fn box_plot<'a>(data: &HashMap<String, Vec<Metric>>, output_file: &'a str){
+
+        let names: Vec<String> = data.keys().cloned().collect();
 
         let root = SVGBackend::new(output_file, (800, 600)).into_drawing_area();
         root.fill(&WHITE).unwrap();
 
         let quartiles: Vec<Quartiles> = data
             .iter()
-            .map(|v| {
+            .map(|(s,v)| {
                 Quartiles::new(&Metric::get_rmse(v))
             })
             .collect();
@@ -124,8 +315,6 @@ impl Metric{
                 names[..].into_segmented(),
                 y_min..y_max,
             ).unwrap();
-
-        //chart.configure_mesh().light_line_style(WHITE).draw().unwrap();
 
         chart.configure_mesh()
             .y_desc("APE RMSE")
@@ -195,9 +384,6 @@ impl FromStr for Metric {
 }
 
 
-
-
-
 #[derive(Clone)]
 pub struct ContainerMetrics{
     stats: Vec<ContainerStats>
@@ -263,6 +449,7 @@ impl ContainerPlot {
             })
             .fold(std::f64::MIN, |a,b| a.max(b));
 
+            
         let starting_time: Vec<DateTime<Utc>> = data.iter().map(|d| {    
             d.stats[0].created_at.unwrap()
         }).collect();
@@ -284,13 +471,13 @@ impl ContainerPlot {
             .draw()
             .unwrap();
         
-
         let _: Vec<_> = data
             .iter()
             .enumerate()
             .map(|(idx, d)|{
                 let color = Palette99::pick(idx).mix(0.9);
 
+                
                 chart
                 .draw_series(LineSeries::new(
                         d.stats.iter().map(|s| 
@@ -303,6 +490,8 @@ impl ContainerPlot {
                 )).unwrap()
                 .label(&d.name)
                 .legend(move |(x, y)| Rectangle::new([(x, y - 5), (x + 10, y + 5)], color.filled()));
+
+                
             })
             .collect();
         
@@ -319,6 +508,8 @@ impl ContainerPlot {
     fn plot_memory_per_sec(&self, data: &Vec<TaskOutput>, output_file: &str){
         let root = SVGBackend::new(output_file, (800, 600)).into_drawing_area();
         root.fill(&WHITE).unwrap();
+
+        println!("Hello there");
         
         let mem_sec: Vec<Vec<f64>> = data
             .iter()
@@ -357,6 +548,7 @@ impl ContainerPlot {
         })
         .fold(std::f64::MAX, |a,b| a.min(b));
 
+        println!("Hello ");
 
         let x_max = (data[0].stats.last().unwrap().created_at.unwrap() - data[0].stats[0].created_at.unwrap()).num_seconds();
         //Get starting time of each Task
@@ -364,6 +556,7 @@ impl ContainerPlot {
         let starting_time: Vec<DateTime<Utc>> = data.iter().map(|d| {    
             d.stats[0].created_at.unwrap()
         }).collect();
+        println!("man ");
 
         let mut chart = ChartBuilder::on(&root)
             .caption("Memory Usage Per Second (MiB/s)", ("sans-serif", 24).into_font())
@@ -371,6 +564,8 @@ impl ContainerPlot {
             .x_label_area_size(50)
             .y_label_area_size(50)
             .build_cartesian_2d(0i64..x_max, y_min..y_max).unwrap();
+        
+        println!("i have no ");
 
         chart.configure_mesh()
             .y_desc("MiB/s")
@@ -379,6 +574,7 @@ impl ContainerPlot {
             .draw()
             .unwrap();
         
+            println!("i have no ");
 
 
             let _: Vec<_> = data
@@ -386,6 +582,8 @@ impl ContainerPlot {
             .zip_eq(mem_sec.into_iter())
             .enumerate()
             .map(|(idx, (d, m))|{
+                println!("idea ");
+
                 let color = Palette99::pick(idx).mix(0.9);
                 chart
                 .draw_series(
@@ -404,10 +602,13 @@ impl ContainerPlot {
                 )).unwrap()
                 .label(&d.name)
                 .legend(move |(x, y)| Rectangle::new([(x, y - 5), (x + 10, y + 5)], color.filled()));
+            println!("fu ");
+
             })
             .collect();
 
 
+            println!("me ");
 
         chart
             .configure_series_labels()

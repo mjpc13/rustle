@@ -94,7 +94,7 @@ struct InnerConfig {
 }
 
 /// Wraps InnerConfig in an `Arc<InnerConfig>`
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Config {
     config: Arc<InnerConfig>
 }
@@ -583,4 +583,47 @@ impl Task {
         
     }
 
+}
+
+#[derive(Debug)]
+pub struct TaskBatch{
+    pub configs: Vec<Config>,
+    pub batch_size: u8,
+    pub run_async: bool 
+}
+
+impl TaskBatch {
+    pub async fn run(&self) -> Result<HashMap<&str, Vec<TaskOutput>>, RosError>{
+        let mut res:Vec<TaskOutput> = vec![];
+
+        let mut res_hash: HashMap<&str, Vec<TaskOutput>> =  HashMap::new();
+
+        //init new algorithms
+        for c in &self.configs{
+            res_hash.insert(c.get_algo(), Vec::new());
+        }
+
+        //wrap hash in a new arc mutex
+        let mut_res: Mutex<HashMap<&str, Vec<TaskOutput>>> = Mutex::new(res_hash);
+
+        if self.run_async{
+            for _ in 0..self.batch_size{
+                let results = self.configs
+                .iter()
+                .map(|c| async  {
+                    let task: Task = Task::new(c.clone()).await;
+                    let res = task.run().await.unwrap();
+                    mut_res.lock().unwrap().get_mut(c.get_algo()).unwrap().push(res);
+                });
+                futures_util::future::join_all(results).await;
+            }
+        }
+        else{
+            todo!();
+        }
+
+        let res_hash = mut_res.into_inner().unwrap();
+
+        Ok(res_hash)
+    } 
 }

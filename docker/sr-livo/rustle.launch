@@ -1,0 +1,10 @@
+<launch>
+
+    <!-- Parameters -->
+    <rosparam file="/rustle/config/params.yaml" command="load" />
+
+    <param name="debug_output" type="bool" value="0"/>
+    <param name="output_path" type="string" value="$(find sr_livo)/output"/>
+    <node pkg="sr_livo" type="livo_node" name="livo_node" output="screen" /> 
+
+</launch>
