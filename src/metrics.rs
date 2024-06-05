@@ -285,14 +285,33 @@ impl Metric{
         return res;
     }
 
-    pub fn box_plot<'a>(data: &HashMap<String, Vec<Metric>>, output_file: &'a str){
+    pub fn box_plot<'a>(data: &HashMap<String, Vec<Result<Metric, EvoError>>>, output_file: &'a str){
 
-        let names: Vec<String> = data.keys().cloned().collect();
+
+        let mut data_filtered: HashMap<String, Vec<Metric>> = HashMap::new();
+
+        for (k, v) in data {
+            let metric_vec: Vec<Metric> = v
+                .into_iter()
+                .filter(|m| m.is_ok())
+                .map(|m| *m.as_ref().unwrap())
+                .collect();
+
+            if metric_vec.len() == v.len(){
+                data_filtered.insert(k.to_string(), metric_vec);
+            } else {
+                //Some runs have failed
+                data_filtered.insert(format!("{:}*", k), metric_vec);
+            }
+        };
+
+        let names: Vec<String> = data_filtered.keys().cloned().collect();
+
 
         let root = SVGBackend::new(output_file, (800, 600)).into_drawing_area();
         root.fill(&WHITE).unwrap();
 
-        let quartiles: Vec<Quartiles> = data
+        let quartiles: Vec<Quartiles> = data_filtered
             .iter()
             .map(|(s,v)| {
                 Quartiles::new(&Metric::get_rmse(v))
@@ -306,6 +325,9 @@ impl Metric{
         let y_max = quartiles.iter()
             .map(|q| q.values()[0])
             .fold(std::f32::MIN, |a,b| a.max(b));
+        
+        let y_min = y_min - 0.1*y_min;
+        let y_max = y_max + 0.1*y_max;
 
         let mut chart = ChartBuilder::on(&root)
             .x_label_area_size(50)

@@ -1,18 +1,12 @@
-
-use std::result;
-
 use rustle::evo_wrapper::EvoApeArg;
-use rustle::evo_wrapper::PlotArg;
 use rustle::metrics::ContainerPlot;
 use rustle::metrics::Metric;
-use rustle::metrics::ContainerStats;
 use rustle::task::AdvancedConfig;
 use rustle::task::TaskBatch;
 use rustle::task::TaskOutput;
 use tokio;
 
 use rustle::task::Config;
-use rustle::task::Task;
 
 use env_logger::init;
 
@@ -66,17 +60,17 @@ async fn main() {
     //----------------//
 
     // FAST-LIO //
-    configs.push(
-        Config::new(
-            "mjpc13/rustle:fast-lio",
-            "fast-lio",
-            dataset_path,
-            "/home/mario/Documents/rustle/test/config/fast-lio/params.yaml",
-            vec!["/Odometry"],
-            gt_topic,
-            None
-        ).await.unwrap()
-    );
+    //configs.push(
+    //    Config::new(
+    //        "mjpc13/rustle:fast-lio",
+    //        "fast-lio",
+    //        dataset_path,
+    //        "/home/mario/Documents/rustle/test/config/fast-lio/params.yaml",
+    //        vec!["/Odometry"],
+    //        gt_topic,
+    //        None
+    //    ).await.unwrap()
+    //);
 
     //----------------//
 
@@ -157,45 +151,26 @@ async fn main() {
             ..Default::default()
         }
     );
-    println!("Finished batch:\n {:#?}", batch_res);
+    
     //__PRINT_IN_MD_TABLE___
     let md_batch = Metric::print_batch(&batch_res);
     println!("{}", md_batch);
     //______________________
     //_____PLOT_BOXPLOT_____
-    //Metric::box_plot(&batch_res, "/home/mario/Documents/rustle/test/results/box_plot.svg");
+    Metric::box_plot(&batch_res, "/home/mario/Documents/rustle/test/results/box_plot.svg");
     //______________________
 
 
+    //__PLOT_COMPUTER_STATS__
+      let task_vec: Vec<TaskOutput> = batch_output
+        .into_iter()
+        .map(|(k,v)| {
+            v.into_iter().next().unwrap()
+        })
+        .collect();
 
-    //------SYNC-SINGLE------// (running 1 algo at a time only 1 time)
-//    let mut single_to: Vec<TaskOutput> = Vec::<TaskOutput>::new();
-//    for c in configs{
-//        let task = Task::new(c.clone()).await;
-//        let res = task.run().await.unwrap();
-//        single_to.push(res);
-//    }
-//
-//    //--COMPUTE-APE--
-//    let evo_args = EvoApeArg{
-//        //plot: Some(PlotArg::default()),
-//        plot: None,
-//        ..Default::default()
-//    };
-//
-//    for to in single_to.clone(){
-//        let ape = Metric::compute(
-//            &to, 
-//            &evo_args, 
-//            None
-//            //Some("/home/mario/Documents/rustle/test/results")
-//        );
-//        println!("APE: {:?}", ape);
-//    }
-//
-//    //__PLOT_COMPUTER_STATS__
-//    ContainerPlot::MemoryUsage.plot(&single_to, "/home/mario/Documents/rustle/test/results/memory_usage.svg");
-//    ContainerPlot::LoadPercentage.plot(&single_to, "/home/mario/Documents/rustle/test/results/load_percentage.svg");
-//    ContainerPlot::MemoryUsagePerSec.plot(&single_to, "/home/mario/Documents/rustle/test/results/memory_usage_per_sec.svg");
+    ContainerPlot::MemoryUsage.plot(&task_vec, "/home/mario/Documents/rustle/test/results/memory_usage.svg");
+    ContainerPlot::LoadPercentage.plot(&task_vec, "/home/mario/Documents/rustle/test/results/load_percentage.svg");
+    //ContainerPlot::MemoryUsagePerSec.plot(&task_vec, "/home/mario/Documents/rustle/test/results/memory_usage_per_sec.svg");
 
 }
