@@ -1,0 +1,33 @@
+<launch>
+
+
+
+  <!-- DLO Odometry Node -->
+  <node name="dlo_odom" pkg="direct_lidar_odometry" type="dlo_odom_node" output="screen" clear_params="true">
+
+    <!-- Subscriptions -->
+    <remap from="~pointcloud" to="/velodyne_points"/>
+    <remap from="~imu" to="/imu/data"/>
+  <rosparam command="load" file="/rustle/config/params.yaml" />
+
+    <!-- Publications -->
+    <remap from="~odom" to="/dlo/odom_node/odom"/>
+    <remap from="~pose" to="/dlo/odom_node/pose"/>
+    <remap from="~kfs" to="/dlo/odom_node/odom/keyframe"/>
+    <remap from="~keyframe" to="/dlo/odom_node/pointcloud/keyframe"/>
+
+  </node>
+
+  <!-- DLO Mapping Node -->
+  <node name="dlo_map" pkg="direct_lidar_odometry" type="dlo_map_node" output="screen" clear_params="true">
+  <rosparam command="load" file="/rustle/config/params.yaml" />
+
+    <!-- Subscriptions -->
+    <remap from="~keyframes" to="/dlo/odom_node/pointcloud/keyframe"/>
+
+    <!-- Publications -->
+    <remap from="~map" to="/dlo/map_node/map"/>
+
+  </node>
+
+</launch>

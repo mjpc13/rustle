@@ -1,0 +1,53 @@
+FROM ros:noetic-ros-base
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV ROS_WS /rustle/catkin_ws
+
+LABEL author="Mario Cristovao <mario.cristovao@isr.uc.pt>"
+LABEL maintainer="Mario Cristovao <mario.cristovao@isr.uc.pt>"
+LABEL description="LIO-SAM 6 Axis Environment for Rustle"
+
+#Install dependencies
+RUN apt-get update \
+  && apt-get install -y curl git \
+  && apt-get update \
+  && apt-get install -y ros-$ROS_DISTRO-navigation \
+  ros-$ROS_DISTRO-robot-localization \
+  ros-$ROS_DISTRO-cv-bridge \
+  ros-$ROS_DISTRO-robot-state-publisher \
+  ros-$ROS_DISTRO-xacro \
+  ros-$ROS_DISTRO-rviz-satellite \
+  ros-$ROS_DISTRO-pcl-conversions \
+  ros-$ROS_DISTRO-pcl-ros \
+  python3-catkin-tools \
+  qt5-default \
+  libpcl-dev \
+  && rm -rf /var/lib/apt/lists/* \
+  && mkdir -p /rustle/catkin_ws/src
+
+# Install GTSAM (a non ROS dependency)
+RUN apt-get update \
+  && apt install -y software-properties-common \
+  && add-apt-repository -y ppa:borglab/gtsam-release-4.0 \
+  && apt-get update \
+  && apt install -y libgtsam-dev libgtsam-unstable-dev \
+  && rm -rf /var/lib/apt/lists/*
+
+RUN mkdir -p /rustle/dataset/ && mkdir -p /rustle/config/
+SHELL ["/bin/bash", "-l", "-c"]
+WORKDIR ${ROS_WS}
+
+#Clone only latest commit, initialize and update nested submodules 
+RUN git clone --depth 1 --recurse-submodules https://github.com/JokerJohn/LIO_SAM_6AXIS.git src/LIO_SAM_6AXIS
+
+# Build ros package source
+RUN catkin config --extend /opt/ros/$ROS_DISTRO && catkin create pkg -p src/ rustle
+
+#Copy custom launch file into our package
+COPY ./rustle.launch /rustle/catkin_ws/src/rustle/launch/rustle.launch
+
+#Compile packages
+RUN catkin build -s
+
+# source catkin workspace
+RUN echo "source /rustle/catkin_ws/devel/setup.bash" >> /root/.profile

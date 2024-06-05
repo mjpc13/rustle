@@ -1,0 +1,14 @@
+<launch>
+
+    <!--- Robot State TF 
+    <include file="$(find lvi_sam)/launch/include/module_robot_state_publisher.launch" />-->
+
+    <param name="/use_sim_time" value="true"/>
+
+    <!-- Parameters -->
+    <rosparam file="/rustle/config/params.yaml" command="load" />
+
+    <!--- SAM -->
+    <include file="$(find lvi_sam)/launch/include/module_sam.launch" />
+
+</launch>
