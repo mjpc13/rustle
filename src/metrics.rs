@@ -1,6 +1,6 @@
 use crate::{errors::{EvoError, RosError}, evo_wrapper::EvoArg, ros_msgs::{Odometry, RosMsg}, task::{Config, TaskOutput}};
 //use anyhow::Ok;
-use plotters::{backend::{BitMapBackend, SVGBackend}, chart::{ChartBuilder, SeriesLabelPosition}, coord::ranged1d::{IntoSegmentedCoord, SegmentValue}, data::{fitting_range, Quartiles}, drawing::IntoDrawingArea, element::{Boxplot, PathElement, Rectangle}, series::LineSeries, style::{self, Color, IntoFont, Palette, Palette99, RGBColor, BLACK, RED, WHITE}};
+use plotters::{backend::{BitMapBackend, SVGBackend}, chart::{ChartBuilder, SeriesLabelPosition}, coord::ranged1d::{IntoSegmentedCoord, SegmentValue}, data::{fitting_range, Quartiles}, drawing::IntoDrawingArea, element::{Boxplot, PathElement, Rectangle}, series::LineSeries, style::{self, Color, IntoFont, Palette, Palette99, RGBColor, TextStyle, BLACK, RED, WHITE}};
 use serde::{Deserialize, Serialize};
 use bollard::container::{MemoryStats, CPUStats};
 use chrono::{DateTime, Utc};
@@ -121,7 +121,7 @@ impl Metric{
 
 
         if size == 0 {
-            todo!()
+            return Err(EvoError::CommandError { stderr: "()".into() })
         } else{
             let max: f32 = metrics.iter()
                 .map(|m| {
@@ -257,7 +257,7 @@ impl Metric{
 
             evo_md = match v{
                 Ok(ve) => evo_md + &ve.to_md(&k),
-                Err(e) => evo_md + &format!("| {}ks | - | - | - | - | - | - |\n", &k)
+                Err(e) => evo_md + &format!("| {}* | - | - | - | - | - | - |\n", &k)
             }
         }
 
@@ -271,7 +271,7 @@ impl Metric{
         for (k, v) in data{
             evo_md = match v{
                 Ok(ve) => evo_md + &ve.to_md(&k),
-                Err(e) => evo_md + &format!("| {}ks | - | - | - | - | - | - |\n", &k)
+                Err(e) => evo_md + &format!("| {}* | - | - | - | - | - | - |\n", &k)
             }
         }
 
@@ -331,8 +331,9 @@ impl Metric{
 
         let mut chart = ChartBuilder::on(&root)
             .x_label_area_size(50)
-            .y_label_area_size(50)
+            .y_label_area_size(80)
             .caption("Boxplot of RMSE", ("sans-serif", 24).into_font())
+            .margin(8)
             .build_cartesian_2d(
                 names[..].into_segmented(),
                 y_min..y_max,
@@ -340,7 +341,8 @@ impl Metric{
 
         chart.configure_mesh()
             .y_desc("APE RMSE")
-            .axis_desc_style(("sans-serif", 18))
+            .axis_desc_style(("sans-serif", 20))
+            .label_style(("sans-serif", 14).into_font())
             .draw()
             .unwrap();
 
@@ -478,9 +480,9 @@ impl ContainerPlot {
 
         let mut chart = ChartBuilder::on(&root)
             .caption("Memory Usage (MiB)", ("sans-serif", 24).into_font())
-            .margin(5)
+            .margin(8)
             .x_label_area_size(50)
-            .y_label_area_size(50)
+            .y_label_area_size(80)
             .build_cartesian_2d(0i64..x_max, 0f64..y_max).unwrap();
 
 
@@ -489,7 +491,8 @@ impl ContainerPlot {
         chart.configure_mesh()
             .y_desc("Memory Usage (MiB)")
             .x_desc("Time (s)")
-            .axis_desc_style(("sans-serif", 18))
+            .axis_desc_style(("sans-serif", 20))
+            .label_style(("sans-serif", 14).into_font())
             .draw()
             .unwrap();
         
@@ -520,6 +523,7 @@ impl ContainerPlot {
         chart
             .configure_series_labels()
             .position(SeriesLabelPosition::UpperRight)
+            .label_font(("sans-serif", 14))
             .background_style(&WHITE.mix(0.8))
             .border_style(&BLACK)
             .draw().unwrap();
@@ -530,8 +534,6 @@ impl ContainerPlot {
     fn plot_memory_per_sec(&self, data: &Vec<TaskOutput>, output_file: &str){
         let root = SVGBackend::new(output_file, (800, 600)).into_drawing_area();
         root.fill(&WHITE).unwrap();
-
-        println!("Hello there");
         
         let mem_sec: Vec<Vec<f64>> = data
             .iter()
@@ -570,15 +572,12 @@ impl ContainerPlot {
         })
         .fold(std::f64::MAX, |a,b| a.min(b));
 
-        println!("Hello ");
-
         let x_max = (data[0].stats.last().unwrap().created_at.unwrap() - data[0].stats[0].created_at.unwrap()).num_seconds();
         //Get starting time of each Task
         
         let starting_time: Vec<DateTime<Utc>> = data.iter().map(|d| {    
             d.stats[0].created_at.unwrap()
         }).collect();
-        println!("man ");
 
         let mut chart = ChartBuilder::on(&root)
             .caption("Memory Usage Per Second (MiB/s)", ("sans-serif", 24).into_font())
@@ -586,8 +585,7 @@ impl ContainerPlot {
             .x_label_area_size(50)
             .y_label_area_size(50)
             .build_cartesian_2d(0i64..x_max, y_min..y_max).unwrap();
-        
-        println!("i have no ");
+    
 
         chart.configure_mesh()
             .y_desc("MiB/s")
@@ -595,8 +593,7 @@ impl ContainerPlot {
             .axis_desc_style(("sans-serif", 18))
             .draw()
             .unwrap();
-        
-            println!("i have no ");
+    
 
 
             let _: Vec<_> = data
@@ -695,20 +692,18 @@ impl ContainerPlot {
 
         let mut chart = ChartBuilder::on(&root)
             .caption("Computer CPU", ("sans-serif", 24).into_font())
-            .margin(5)
+            .margin(8)
             .x_label_area_size(50)
-            .y_label_area_size(50)
+            .y_label_area_size(80)
             .build_cartesian_2d(0i64..x_max, 0f64..y_max)
             .unwrap();
-
-        chart.configure_series_labels()
-             .position(SeriesLabelPosition::UpperRight);
 
         chart
             .configure_mesh()
             .y_desc("CPU Load (%)")
             .x_desc("Time (s)")
-            .axis_desc_style(("sans-serif", 18))
+            .axis_desc_style(("sans-serif", 20))
+            .label_style(("sans-serif", 18).into_font())
             .draw()
             .unwrap();
         
@@ -744,6 +739,7 @@ impl ContainerPlot {
         chart
             .configure_series_labels()
             .position(SeriesLabelPosition::UpperRight)
+            .label_font(("sans-serif", 14))
             .background_style(&WHITE.mix(0.8))
             .border_style(&BLACK)
             .draw().unwrap();

@@ -7,15 +7,15 @@ dlio:
   adaptive: true
 
   imu:
-    calibration: true
+    calibration: false
     intrinsics:
       accel:
-        bias: [ 0.0, 0.0, 0.0 ]
+        bias: [ 0.00008, 0.00008, 0.00008 ]
         sm:   [ 1.,  0.,  0.,
                 0.,  1.,  0.,
                 0.,  0.,  1. ]
       gyro:
-        bias: [ 0.0, 0.0, 0.0 ]
+        bias: [ 0.00003, 0.00003, 0.00003 ]
   gravityAlign: true
 
 
@@ -26,10 +26,10 @@ dlio:
            0.,  1.,  0.,
            0.,  0.,  1. ]
     baselink2lidar:
-      t: [ 0.,  0.,  0. ]
-      R: [ 1.,  0.,  0.,
-           0.,  1.,  0.,
-           0.,  0.,  1. ]
+      t: [ 0.0584867781527745, 0.00840419966766332,  0.168915521980526 ]
+      R: [ 0.999678872580465,0.0252865664429322,0.00150422292234868,
+           -0.0252723438960774,0.999649431893338,-0.0078025434141585,
+          -0.00170103929405540,0.00776298237926191,0.99996789371916 ]
 
 
   frames:
@@ -43,7 +43,7 @@ dlio:
     dense:
       filtered: false
     sparse:
-      leafSize: 0.25
+      leafSize: 0.3
 
   odom:
 
@@ -53,8 +53,8 @@ dlio:
     imu:
       approximateGravity: true
       calibration:
-        gyro: true
-        accel: true
+        gyro: false
+        accel: false
         time: 3
       bufferSize: 5000
 
@@ -76,8 +76,8 @@ dlio:
     gicp:
       minNumPoints: 64
       kCorrespondences: 16
-      maxCorrespondenceDistance: 0.5
-      maxIterations: 32
+      maxCorrespondenceDistance: 0.4
+      maxIterations: 40
       transformationEpsilon: 0.01
       rotationEpsilon: 0.01
       initLambdaFactor: 1e-9

@@ -296,7 +296,7 @@ impl Task {
         let commands: Vec<_> = vec![
             "roslaunch rustle rustle.launch --wait",
             "rosbag play --clock /rustle/dataset/*.bag"
-            //"rosbag play -d 9 --clock -u 20 /rustle/dataset/*.bag"
+            //"rosbag play -d 9 --clock -u 40 /rustle/dataset/*.bag"
         ];
 
         let execs: Vec<_> = future::try_join_all(commands
