@@ -8,7 +8,7 @@ use std::{
     fmt, 
     fs::{File, OpenOptions}, 
     io::Write, path::Path, 
-    sync::{Arc, Mutex}, 
+    sync::{Arc}, 
     thread, 
     time
 };
@@ -16,6 +16,7 @@ use std::{
 use tokio;
 use tokio::select;
 use tokio_util::sync::CancellationToken;
+use tokio::sync::Mutex;
 
 use futures_util::stream::{StreamExt};
 use futures_util::future;
@@ -64,21 +65,19 @@ async fn pull_image(img_name: &str, docker: &Docker) -> Result<(), Box<dyn Error
 #[derive(Debug, Clone)]
 pub struct AdvancedConfig{
     pub docker_socket: Docker,
-    pub db_endpoint: String,
-    pub db_namespace: String,
+    pub db_connection: Surreal<surrealdb::engine::any::Any>,
     pub db_database: String
 }
 
-impl Default for AdvancedConfig {
-    fn default() -> AdvancedConfig {
-        AdvancedConfig{
-            docker_socket: Docker::connect_with_local_defaults().unwrap(),
-            db_endpoint: "memory".to_string(),
-            db_namespace: "namespace".to_string(),
-            db_database: "database".to_string()
-        }
-    }
-}
+//impl Default for AdvancedConfig {
+//    fn default() -> AdvancedConfig {
+//        AdvancedConfig{
+//            kc: Docker::connect_with_local_defaults().unwrap(),
+//            db_connection: any::connect("memory").unwrap(),
+//            db_database: "database".to_string()
+//        }
+//    }
+//}
 
 #[derive(Debug, Clone)]
 struct InnerConfig {
@@ -136,15 +135,22 @@ impl Config {
         //Creates the DB
         let connection = match advanced_args{
             Some(val) => {
-                let connection = any::connect(&val.db_endpoint).await.unwrap();
-                connection.use_ns(&val.db_namespace).use_db(&val.db_database).await.unwrap();
-                connection
+
+                //match val.db_connection.clone(){
+                //    c => Arc::new(Mutex::new(c)),
+                //}
+
+                let connection = val.db_connection.clone();
+                connection.use_ns("namespace").use_db(algo_name).await.unwrap();
+                Arc::new(Mutex::new(connection))
+
+
             },
             None => {
                 let endpoint = std::env::var("SURREALDB_ENDPOINT").unwrap_or_else(|_| "memory".to_owned());
                 let connection = any::connect(endpoint).await.unwrap();
                 connection.use_ns("namespace").use_db(algo_name).await.unwrap();
-                connection
+                Arc::new(Mutex::new(connection))
             }
         };
 
@@ -372,9 +378,13 @@ impl Task {
             .map( |s| {
                 let config_clone = self.config.clone();
                 let token = token.clone();
+
+
                 tokio::spawn(async move {
                     Self::record_task(config_clone, &s, token).await;
                 })
+
+
             })
             .collect();
 
@@ -463,7 +473,7 @@ impl Task {
                     
                     
                     
-                    let test = odoms_result_clone.lock().unwrap().insert(s.to_string(), odoms);
+                    let test = odoms_result_clone.lock().await.insert(s.to_string(), odoms);
                 
                 
                 })
@@ -482,7 +492,7 @@ impl Task {
         
         futures_util::future::join_all(write_results).await;
 
-        let odoms_result = Arc::into_inner(odoms_result).unwrap().into_inner().unwrap();
+        let odoms_result = Arc::into_inner(odoms_result).unwrap().into_inner();
 
         let name = String::from(self.config.get_algo());
 
@@ -613,7 +623,7 @@ impl TaskBatch {
                 .map(|c| async  {
                     let task: Task = Task::new(c.clone()).await;
                     let res = task.run().await.unwrap();
-                    mut_res.lock().unwrap().get_mut(c.get_algo()).unwrap().push(res);
+                    mut_res.lock().await.get_mut(c.get_algo()).unwrap().push(res);
                 });
                 futures_util::future::join_all(results).await;
             }
@@ -622,7 +632,7 @@ impl TaskBatch {
             todo!();
         }
 
-        let res_hash = mut_res.into_inner().unwrap();
+        let res_hash = mut_res.into_inner();
 
         Ok(res_hash)
     } 
