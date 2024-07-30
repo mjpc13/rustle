@@ -1,16 +1,9 @@
-use bollard::{container::{self, RemoveContainerOptions, StatsOptions}, exec::{CreateExecOptions, StartExecResults}, image::CreateImageOptions, models::{HostConfig, ResourcesUlimits}, Docker
+use bollard::{container::{self, RemoveContainerOptions, StatsOptions}, exec::{CreateExecOptions, StartExecResults}, image::{self, CreateImageOptions}, models::{HostConfig, ResourcesUlimits}, Docker
 };
 use yaml_rust2::{parser::Parser, YamlLoader};
 
 use std::{
-    collections::HashMap, 
-    error::Error, 
-    fmt, 
-    fs::{File, OpenOptions}, 
-    io::Write, path::Path, 
-    sync::{Arc}, 
-    thread, 
-    time
+    collections::HashMap, error::Error, fmt, fs::{File, OpenOptions}, io::Write, path::Path, sync::Arc, task, thread, time
 };
 
 use tokio;
@@ -33,6 +26,8 @@ use surrealdb::{
 use crate::errors::RosError;
 use crate::ros_msgs::{Header, Pose, Twist, Odometry};
 
+use rand::Rng;
+
 
 //Logs
 use log::{debug, error, info, warn, trace};
@@ -44,13 +39,13 @@ async fn pull_image(img_name: &str, docker: &Docker) -> Result<(), Box<dyn Error
       ..Default::default()
     });
 
-    info!("Docker Image downloading:");
+    trace!("Docker Image downloading:");
 
     let mut image_down_stream = docker.create_image(options, None, None);
 
     while let Some(image_info) = image_down_stream.next().await {
         match image_info{
-            Ok(msg) => debug!("{0:#?}", msg),
+            Ok(msg) => trace!("{0:#?}", msg),
             Err(e) => panic!("Error downloading image: {:?}", e)
         }
     };
@@ -58,7 +53,7 @@ async fn pull_image(img_name: &str, docker: &Docker) -> Result<(), Box<dyn Error
     //TODO: refactor this
     let test = match "1"{
         "1" => Ok(()),
-        _ => panic!("Test")
+        _ => panic!("Error downloading image")
     };
     test
 }
@@ -136,20 +131,17 @@ impl Config {
         let connection = match advanced_args{
             Some(val) => {
 
-                //match val.db_connection.clone(){
-                //    c => Arc::new(Mutex::new(c)),
-                //}
-
                 let connection = val.db_connection.clone();
-                connection.use_ns("namespace").use_db(algo_name).await.unwrap();
+                //connection.use_ns(algo_name).use_db([task-name]).await.unwrap();
+                info!("DB Connection: Custom");
                 Arc::new(Mutex::new(connection))
-
 
             },
             None => {
                 let endpoint = std::env::var("SURREALDB_ENDPOINT").unwrap_or_else(|_| "memory".to_owned());
                 let connection = any::connect(endpoint).await.unwrap();
-                connection.use_ns("namespace").use_db(algo_name).await.unwrap();
+                //connection.use_ns("namespace").use_db(algo_name).await.unwrap();
+                info!("DB Connection: Memory");
                 Arc::new(Mutex::new(connection))
             }
         };
@@ -158,18 +150,24 @@ impl Config {
 
         //TODO: Check if img_name//dataset_path//params_path are valid.
         let docker = match advanced_args{
-            Some(val) => val.docker_socket.clone(),
-            None => Docker::connect_with_local_defaults().unwrap()
+            Some(val) => {
+                info!("Docker Socket: Custom");
+                val.docker_socket.clone()
+            },
+            None => {
+                info!("Docker Socket: Default");
+                Docker::connect_with_local_defaults().unwrap()
+            }
         };
 
         let topics: Vec<String> = topics.into_iter().map(|s| s.to_string()).collect();
 
         //Check if Docker Image is in the system, if not pull it from a Docker repository
         match docker.inspect_image(&img_name).await {
-            Ok(_) => info!("Docker image found!"),
+            Ok(_) => info!("Docker image: Found"),
             Err(error) => match error{
                 _DockerResponseServerError => match pull_image(&img_name, &docker).await {
-                    Ok(_) => (),
+                    Ok(_) => info!("Docker image: Pulled"),
                     Err(e) => panic!("Problem downloading image: {:?}", e),
                 },
                 other_error => {
@@ -193,6 +191,8 @@ impl Config {
         };
 
         let config_arc = Arc::new(config);
+
+        debug!("Config created: {:#?}", config_arc);
 
         Ok(Config{config: config_arc})
     }
@@ -232,7 +232,7 @@ impl Config {
 }
 
 pub struct Task{
-    pub image_id: String,
+    pub task_id: String,
     pub config: Config,
 }
 
@@ -240,23 +240,23 @@ impl Task {
     // add code here
     // pub async fn new (config: Config) -> Result<Task, &'static str> {
     pub async fn new(config: Config) -> Task {
+
+        //Create a random container name, unique for each task
+        let mut rng = rand::thread_rng();
+        let n1: u16 = rng.gen();
+        let container_id = format!("rustle-{}-{}", config.get_algo(), n1);
         
         //TODO Parse the parameters of yaml? Or mount the YAML file into Docker container 
         let options = Some(container::CreateContainerOptions{
-            name: format!("rustle-{}", config.get_algo()),
+            name: &container_id,
             platform: None,
         });
 
-        //Set up the binds config to mount these volumes inside our container (needs refactor)
+        //Set up the binds config to mount these volumes inside our container
         let hm: HashMap<&str, &str> = HashMap::from([
             ("/rustle/dataset/", config.get_dataset()),
             ("/rustle/config/params.yaml", config.get_params()),
         ]);
-
-
-
-
-
         let mut path_mounts = vec![];
         let _: Vec<_> = hm.
             iter().
@@ -269,7 +269,8 @@ impl Task {
             })
             .collect();
         
-        //Create the running config (cmd to execute, env variables, volumes to mount, etc...)
+
+        //Setup container flags (cmd to execute, env variables, volumes to mount, etc...).
         let config_docker = container::Config {
             image: Some(config.get_img()),
             cmd: Some(vec!["roscore"]),
@@ -281,36 +282,38 @@ impl Task {
             ..Default::default()
         };
 
-        // Create a container
+        // Create a container. This does not run the container
         let id: String = config.config.docker
             .create_container(options, config_docker)
             .await.unwrap()
             .id;
 
-        Task{image_id:id, config}
+        debug!("Container created: {:#?}", id);
+
+        Task{task_id: container_id, config}
     }
 
     pub async fn run(&self) -> Result<TaskOutput, RosError>{
         //Start the container
-        // let _ = self.config.start_container().await;
-        let _ = self.config.get_docker().start_container::<String>(&self.image_id, None).await;
+        debug!("Starting container: {:#?}", self.task_id);
+        let _ = self.config.get_docker().start_container::<String>(&self.task_id, None).await;
 
         //Wait 1s for roscore to start
         //let ten_sec = time::Duration::from_secs(1);
         //thread::sleep(ten_sec);
 
+        //Vector of commands to run inside the container
         let commands: Vec<_> = vec![
             "roslaunch rustle rustle.launch --wait",
             "rosbag play --clock /rustle/dataset/*.bag"
             //"rosbag play -d 9 --clock -u 40 /rustle/dataset/*.bag"
         ];
-
         let execs: Vec<_> = future::try_join_all(commands
             .iter()
             .map(|command| async {
                 self.config.get_docker()
                     .create_exec(
-                        &self.image_id,
+                        &self.task_id,
                         CreateExecOptions {
                             attach_stdout: Some(true),
                             attach_stderr: Some(true),
@@ -320,26 +323,29 @@ impl Task {
                     ).await
             })).await.unwrap();
 
+
+        //Create a cancellation token to stop the execution threads
         let token = CancellationToken::new();
 
-
+        //Wait 1s for roscore to start
         let ten_sec = time::Duration::from_secs(1);
         thread::sleep(ten_sec);
 
         let config_clone = self.config.clone();
         let roslaunch_id = execs[0].id.clone();
         let task_token = token.clone();
-        let id = self.image_id.clone();
+        let id = self.task_id.clone();
+
         //spawn a task for roslaunch
         let roslaunch_task = tokio::spawn(async move {
             if let StartExecResults::Attached { mut output, mut input } = config_clone.get_docker().start_exec(&roslaunch_id, None).await.unwrap() {
                 loop{
                     select!{
                         Some(Ok(msg)) = output.next() => {
-                            trace!("RUSTLE TASK: {msg}");
+                            trace!("ROS MSG: {msg}");
                         },
                         _ = task_token.cancelled()=>{
-                            info!("Roslaunch was asked to stop");
+                            info!("Container Stopped");
                             //logic to cancel this task
 
                             let record_options_future = config_clone.get_docker()
@@ -353,12 +359,9 @@ impl Task {
                                 },
                             ).await.unwrap();
 
-                            config_clone.get_docker().start_exec(&record_options_future.id, None).await.unwrap(); //kill
+                            config_clone.get_docker().start_exec(&record_options_future.id, None).await.unwrap(); //This kills the record command
                             //the record command
-
-                            //let ten_sec = time::Duration::from_secs(1);
-                            //thread::sleep(ten_sec);
-
+                            debug!("Record command killed");
                             break;
                         }
                     }
@@ -369,7 +372,10 @@ impl Task {
             }
         });
 
-        //Add the ground truth as a topic
+
+
+
+        //Add the ground truth as a topic, because we need to record it. Add option to provide a file directly
         let mut topics = self.config.get_topics();
         topics.push(self.config.get_gt().to_string());
         
@@ -378,28 +384,27 @@ impl Task {
             .map( |s| {
                 let config_clone = self.config.clone();
                 let token = token.clone();
-
+                let task_id_clone = self.task_id.clone();
 
                 tokio::spawn(async move {
-                    Self::record_task(config_clone, &s, token).await;
+                    Self::record_task(config_clone, task_id_clone, &s, token).await;
                 })
-
 
             })
             .collect();
 
-        // Wait a certain number of seconds for the algorithm to init, PARAMETER
+        // Wait a certain number of seconds for the algorithm to init, THIS SHOULD BE A PARAMETER
         let ten_sec = time::Duration::from_secs(5);
         thread::sleep(ten_sec);
 
-        let image_id = self.image_id.clone();
+        let task_id_clone = self.task_id.clone();
         let stream_token = token.clone();
         let config_clone = self.config.clone();
 
         let stream_task = tokio::spawn(async move{
             let stream= &mut config_clone.get_docker()
                     .stats(
-                        &image_id,
+                        &task_id_clone,
                         Some(StatsOptions {
                             stream: true,
                             one_shot: false
@@ -421,7 +426,7 @@ impl Task {
                         };
 
                         // Add stats the the database;
-                        config_clone.get_db().add_stat(stats).await;
+                        config_clone.get_db().add_stat(config_clone.get_algo(),&task_id_clone, stats).await;
                     },
                     _ = stream_token.cancelled()=>{
                         break;
@@ -434,12 +439,13 @@ impl Task {
 
         let rosplay_id = execs[1].id.clone();
         let config_clone = self.config.clone();
+        let task_id_clone = self.task_id.clone();
 
         //spawn a task for rosplay
         let rosplay_task = tokio::spawn(async move {
             if let StartExecResults::Attached { mut output, .. } = config_clone.get_docker().start_exec(&rosplay_id, None).await.unwrap() {
                 while let Some(Ok(msg)) = output.next().await {
-                    trace!("RUSTLE PLAY: {msg}");
+                    trace!("ROSBAG: {msg}");
                 }
             } else {
                 warn!("STREAM PLAY ENDED");
@@ -448,26 +454,30 @@ impl Task {
                 //Loop to give the prints;
         });
 
+        
         tokio::join!(rosplay_task);
 
+        debug!("Stoped rosbag play, send cancel signal to the other tasks");
         token.cancel(); // the end of the rosbag will be the first point where the other tasks need
         // to stop
         tokio::join!(roslaunch_task);
+        debug!("Stoped roslaunch");
 
         let mut odoms_result = Arc::new(Mutex::new(HashMap::<String, Vec<Odometry>>::new()));
-        let stats_result: Vec<ContainerStats> = self.config.get_db().query_stats().await.unwrap();
+        let stats_result: Vec<ContainerStats> = self.config.get_db().query_stats(self.config.get_algo(), &self.task_id).await.unwrap();
 
-        let  gt_result: Vec<Odometry> = self.config.get_db().query_odom(self.config.get_gt()).await.unwrap();
+        let  gt_result: Vec<Odometry> = self.config.get_db().query_odom(self.config.get_algo(), &self.task_id, self.config.get_gt()).await.unwrap();
         
         let write_results:Vec<_> = self.config.get_topics()
             .into_iter()
             .map(|s|{
                 let config_clone = self.config.clone();
+                let task_id_clone = self.task_id.clone();
                 let mut odoms_result_clone = odoms_result.clone();
                 tokio::spawn(async move {
                     let odoms: Vec<Odometry> = config_clone
                         .get_db()
-                        .query_odom(&s)
+                        .query_odom(config_clone.get_algo(), &task_id_clone, &s)
                         .await
                         .expect("Unable to find odometry data on table!");
                     
@@ -480,8 +490,9 @@ impl Task {
             })
             .collect();
         
+        //Remove the containers
         self.config.get_docker().remove_container(
-            &format!("rustle-{}", self.config.get_algo()), 
+            &self.task_id,
             Some(
                 RemoveContainerOptions{
                     force: true,
@@ -489,6 +500,7 @@ impl Task {
                 }
             )
         ).await;
+        debug!("Container removed");
         
         futures_util::future::join_all(write_results).await;
 
@@ -505,16 +517,14 @@ impl Task {
 
     }
 
-    async fn record_task(config: Config, topic: &str, record_token: CancellationToken){
+    async fn record_task(config: Config, task_id: String, topic: &str, record_token: CancellationToken){
 
         let cmd = format!("rostopic echo {topic}");
-
-        let image_id = format!("rustle-{}", config.get_algo());
 
          // Check how I'm gonna record the localization
         let record_options_future = config.get_docker()
             .create_exec(
-            &image_id,
+            &task_id,
             CreateExecOptions {
                 attach_stdout: Some(true),
                 attach_stderr: Some(true),
@@ -533,7 +543,7 @@ impl Task {
                             match Self::convert_to_ros(msg.to_string()){
                                 Ok(r) => {
                                     let odom = r.as_odometry().unwrap();
-                                    config.get_db().add_odom(odom, topic).await;
+                                    config.get_db().add_odom(config.get_algo(), &task_id, odom, topic).await;
                                 }
                                 Err(e) => {
                                     warn!("{e:}");
@@ -545,7 +555,7 @@ impl Task {
                             
                             let record_options_future = config.get_docker()
                                 .create_exec(
-                                &image_id,
+                                &task_id,
                                 CreateExecOptions {
                                     attach_stderr: Some(true),
                                     cmd: Some(vec!["pkill", "-SIGINT", "record"]),

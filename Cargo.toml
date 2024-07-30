@@ -36,4 +36,4 @@ itertools = "*"
 nalgebra = { version = "0.32.4", features = ["serde-serialize"] }
 plotters = "0.3.4"
 yaml-rust2 = "0.8.0"
-#fontconfig-sys = "0.8.0"
+rand = "*"
