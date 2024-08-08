@@ -1,12 +1,10 @@
 use core::f32;
 use std::process::Command;
 use std::fmt;
-use log::{error, trace, warn};
+use log::{debug, error, trace, warn};
 use struct_iterable::Iterable;
 
 use crate::errors::{EvoError, RosError};
-
-
 
 pub trait EvoArg {
     fn compute<'a>(&self, groundtruth: &str, data: &str) -> Result<String, EvoError>;
@@ -51,7 +49,7 @@ impl EvoApeArg {
                 //This handles all the Option<f32>
                 if o.is::<Option<f32>>(){
                     match o.downcast_ref::<Option<f32>>().unwrap(){
-                        Some(val) => commands.push(format!("--{s} {val}")),
+                        Some(val) => commands.push(format!("--{s}={val}")),
                         None => (),
                     }
                 } else if o.is::<bool>(){ //This handles all the bools
@@ -91,6 +89,8 @@ impl EvoApeArg {
             None => ()
         }
 
+        debug!("Flags for EVO APE:{:#?}", commands);
+
         return commands;
     }
 }
@@ -98,7 +98,7 @@ impl EvoApeArg {
 impl Default for EvoApeArg {
     fn default() -> EvoApeArg {
         EvoApeArg{
-            t_max_diff: None,
+            t_max_diff: Some(0.1),
             t_offset: None,
             t_start: None,
             t_end: None,
@@ -124,7 +124,7 @@ impl fmt::Display for EvoApeArg {
                 //This handles all the Option<f32>
                 if o.is::<Option<f32>>(){
                     match o.downcast_ref::<Option<f32>>().unwrap(){
-                        Some(val) => string.push_str(&format!(" --{s} {val}")),
+                        Some(val) => string.push_str(&format!(" --{s}={val}")),
                         None => (),
                     }
                 } else if o.is::<bool>(){ //This handles all the bools
@@ -260,11 +260,9 @@ impl EvoArg for EvoApeArg{
         let stderr = std::str::from_utf8(&output.stderr).unwrap();
 
         if stdout.contains("[ERROR]"){
-            error!("{}", stdout);
             return Err(EvoError::CommandError { stderr: stdout.into() });
             
         } else if !stderr.is_empty(){
-            error!("{}", stdout);
             return Err(EvoError::CommandError { stderr: stderr.into() });
 
         } else if !stdout.is_empty(){
@@ -307,7 +305,7 @@ impl EvoRpeArg {
                 //This handles all the Option<f32>
                 if o.is::<Option<f32>>(){
                     match o.downcast_ref::<Option<f32>>().unwrap(){
-                        Some(val) => commands.push(format!("--{s} {val}")),
+                        Some(val) => commands.push(format!("--{s}={val}")),
                         None => (),
                     }
                 } else if o.is::<bool>(){ //This handles all the bools
