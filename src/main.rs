@@ -25,7 +25,8 @@ async fn main() {
 
     let configs = config_setup().await;
 
-    let batch_task = TaskBatch{ configs: configs.clone(), batch_size: 1, run_async: true };
+    let batch_task = TaskBatch{ configs: configs.clone(), iterations: 1, workers: 6};
+
     let batch_output = batch_task.run().await.unwrap();
     let batch_res = Metric::compute_batch(
         &batch_output, 
@@ -97,56 +98,56 @@ async fn config_setup() -> Vec<Config> {
     //----------------//
 
     // LIO-SAM-6AXIS //
-    configs.push(
-        Config::new(
-            "mjpc13/rustle:lio-sam-6axis", 
-            "LIO-SAM", 
-            dataset_path, 
-            "/home/mario/Documents/rustle/test/config/lio-sam-6axis/params.yaml",   
-            vec!["/lio_sam_6axis/mapping/odometry_incremental"], 
-            gt_topic,  
-            Some(&adv) 
-        ).await.unwrap()
-    );
+    //configs.push(
+    //    Config::new(
+    //        "mjpc13/rustle:lio-sam-6axis", 
+    //        "LIO-SAM", 
+    //        dataset_path, 
+    //        "/home/mario/Documents/rustle/test/config/lio-sam-6axis/params.yaml",   
+    //        vec!["/lio_sam_6axis/mapping/odometry_incremental"], 
+    //        gt_topic,  
+    //        Some(&adv) 
+    //    ).await.unwrap()
+    //);
 
     //----------------//
 
     // POINT-LIO //
-    //configs.push(
-    //    Config::new(
-    //        "mjpc13/rustle:point-lio", 
-    //        "Point-LIO", 
-    //        dataset_path, 
-    //        "/home/mario/Documents/rustle/test/config/point-lio/params.yaml", 
-    //        vec!["/aft_mapped_to_init"], 
-    //        gt_topic,  
-    //        None 
-    //    ).await.unwrap()
-    //);
+    configs.push(
+        Config::new(
+            "mjpc13/rustle:point-lio", 
+            "Point-LIO", 
+            dataset_path, 
+            "/home/mario/Documents/rustle/test/config/point-lio/params.yaml", 
+            vec!["/aft_mapped_to_init"], 
+            gt_topic,  
+            None 
+        ).await.unwrap()
+    );
 
     // DLO //
-    //configs.push(Config::new(
-    //    "mjpc13/rustle:dlo", //docker image name
-    //    "DLO", //algorithm name
-    //    dataset_path, // path to the directory of the rosbag
-    //    "/home/mario/Documents/rustle/test/config/dlo/params.yaml",  //Yaml config file for the algorithm 
-    //    vec!["/dlo/odom_node/odom"], //Vector of topics to record
-    //    gt_topic, //topic of the ground truth
-    //    None //Advanced arguments (database and docker stuff) replace with None for default config
-    //    ).await.unwrap()
-    //);
+    configs.push(Config::new(
+        "mjpc13/rustle:dlo", //docker image name
+        "DLO", //algorithm name
+        dataset_path, // path to the directory of the rosbag
+        "/home/mario/Documents/rustle/test/config/dlo/params.yaml",  //Yaml config file for the algorithm 
+        vec!["/dlo/odom_node/odom"], //Vector of topics to record
+        gt_topic, //topic of the ground truth
+        None //Advanced arguments (database and docker stuff) replace with None for default config
+        ).await.unwrap()
+    );
 
    // DLIO //
-    //configs.push(Config::new(
-    //    "mjpc13/rustle:dlio", //docker image name
-    //    "DLIO", //algorithm name
-    //    dataset_path, // path to the directory of the rosbag
-    //    "/home/mario/Documents/rustle/test/config/dlio/params.yaml",  //Yaml config file for the algorithm 
-    //    vec!["/dlio/odom_node/odom"], //Vector of topics to record
-    //    gt_topic, //topic of the ground truth
-    //    None //Advanced arguments (database and docker stuff) replace with None for default config
-    //    ).await.unwrap()
-    //);
+    configs.push(Config::new(
+        "mjpc13/rustle:dlio", //docker image name
+        "DLIO", //algorithm name
+        dataset_path, // path to the directory of the rosbag
+        "/home/mario/Documents/rustle/test/config/dlio/params.yaml",  //Yaml config file for the algorithm 
+        vec!["/dlio/odom_node/odom"], //Vector of topics to record
+        gt_topic, //topic of the ground truth
+        None //Advanced arguments (database and docker stuff) replace with None for default config
+        ).await.unwrap()
+    );
 
 
     // SR-LIVO //
@@ -162,28 +163,28 @@ async fn config_setup() -> Vec<Config> {
     //);
 
     // A-LOAM //
-    //configs.push(Config::new(
-    //        "mjpc13/rustle:a-loam", //docker image name
-    //        "Light-LOAM", //algorithm name
-    //        dataset_path, // path to the directory of the rosbag
-    //        "/home/mario/Documents/rustle/test/config/a-loam/params.yaml",  //Yaml config file for the algorithm 
-    //        vec!["/aft_mapped_to_init"], //Vector of topics to record
-    //        gt_topic, //topic of the ground truth
-    //        None //Advanced arguments (database and docker stuff) replace with None for default config
-    //    ).await.unwrap()
-    //);
+    configs.push(Config::new(
+            "mjpc13/rustle:a-loam", //docker image name
+            "Light-LOAM", //algorithm name
+            dataset_path, // path to the directory of the rosbag
+            "/home/mario/Documents/rustle/test/config/a-loam/params.yaml",  //Yaml config file for the algorithm 
+            vec!["/aft_mapped_to_init"], //Vector of topics to record
+            gt_topic, //topic of the ground truth
+            None //Advanced arguments (database and docker stuff) replace with None for default config
+        ).await.unwrap()
+    );
 
     // Faster-LIO //
-    //configs.push(Config::new(
-    //        "mjpc13/rustle:faster-lio", //docker image name
-    //        "Faster-LIO", //algorithm name
-    //        dataset_path, // path to the directory of the rosbag
-    //        "/home/mario/Documents/rustle/test/config/faster-lio/params.yaml",  //Yaml config file for the algorithm 
-    //        vec!["/Odometry"], //Vector of topics to record
-    //        gt_topic, //topic of the ground truth
-    //        None //Advanced arguments (database and docker stuff) replace with None for default config
-    //    ).await.unwrap()
-    //);
+    configs.push(Config::new(
+            "mjpc13/rustle:faster-lio", //docker image name
+            "Faster-LIO", //algorithm name
+            dataset_path, // path to the directory of the rosbag
+            "/home/mario/Documents/rustle/test/config/faster-lio/params.yaml",  //Yaml config file for the algorithm 
+            vec!["/Odometry"], //Vector of topics to record
+            gt_topic, //topic of the ground truth
+            None //Advanced arguments (database and docker stuff) replace with None for default config
+        ).await.unwrap()
+    );
 
     return configs;
 
