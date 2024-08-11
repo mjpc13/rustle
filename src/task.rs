@@ -283,12 +283,14 @@ impl Task {
         };
 
         // Create a container. This does not run the container
-        let id: String = config.config.docker
-            .create_container(options, config_docker)
-            .await.unwrap()
-            .id;
+        //let id: String = config.config.docker
+        //    .create_container(options, config_docker)
+        //    .await.unwrap()
+        //    .id;
 
-        debug!("Container created: {:#?}", id);
+        config.get_docker().create_container(options, config_docker).await.unwrap();
+
+        //debug!("Container created: {:#?}", id);
 
         Task{task_id: container_id, config}
     }
@@ -608,8 +610,8 @@ impl Task {
 #[derive(Debug)]
 pub struct TaskBatch{
     pub configs: Vec<Config>,
-    pub batch_size: u8,
-    pub run_async: bool 
+    pub iterations: usize,
+    pub workers: u8
 }
 
 impl TaskBatch {
@@ -626,21 +628,53 @@ impl TaskBatch {
         //wrap hash in a new arc mutex
         let mut_res: Mutex<HashMap<&str, Vec<TaskOutput>>> = Mutex::new(res_hash);
 
-        if self.run_async{
-            for _ in 0..self.batch_size{
-                let results = self.configs
-                .iter()
-                .map(|c| async  {
+        //Repeat the configurations for the number of times specified in the batch size and wrapped in an arc mutex
+        let mut test = self.configs.clone();
+
+
+        let task_jobs: Vec<Config> = self.configs.clone().into_iter().cycle().take(self.configs.len() * self.iterations).collect();
+        let task_jobs: Arc<Mutex<Vec<Config>>> = Arc::new(Mutex::new(task_jobs));
+
+
+        //if self.run_async{
+        //    for _ in 0..self.batch_size{
+        //        let results = self.configs
+        //        .iter()
+        //        .map(|c| async  {
+        //            let task: Task = Task::new(c.clone()).await;
+        //            let res = task.run().await.unwrap();
+        //            mut_res.lock().unwrap().get_mut(c.get_algo()).unwrap().push(res);
+        //        });
+        //        futures_util::future::join_all(results).await;
+        //    }
+        //}
+        //else{
+        //    todo!();
+        //}
+
+        while task_jobs.lock().await.len() != 0{
+
+            let results = (0..self.workers).map(|_| async {
+
+                let mut config: Option<Config> = None;
+                config = task_jobs.lock().await.pop();
+
+                if let Some(c) = config{
+
+                    info!("Running task: {:#?}", &c);
+
                     let task: Task = Task::new(c.clone()).await;
                     let res = task.run().await.unwrap();
+
                     mut_res.lock().await.get_mut(c.get_algo()).unwrap().push(res);
-                });
-                futures_util::future::join_all(results).await;
-            }
+
+               } else{
+                    debug!("No more tasks to run");
+               }
+            });
+            futures_util::future::join_all(results).await;
         }
-        else{
-            todo!();
-        }
+
 
         let res_hash = mut_res.into_inner();
 
