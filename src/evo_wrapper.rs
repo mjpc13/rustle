@@ -1,7 +1,7 @@
 use core::f32;
 use std::process::Command;
 use std::fmt;
-use log::{debug, error, trace, warn};
+use log::{debug, error, info, trace, warn};
 use struct_iterable::Iterable;
 
 use crate::errors::{EvoError, RosError};
@@ -98,7 +98,7 @@ impl EvoApeArg {
 impl Default for EvoApeArg {
     fn default() -> EvoApeArg {
         EvoApeArg{
-            t_max_diff: Some(0.1),
+            t_max_diff: None,
             t_offset: None,
             t_start: None,
             t_end: None,
@@ -225,7 +225,7 @@ impl PlotArg {
                 //    }
                 //} 
                 else{
-                    //println!("WHAT THE HELLLL")
+                    
                 }
             }).collect();
         

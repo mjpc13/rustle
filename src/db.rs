@@ -88,7 +88,6 @@ impl DB{
 
         let odoms: Vec<_> = response.take(0)?;
 
-        debug!("Query of Odom: {:#?}", odoms);
         Ok(odoms)
     }
 }

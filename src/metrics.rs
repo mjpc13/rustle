@@ -1,4 +1,5 @@
 use crate::{errors::{EvoError, RosError}, evo_wrapper::EvoArg, ros_msgs::{Odometry, RosMsg}, task::{Config, TaskOutput}};
+use log::info;
 //use anyhow::Ok;
 use plotters::{backend::{BitMapBackend, SVGBackend}, chart::{ChartBuilder, SeriesLabelPosition}, coord::ranged1d::{IntoSegmentedCoord, SegmentValue}, data::{fitting_range, Quartiles}, drawing::IntoDrawingArea, element::{Boxplot, PathElement, Rectangle}, series::LineSeries, style::{self, Color, IntoFont, Palette, Palette99, RGBColor, TextStyle, BLACK, RED, WHITE}};
 use serde::{Deserialize, Serialize};
@@ -82,6 +83,7 @@ impl Metric{
 
             for to in v {
                 
+                info!("Computing metrics for {}", to.name);
                 let vec_metric = Metric::compute(to, &args, None);
 
                 if vec_metric.len() == 1{
