@@ -10,6 +10,13 @@ pip install evo
 
 During initial tests I am using the the [park_dataset.bag](https://drive.google.com/drive/folders/1gJHwfdHCRdjP7vuT556pv8atqrCJPbUq) (3.22GB)
 
+
+
+## Dependencies
+
+pkg-config fontconfig
+
+
 ## Running code
 
 To build:
