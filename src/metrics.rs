@@ -50,6 +50,7 @@ impl Metric{
             }
         };
         let mut path_gt = path.clone();
+        println!("The outputh path is {:}", path.display());
         
         Self::write_file(&data.groundtruth, "groundtruth", &mut path_gt);
 
@@ -69,7 +70,6 @@ impl Metric{
             .collect();
 
         metric_results
-        
     }
 
 
@@ -334,7 +334,6 @@ impl Metric{
         let mut chart = ChartBuilder::on(&root)
             .x_label_area_size(50)
             .y_label_area_size(80)
-            .caption("Boxplot of RMSE", ("sans-serif", 24).into_font())
             .margin(8)
             .build_cartesian_2d(
                 names[..].into_segmented(),
@@ -344,7 +343,7 @@ impl Metric{
         chart.configure_mesh()
             .y_desc("APE RMSE")
             .axis_desc_style(("sans-serif", 20))
-            .label_style(("sans-serif", 14).into_font())
+            .label_style(("sans-serif", 16).into_font())
             .draw()
             .unwrap();
 
@@ -435,8 +434,6 @@ pub struct ContainerPlotArg<'a>{
     bg_color: RGBColor,
     line_color: RGBColor,
     border_color: RGBColor,
-    caption: &'a str,
-    caption_style: (&'a str, u32),
     legend: &'a str,
 }
 
@@ -481,7 +478,6 @@ impl ContainerPlot {
         }).collect();
 
         let mut chart = ChartBuilder::on(&root)
-            .caption("Memory Usage (MiB)", ("sans-serif", 24).into_font())
             .margin(8)
             .x_label_area_size(50)
             .y_label_area_size(80)
@@ -494,7 +490,7 @@ impl ContainerPlot {
             .y_desc("Memory Usage (MiB)")
             .x_desc("Time (s)")
             .axis_desc_style(("sans-serif", 20))
-            .label_style(("sans-serif", 14).into_font())
+            .label_style(("sans-serif", 16).into_font())
             .draw()
             .unwrap();
         
@@ -525,7 +521,7 @@ impl ContainerPlot {
         chart
             .configure_series_labels()
             .position(SeriesLabelPosition::UpperRight)
-            .label_font(("sans-serif", 14))
+            .label_font(("sans-serif", 16))
             .background_style(&WHITE.mix(0.8))
             .border_style(&BLACK)
             .draw().unwrap();
@@ -582,7 +578,6 @@ impl ContainerPlot {
         }).collect();
 
         let mut chart = ChartBuilder::on(&root)
-            .caption("Memory Usage Per Second (MiB/s)", ("sans-serif", 24).into_font())
             .margin(5)
             .x_label_area_size(50)
             .y_label_area_size(50)
@@ -595,7 +590,6 @@ impl ContainerPlot {
             .axis_desc_style(("sans-serif", 18))
             .draw()
             .unwrap();
-    
 
 
             let _: Vec<_> = data
@@ -603,7 +597,6 @@ impl ContainerPlot {
             .zip_eq(mem_sec.into_iter())
             .enumerate()
             .map(|(idx, (d, m))|{
-                println!("idea ");
 
                 let color = Palette99::pick(idx).mix(0.9);
                 chart
@@ -623,13 +616,10 @@ impl ContainerPlot {
                 )).unwrap()
                 .label(&d.name)
                 .legend(move |(x, y)| Rectangle::new([(x, y - 5), (x + 10, y + 5)], color.filled()));
-            println!("fu ");
 
             })
             .collect();
 
-
-            println!("me ");
 
         chart
             .configure_series_labels()
@@ -693,7 +683,6 @@ impl ContainerPlot {
 
 
         let mut chart = ChartBuilder::on(&root)
-            .caption("Computer CPU", ("sans-serif", 24).into_font())
             .margin(8)
             .x_label_area_size(50)
             .y_label_area_size(80)
@@ -741,7 +730,7 @@ impl ContainerPlot {
         chart
             .configure_series_labels()
             .position(SeriesLabelPosition::UpperRight)
-            .label_font(("sans-serif", 14))
+            .label_font(("sans-serif", 16))
             .background_style(&WHITE.mix(0.8))
             .border_style(&BLACK)
             .draw().unwrap();

@@ -33,7 +33,6 @@ pub struct EvoApeArg{
     pub align: bool,
     pub scale: bool,
     pub n_to_align: Option<f32>,
-    pub align_origin: bool,
     pub plot: Option<PlotArg>
 }
 
@@ -106,7 +105,6 @@ impl Default for EvoApeArg {
             align: true,
             scale: true,
             n_to_align: None,
-            align_origin: true,
             plot: None
         }
     }
@@ -216,17 +214,6 @@ impl PlotArg {
                         _ => (),
                     }
                 } 
-                //else if o.is::<AxisUnit>(){ 
-                //    match o.downcast_ref::<AxisUnit>().unwrap(){
-                //        AxisUnit::Index => commands.push("--plot_x_dimension=index".to_string()),
-                //        AxisUnit::Second => commands.push("--plot_x_dimension=seconds".to_string()),
-                //        AxisUnit::Distance => commands.push("---plot_x_dimension=distances".to_string()),
-                //        _ => (),
-                //    }
-                //} 
-                else{
-                    
-                }
             }).collect();
         
         return commands;
@@ -248,6 +235,7 @@ impl Default for PlotArg {
 
 impl EvoArg for EvoApeArg{
     fn compute<'a>(&self, groundtruth: &str, data: &str) -> Result<String, EvoError>{
+
         let output = Command::new("evo_ape")
             .arg("tum")
             .arg(groundtruth)
@@ -263,6 +251,7 @@ impl EvoArg for EvoApeArg{
             return Err(EvoError::CommandError { stderr: stdout.into() });
             
         } else if !stderr.is_empty(){
+            log::warn!("The evo_ape command gave an error. This might be a bad parameter setup or a bad file location");
             return Err(EvoError::CommandError { stderr: stderr.into() });
 
         } else if !stdout.is_empty(){
@@ -288,7 +277,6 @@ pub struct EvoRpeArg{
     align: bool,
     scale: bool,
     n_to_align: Option<f32>,
-    align_origin: bool,
     plot: Option<PlotArg>
 }
 
@@ -314,7 +302,6 @@ impl EvoRpeArg {
                         match s{
                             "align" => commands.push("-a".to_string()),
                             "scale" => commands.push("-s".to_string()),
-                            "align_origin" => commands.push("--align_origin".to_string()),
                             _ => (),
                         }
                     }
@@ -360,7 +347,6 @@ impl Default for EvoRpeArg {
             align: true,
             scale: true,
             n_to_align: None,
-            align_origin: true,
             plot: None
         }
     }

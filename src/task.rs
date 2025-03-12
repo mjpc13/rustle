@@ -3,7 +3,7 @@ use bollard::{container::{self, RemoveContainerOptions, StatsOptions}, exec::{Cr
 use yaml_rust2::{parser::Parser, YamlLoader};
 
 use std::{
-    collections::HashMap, error::Error, fmt, fs::{File, OpenOptions}, io::Write, path::Path, sync::Arc, task, thread, time
+    cmp::Ordering, collections::HashMap, error::Error, fmt, fs::{File, OpenOptions}, io::Write, path::Path, sync::Arc, task, thread, time
 };
 
 use tokio;
@@ -99,6 +99,38 @@ pub struct TaskOutput{
     pub groundtruth: Vec<Odometry>,
     pub name: String
 }
+
+// Implement `PartialEq` for equality comparison
+impl PartialEq for TaskOutput {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name
+    }
+}
+
+// Implement `Eq`
+impl Eq for TaskOutput {}
+
+// Implement `PartialOrd` for partial ordering
+impl PartialOrd for TaskOutput {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+// Implement `Ord` for total ordering
+impl Ord for TaskOutput {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.name.cmp(&other.name) // Sort by `name` field
+    }
+}
+
+
+
+
+
+
+
+
 
 impl Config {
     /// Constructs a new `Config`.
@@ -282,12 +314,6 @@ impl Task {
             ..Default::default()
         };
 
-        // Create a container. This does not run the container
-        //let id: String = config.config.docker
-        //    .create_container(options, config_docker)
-        //    .await.unwrap()
-        //    .id;
-
         config.get_docker().create_container(options, config_docker).await.unwrap();
 
         //debug!("Container created: {:#?}", id);
@@ -307,8 +333,8 @@ impl Task {
         //Vector of commands to run inside the container
         let commands: Vec<_> = vec![
             "roslaunch rustle rustle.launch --wait",
-            "rosbag play --clock /rustle/dataset/*.bag"
-            //"rosbag play -d 9 --clock -u 40 /rustle/dataset/*.bag"
+            //"rosbag play --clock /rustle/dataset/*.bag"
+            "rosbag play -d 9 --clock -u 40 /rustle/dataset/*.bag"
         ];
         let execs: Vec<_> = future::try_join_all(commands
             .iter()
@@ -459,11 +485,11 @@ impl Task {
         
         tokio::join!(rosplay_task);
 
-        debug!("Stoped rosbag play, send cancel signal to the other tasks");
+        debug!("Stopped rosbag play, send cancel signal to the other tasks");
         token.cancel(); // the end of the rosbag will be the first point where the other tasks need
         // to stop
         tokio::join!(roslaunch_task);
-        debug!("Stoped roslaunch");
+        debug!("Stopped roslaunch");
 
         let mut odoms_result = Arc::new(Mutex::new(HashMap::<String, Vec<Odometry>>::new()));
         let stats_result: Vec<ContainerStats> = self.config.get_db().query_stats(self.config.get_algo(), &self.task_id).await.unwrap();
@@ -483,14 +509,15 @@ impl Task {
                         .await
                         .expect("Unable to find odometry data on table!");
                     
-                    
+                    if odoms.is_empty(){
+                        warn!("Odometry is empty, {:} failed to estimate odometry probably due to a bad config setup.", config_clone.get_algo());
+                    }
                     
                     let test = odoms_result_clone.lock().await.insert(s.to_string(), odoms);
-                
-                
                 })
             })
             .collect();
+
         
         //Remove the containers
         self.config.get_docker().remove_container(
@@ -634,23 +661,6 @@ impl TaskBatch {
 
         let task_jobs: Vec<Config> = self.configs.clone().into_iter().cycle().take(self.configs.len() * self.iterations).collect();
         let task_jobs: Arc<Mutex<Vec<Config>>> = Arc::new(Mutex::new(task_jobs));
-
-
-        //if self.run_async{
-        //    for _ in 0..self.batch_size{
-        //        let results = self.configs
-        //        .iter()
-        //        .map(|c| async  {
-        //            let task: Task = Task::new(c.clone()).await;
-        //            let res = task.run().await.unwrap();
-        //            mut_res.lock().unwrap().get_mut(c.get_algo()).unwrap().push(res);
-        //        });
-        //        futures_util::future::join_all(results).await;
-        //    }
-        //}
-        //else{
-        //    todo!();
-        //}
 
         while task_jobs.lock().await.len() != 0{
 
