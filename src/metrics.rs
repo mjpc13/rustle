@@ -1,16 +1,16 @@
-use crate::{errors::{EvoError, RosError}, evo_wrapper::EvoArg, ros_msgs::{Odometry, RosMsg}, task::{Config, TaskOutput}};
-use log::info;
-//use anyhow::Ok;
+use crate::{db::DB, errors::{EvoError, RosError}, evo_wrapper::EvoArg, ros_msgs::{Odometry, RosMsg}, task::{Config, TaskOutput}};
+use log::{info, warn};
+use num::PrimInt;
 use plotters::{backend::{BitMapBackend, SVGBackend}, chart::{ChartBuilder, SeriesLabelPosition}, coord::ranged1d::{IntoSegmentedCoord, SegmentValue}, data::{fitting_range, Quartiles}, drawing::IntoDrawingArea, element::{Boxplot, PathElement, Rectangle}, series::LineSeries, style::{self, Color, IntoFont, Palette, Palette99, RGBColor, TextStyle, BLACK, RED, WHITE}};
 use serde::{Deserialize, Serialize};
 use bollard::container::{MemoryStats, CPUStats};
 use chrono::{DateTime, Utc};
 
 use surrealdb::{
-    Surreal,
-    engine::any
+    engine::any::Any, Surreal
 };
 use temp_dir::TempDir;
+use tokio::sync::Mutex;
 use core::time;
 use std::{collections::{hash_map::Entry, HashMap}, default, env, fs::OpenOptions, io::Write, path::PathBuf, str::FromStr};
 use itertools::Itertools;
@@ -50,7 +50,6 @@ impl Metric{
             }
         };
         let mut path_gt = path.clone();
-        println!("The outputh path is {:}", path.display());
         
         Self::write_file(&data.groundtruth, "groundtruth", &mut path_gt);
 
@@ -73,21 +72,19 @@ impl Metric{
     }
 
 
-    pub fn compute_batch<R: EvoArg>(data: &HashMap<&str, Vec<TaskOutput>>, args: R) -> HashMap<String, Vec<Result<Metric, EvoError>>>{
+    pub fn compute_batch<R: EvoArg, S: AsRef<str>>(data: &HashMap<S, Vec<TaskOutput>>, args: R) -> HashMap<String, Vec<Result<Metric, EvoError>>>{
         
         let mut metric_hash: HashMap<String, Vec<Result<Metric, EvoError>>> = HashMap::new();
 
         for (k, v) in data{
             
-            //let mut vec_mec_hash: HashMap<String, Vec<Metric>> = HashMap::new();
-
             for to in v {
                 
                 info!("Computing metrics for {}", to.name);
                 let vec_metric = Metric::compute(to, &args, None);
 
                 if vec_metric.len() == 1{
-                    match metric_hash.entry(k.to_string()) {
+                    match metric_hash.entry(k.as_ref().to_owned()) {
                         Entry::Vacant(e) => { e.insert(vec_metric); },
                         Entry::Occupied(mut e) => { e.get_mut().push(vec_metric.into_iter().nth(0).unwrap()); }
                     }
@@ -96,7 +93,7 @@ impl Metric{
 
                     for (m,n) in vec_metric.into_iter().zip(to.odoms.keys().into_iter()){
                         let n1 = n.split("/").last().unwrap();
-                        let name = format!("{k} - {n1}");
+                        let name = format!("{:} - {n1}", k.as_ref());
 
                         match metric_hash.entry(name) {
                             Entry::Vacant(e) => { e.insert(vec![m]); },
@@ -384,14 +381,6 @@ impl FromStr for Metric {
             )
             .map(|(k, v)| {
                 let n = v.parse::<f32>().unwrap();
-                    //.unwrap_or(
-                    //return Err::<(),RosError>(
-                    //        RosError::ParseError { 
-                    //            name: "asd".into(), 
-                    //            value: "dsa".into() 
-                    //        }
-                    //    )
-                    //);
                     hash.insert(k, n);
             }
         )
@@ -498,7 +487,7 @@ impl ContainerPlot {
             .iter()
             .enumerate()
             .map(|(idx, d)|{
-                let color = Palette99::pick(idx).mix(0.9);
+                let color = Palette99::pick(idx+10).mix(0.9);
 
                 
                 chart
@@ -724,8 +713,6 @@ impl ContainerPlot {
                 .legend(move |(x, y)| Rectangle::new([(x, y - 5), (x + 10, y + 5)], color.filled()));
             })
             .collect();
-        
-
 
         chart
             .configure_series_labels()
@@ -738,8 +725,4 @@ impl ContainerPlot {
         root.present().unwrap();
     }
 
-
-    fn plot_load(&self, data: &Vec<ContainerStats>, output_path: &str){
-        todo!()
-    }
 }

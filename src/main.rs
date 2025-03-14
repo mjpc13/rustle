@@ -1,4 +1,7 @@
+use std::sync::Arc;
+
 use bollard::Docker;
+use rustle::db::load_from_file;
 use rustle::evo_wrapper::EvoApeArg;
 use rustle::evo_wrapper::PlotArg;
 use rustle::metrics::ContainerPlot;
@@ -6,8 +9,11 @@ use rustle::metrics::Metric;
 use rustle::task::AdvancedConfig;
 use rustle::task::TaskBatch;
 use rustle::task::TaskOutput;
+use rustle::db::DB;
 use surrealdb::engine::any;
 use tokio;
+use tokio::sync::Mutex;
+
 
 use rustle::task::Config;
 
@@ -17,50 +23,56 @@ use env_logger::init;
 async fn main() {
     
     init();
-
     
-    //========RUN=THE=ALGORITHMS=========//
+    //===========RUN=THE=ALGORITHMS=========//
 
     //------ASYNC-BATCH------// (all running at the same time multiple times)
 
-    let configs = config_setup().await;
+    //let configs = config_setup().await;
 
-    let batch_task = TaskBatch{ configs: configs.clone(), iterations: 1, workers: 4};
+    //let batch_task = TaskBatch{ configs: configs.clone(), iterations: 1, workers: 4};
 
-    let batch_output = batch_task.run().await.unwrap();
-    let batch_res = Metric::compute_batch(
-        &batch_output, 
-        EvoApeArg{
-            plot: Some(PlotArg::default()),
-            //plot: None,
-            ..Default::default()
-        }
-    );
+    //let batch_output = batch_task.run().await.unwrap();
+
+
+    //============LOAD=FROM=FILE==============//
+    //instead of running the algorithms from 0 you can load a previously saved database.
+
+    //let batch_output = load_from_file().await;
+
+    //===========COMPUTE=METRICS=============//
+
+    //let batch_res = Metric::compute_batch(
+    //    &batch_output, 
+    //    EvoApeArg{
+    //        //plot: Some(PlotArg::default()),
+    //        plot: None,
+    //        ..Default::default()
+    //    }
+    //);
 
     //__PRINT_IN_MD_TABLE___
-    let md_batch = Metric::print_batch(&batch_res);
-    println!("{}", md_batch);
+    //let md_batch = Metric::print_batch(&batch_res);
+    //println!("{}", md_batch);
     //______________________
 
 
     //_____PLOT_BOXPLOT_____
-    Metric::box_plot(&batch_res, "/home/mjpc13/Documents/rustle/test/results/box_plot_large.svg");
+    //Metric::box_plot(&batch_res, "/home/mjpc13/Documents/rustle/test/results/box_plot_large.svg");
     //______________________
-    
 
     //__PLOT_COMPUTER_STATS__
-    let mut task_vec: Vec<TaskOutput> = batch_output
-        .into_iter()
-        .map(|(k,v)| {
-            v.into_iter().next().unwrap()
-        })
-        .collect();
+    //let mut task_vec: Vec<TaskOutput> = batch_output
+    //    .into_iter()
+    //    .map(|(k,v)| {
+    //        v.into_iter().next().unwrap()
+    //    })
+    //    .collect();
 
-    task_vec.sort();
+    //task_vec.sort(); //sorts the algorithm to ensure that they have the same colors;
 
-
-    ContainerPlot::MemoryUsage.plot(&task_vec, "/home/mjpc13/Documents/rustle/test/results/memory_usage_large.svg");
-    ContainerPlot::LoadPercentage.plot(&task_vec, "/home/mjpc13/Documents/rustle/test/results/load_percentage_large.svg");
+    //ContainerPlot::MemoryUsage.plot(&task_vec, "/home/mjpc13/Documents/rustle/test/results/memory_usage_large.svg");
+    //ContainerPlot::LoadPercentage.plot(&task_vec, "/home/mjpc13/Documents/rustle/test/results/load_percentage_large.svg");
 
 }
 
@@ -72,11 +84,12 @@ async fn config_setup() -> Vec<Config> {
 
 
     let db_connection = any::connect("file://test/db").await.unwrap();
+    let test = db_connection.clone();
 
 
-    let adv = AdvancedConfig{
-        db_connection,
-        db_database: String::from("ig_lio_name"),
+    let adv_ig = AdvancedConfig{
+        db_connection: test,
+        db_database: String::from("ig_lio"),
         docker_socket: Docker::connect_with_local_defaults().unwrap(),
     };
 
@@ -94,13 +107,20 @@ async fn config_setup() -> Vec<Config> {
             "/home/mjpc13/Documents/rustle/test/config/ig-lio/params.yaml",  //Yaml config file for the algorithm 
             vec!["/lio_odom"], //Vector of topics to record
             gt_topic, //topic of the ground truth
-            Some(&adv) //Advanced arguments (database and docker stuff) replace with None for default config
+            Some(&adv_ig) //Advanced arguments (database and docker stuff) replace with None for default config
         ).await.unwrap()
     );
 
     //----------------//
 
+    let test = db_connection.clone();
+
     // LIO-SAM-6AXIS //
+    let adv_lio_sam = AdvancedConfig{
+        db_connection: test,
+        db_database: String::from("lio_sam"),
+        docker_socket: Docker::connect_with_local_defaults().unwrap(),
+    };
     configs.push(
         Config::new(
             "mjpc13/rustle:lio-sam-6axis", 
@@ -109,7 +129,7 @@ async fn config_setup() -> Vec<Config> {
             "/home/mjpc13/Documents/rustle/test/config/lio-sam-6axis/params.yaml",   
             vec!["/lio_sam_6axis/mapping/odometry_incremental"], 
             gt_topic,  
-            None
+            Some(&adv_lio_sam)
         ).await.unwrap()
     );
 

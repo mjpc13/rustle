@@ -126,12 +126,6 @@ impl Ord for TaskOutput {
 
 
 
-
-
-
-
-
-
 impl Config {
     /// Constructs a new `Config`.
     /// 
@@ -494,7 +488,7 @@ impl Task {
         let mut odoms_result = Arc::new(Mutex::new(HashMap::<String, Vec<Odometry>>::new()));
         let stats_result: Vec<ContainerStats> = self.config.get_db().query_stats(self.config.get_algo(), &self.task_id).await.unwrap();
 
-        let  gt_result: Vec<Odometry> = self.config.get_db().query_odom(self.config.get_algo(), &self.task_id, self.config.get_gt()).await.unwrap();
+        let  gt_result: Vec<Odometry> = self.config.get_db().query_odom(self.config.get_algo(), &self.task_id, "groundtruth").await.unwrap();
         
         let write_results:Vec<_> = self.config.get_topics()
             .into_iter()
@@ -572,7 +566,12 @@ impl Task {
                             match Self::convert_to_ros(msg.to_string()){
                                 Ok(r) => {
                                     let odom = r.as_odometry().unwrap();
-                                    config.get_db().add_odom(config.get_algo(), &task_id, odom, topic).await;
+                                    if topic.eq(config.get_gt()){
+                                        config.get_db().add_odom(config.get_algo(), &task_id, odom, "groundtruth").await;
+                                    }
+                                    else{
+                                        config.get_db().add_odom(config.get_algo(), &task_id, odom, topic).await;
+                                    }
                                 }
                                 Err(e) => {
                                     warn!("{e:}");
