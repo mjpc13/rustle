@@ -6,7 +6,8 @@ use rustle::evo_wrapper::EvoApeArg;
 use rustle::evo_wrapper::PlotArg;
 use rustle::metrics::ContainerPlot;
 use rustle::metrics::Metric;
-use rustle::task::AdvancedConfig;
+use rustle::config::AdvancedConfig;
+use rustle::speed_task::SpeedTaskBatch;
 use rustle::task::TaskBatch;
 use rustle::task::TaskOutput;
 use rustle::db::DB;
@@ -15,7 +16,7 @@ use tokio;
 use tokio::sync::Mutex;
 
 
-use rustle::task::Config;
+use rustle::config::Config;
 
 use env_logger::init;
 
@@ -28,11 +29,13 @@ async fn main() {
 
     //------ASYNC-BATCH------// (all running at the same time multiple times)
 
-    //let configs = config_setup().await;
+    let configs = config_setup().await;
 
     //let batch_task = TaskBatch{ configs: configs.clone(), iterations: 1, workers: 4};
-
     //let batch_output = batch_task.run().await.unwrap();
+
+    let speed_task = SpeedTaskBatch{configs:configs.clone(),iterations:1,workers:4, speed_list: [1,1000,100,10].to_vec() };
+    let out = speed_task.run().await;
 
 
     //============LOAD=FROM=FILE==============//
@@ -68,9 +71,7 @@ async fn main() {
     //        v.into_iter().next().unwrap()
     //    })
     //    .collect();
-
     //task_vec.sort(); //sorts the algorithm to ensure that they have the same colors;
-
     //ContainerPlot::MemoryUsage.plot(&task_vec, "/home/mjpc13/Documents/rustle/test/results/memory_usage_large.svg");
     //ContainerPlot::LoadPercentage.plot(&task_vec, "/home/mjpc13/Documents/rustle/test/results/load_percentage_large.svg");
 
@@ -107,6 +108,7 @@ async fn config_setup() -> Vec<Config> {
             "/home/mjpc13/Documents/rustle/test/config/ig-lio/params.yaml",  //Yaml config file for the algorithm 
             vec!["/lio_odom"], //Vector of topics to record
             gt_topic, //topic of the ground truth
+            //None
             Some(&adv_ig) //Advanced arguments (database and docker stuff) replace with None for default config
         ).await.unwrap()
     );
@@ -129,11 +131,19 @@ async fn config_setup() -> Vec<Config> {
             "/home/mjpc13/Documents/rustle/test/config/lio-sam-6axis/params.yaml",   
             vec!["/lio_sam_6axis/mapping/odometry_incremental"], 
             gt_topic,  
+            //None
             Some(&adv_lio_sam)
         ).await.unwrap()
     );
 
     //----------------//
+    let test = db_connection.clone();
+
+    let adv_ig = AdvancedConfig{
+        db_connection: test,
+        db_database: String::from("point_lio"),
+        docker_socket: Docker::connect_with_local_defaults().unwrap(),
+    };
 
     // POINT-LIO //
     configs.push(

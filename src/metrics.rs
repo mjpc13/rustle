@@ -1,4 +1,4 @@
-use crate::{db::DB, errors::{EvoError, RosError}, evo_wrapper::EvoArg, ros_msgs::{Odometry, RosMsg}, task::{Config, TaskOutput}};
+use crate::{errors::EvoError, evo_wrapper::EvoArg, ros_msgs::Odometry, task::TaskOutput};
 use log::{info, warn};
 use num::PrimInt;
 use plotters::{backend::{BitMapBackend, SVGBackend}, chart::{ChartBuilder, SeriesLabelPosition}, coord::ranged1d::{IntoSegmentedCoord, SegmentValue}, data::{fitting_range, Quartiles}, drawing::IntoDrawingArea, element::{Boxplot, PathElement, Rectangle}, series::LineSeries, style::{self, Color, IntoFont, Palette, Palette99, RGBColor, TextStyle, BLACK, RED, WHITE}};
@@ -121,7 +121,6 @@ impl Metric{
             .collect();
 
         let size = metrics.len(); //use the filter option
-
 
         if size == 0 {
             return Err(EvoError::CommandError { stderr: "()".into() })

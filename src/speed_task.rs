@@ -1,64 +1,44 @@
-use bollard::{container::{self, RemoveContainerOptions, StatsOptions}, exec::{CreateExecOptions, StartExecResults}, image::{self, CreateImageOptions}, models::{HostConfig, ResourcesUlimits}, Docker
-};
-use yaml_rust2::{parser::Parser, YamlLoader};
+use std::{cmp::Ordering, collections::{hash_map::Entry, HashMap}, sync::Arc, thread, time};
 
-use std::{
-    cmp::Ordering, collections::HashMap, error::Error, fmt, fs::{File, OpenOptions}, io::Write, path::Path, sync::Arc, task, thread, time
-};
-
-use tokio;
-use tokio::select;
-use tokio_util::sync::CancellationToken;
-use tokio::sync::Mutex;
-
-use futures_util::stream::{StreamExt};
-use futures_util::future;
-use temp_dir::TempDir;
-
-use crate::{config::Config, db::DB, metrics::ContainerStats, ros_msgs::{PoseStamped, RosMsg}};
-//use crate::metrics::Stats;
-
-use surrealdb::{
-    Surreal,
-    engine::any
-};
-
-use crate::errors::RosError;
-use crate::ros_msgs::{Header, Pose, Twist, Odometry};
-
+use bollard::{container::{self, RemoveContainerOptions}, exec::{CreateExecOptions, StartExecResults}, secret::{HostConfig, ResourcesUlimits}};
+use futures_util::{future, StreamExt};
+use log::{debug, info, trace, warn};
 use rand::Rng;
+use tokio::{select, sync::Mutex};
+use tokio_util::sync::CancellationToken;
+use yaml_rust2::YamlLoader;
+
+use crate::{config::Config, errors::{EvoError, RosError}, evo_wrapper::EvoApeArg, metrics::{self, Metric}, ros_msgs::{Odometry, RosMsg}, task::TaskOutput};
 
 
-//Logs
-use log::{debug, error, info, warn, trace};
-
-#[derive(Debug, Clone)]
-pub struct TaskOutput{
-    pub stats: Vec<ContainerStats>,
-    pub odoms: HashMap<String, Vec<Odometry>>,
-    pub groundtruth: Vec<Odometry>,
-    pub name: String
+pub struct SpeedTaskOutput{
+    task_output: TaskOutput,
+    pub bag_speed: u16,
+    pub freq_avg: HashMap<String, f32>,
+    pub name: String,
+    //pub ape: HashMap<String, Vec<Result<Metric, EvoError>>>,
+    //pub rpe: Vec<RPE>,
 }
 
 // Implement `PartialEq` for equality comparison
-impl PartialEq for TaskOutput {
+impl PartialEq for SpeedTaskOutput {
     fn eq(&self, other: &Self) -> bool {
         self.name == other.name
     }
 }
 
 // Implement `Eq`
-impl Eq for TaskOutput {}
+impl Eq for SpeedTaskOutput {}
 
 // Implement `PartialOrd` for partial ordering
-impl PartialOrd for TaskOutput {
+impl PartialOrd for SpeedTaskOutput {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
 // Implement `Ord` for total ordering
-impl Ord for TaskOutput {
+impl Ord for SpeedTaskOutput {
     fn cmp(&self, other: &Self) -> Ordering {
         self.name.cmp(&other.name) // Sort by `name` field
     }
@@ -69,15 +49,16 @@ pub struct Task{
     pub config: Config,
 }
 
+
+
+
 impl Task {
-    // add code here
-    // pub async fn new (config: Config) -> Result<Task, &'static str> {
     pub async fn new(config: Config) -> Task {
 
         //Create a random container name, unique for each task
         let mut rng = rand::thread_rng();
         let n1: u16 = rng.gen();
-        let container_id = format!("rustle-{}-{}", config.get_algo(), n1);
+        let container_id = format!("rustle-speed-{}-{}", config.get_algo(), n1);
         
         //TODO Parse the parameters of yaml? Or mount the YAML file into Docker container 
         let options = Some(container::CreateContainerOptions{
@@ -116,26 +97,24 @@ impl Task {
         };
 
         config.get_docker().create_container(options, config_docker).await.unwrap();
-
-        //debug!("Container created: {:#?}", id);
-
         Task{task_id: container_id, config}
     }
 
-    pub async fn run(&self) -> Result<TaskOutput, RosError>{
+
+    pub async fn run(&self, bag_speed: u16) -> Result<SpeedTaskOutput, RosError>{
         //Start the container
         debug!("Starting container: {:#?}", self.task_id);
         let _ = self.config.get_docker().start_container::<String>(&self.task_id, None).await;
 
-        //Wait 1s for roscore to start
-        //let ten_sec = time::Duration::from_secs(1);
-        //thread::sleep(ten_sec);
+
+        //let cmd = format!("rosbag play -d 9 -r {} --clock -u 40 /rustle/dataset/*.bag", bag_speed);
+        let cmd = format!("rosbag play -r {} --clock /rustle/dataset/*.bag", bag_speed);
+
 
         //Vector of commands to run inside the container
         let commands: Vec<_> = vec![
             "roslaunch rustle rustle.launch --wait",
-            //"rosbag play --clock /rustle/dataset/*.bag"
-            "rosbag play -d 9 --clock -u 40 /rustle/dataset/*.bag"
+            &cmd
         ];
         let execs: Vec<_> = future::try_join_all(commands
             .iter()
@@ -171,7 +150,7 @@ impl Task {
                 loop{
                     select!{
                         Some(Ok(msg)) = output.next() => {
-                            trace!("ROS MSG: {msg}");
+                           //trace!("ROS MSG: {msg}");
                         },
                         _ = task_token.cancelled()=>{
                             info!("Container Stopped");
@@ -183,7 +162,7 @@ impl Task {
                                 CreateExecOptions {
                                     attach_stdout: Some(true),
                                     attach_stderr: Some(true),
-                                    cmd: Some(vec!["killall", "-SIGINT", "record"]),
+                                    cmd: Some(vec!["/bin/bash", "-l", "-c", "rosnode", "kill", "-a", "2>/dev/null"]),
                                     ..Default::default()
                                 },
                             ).await.unwrap();
@@ -200,8 +179,6 @@ impl Task {
                 unreachable!();
             }
         });
-
-
 
 
         //Add the ground truth as a topic, because we need to record it. Add option to provide a file directly
@@ -225,46 +202,6 @@ impl Task {
         // Wait a certain number of seconds for the algorithm to init, THIS SHOULD BE A PARAMETER
         let ten_sec = time::Duration::from_secs(5);
         thread::sleep(ten_sec);
-
-        let task_id_clone = self.task_id.clone();
-        let stream_token = token.clone();
-        let config_clone = self.config.clone();
-
-        let stream_task = tokio::spawn(async move{
-            let stream= &mut config_clone.get_docker()
-                    .stats(
-                        &task_id_clone,
-                        Some(StatsOptions {
-                            stream: true,
-                            one_shot: false
-                        }),
-                    );
-            let mut count=0;
-            loop{
-                count+=1;
-                select!{
-                    Some(Ok(msg)) = stream.next() => {
-
-                        let stats = ContainerStats {
-                            uid: Some(count),
-                            memory_stats: msg.memory_stats,
-                            cpu_stats: msg.cpu_stats,
-                            precpu_stats: msg.precpu_stats,
-                            num_procs: msg.num_procs,
-                            created_at: None
-                        };
-
-                        // Add stats the the database;
-                        config_clone.get_db().add_stat(config_clone.get_algo(),&task_id_clone, stats).await;
-                    },
-                    _ = stream_token.cancelled()=>{
-                        break;
-                    }
-
-                }
-            }
-        });
-
 
         let rosplay_id = execs[1].id.clone();
         let config_clone = self.config.clone();
@@ -293,7 +230,7 @@ impl Task {
         debug!("Stopped roslaunch");
 
         let mut odoms_result = Arc::new(Mutex::new(HashMap::<String, Vec<Odometry>>::new()));
-        let stats_result: Vec<ContainerStats> = self.config.get_db().query_stats(self.config.get_algo(), &self.task_id).await.unwrap();
+        let mut freq_result = Arc::new(Mutex::new(HashMap::<String, f32>::new()));
 
         let  gt_result: Vec<Odometry> = self.config.get_db().query_odom(self.config.get_algo(), &self.task_id, "groundtruth").await.unwrap();
         
@@ -309,8 +246,14 @@ impl Task {
                         .query_odom(config_clone.get_algo(), &task_id_clone, &s)
                         .await
                         .expect("Unable to find odometry data on table!");
+
+                    let freqs = config_clone
+                        .get_db()
+                        .get_frequency_avg(config_clone.get_algo(), &task_id_clone, &s)
+                        .await
+                        .expect("Unable to find odometry data on table!");
                     
-                    if odoms.is_empty(){
+                    if odoms.is_empty() {
                         warn!("Odometry is empty, {:} failed to estimate odometry probably due to a bad config setup.", config_clone.get_algo());
                     }
                     
@@ -318,7 +261,6 @@ impl Task {
                 })
             })
             .collect();
-
         
         //Remove the containers
         self.config.get_docker().remove_container(
@@ -335,14 +277,30 @@ impl Task {
         futures_util::future::join_all(write_results).await;
 
         let odoms_result = Arc::into_inner(odoms_result).unwrap().into_inner();
+        let freq_avg = Arc::into_inner(freq_result).unwrap().into_inner();
 
         let name = String::from(self.config.get_algo());
 
-        Ok(TaskOutput{
-            stats: stats_result,
+        //Need to compute the APE//RPE for this algorithm...
+
+        //let odoms_result: Vec<Odometry> = vec![];
+        let ape = HashMap::<String, Metric>::new();
+
+        let to = TaskOutput{
+            stats: vec![],
             odoms: odoms_result,
             groundtruth: gt_result,
-            name: name
+            name: name.clone()
+        };
+
+        // 
+
+        Ok(SpeedTaskOutput{
+            task_output: to,
+            bag_speed: bag_speed,
+            name,
+            freq_avg,
+            //rpe: Vec<RPE>,
         })
 
     }
@@ -394,10 +352,10 @@ impl Task {
                                 &task_id,
                                 CreateExecOptions {
                                     attach_stderr: Some(true),
-                                    cmd: Some(vec!["pkill", "-SIGINT", "record"]),
+                                    cmd: Some(vec!["/bin/bash", "-l", "-c", "rosnode", "kill", "-a", "2>/dev/null"]),
                                     ..Default::default()
                                 },
-                            ).await.unwrap();    // kill -SIGINT pid
+                            ).await.unwrap();
 
                             config.get_docker().start_exec(&record_options_future.id, None).await.unwrap();
 
@@ -415,7 +373,6 @@ impl Task {
     }
 
     fn convert_to_ros(msg: String) -> Result<RosMsg, RosError> {
-
 
         let yaml = match YamlLoader::load_from_str(&msg.replace("\n---\n", "")){
             Ok(y) => y,
@@ -436,65 +393,88 @@ impl Task {
         let ros = RosMsg::new(top_fields)?;
 
         return ros.from_yaml(yaml[0].clone());
-        
     }
 
 }
 
 #[derive(Debug)]
-pub struct TaskBatch{
+pub struct SpeedTaskBatch{
     pub configs: Vec<Config>,
+    pub speed_list: Vec<u16>,
     pub iterations: usize,
     pub workers: u8
 }
 
-impl TaskBatch {
-    pub async fn run(&self) -> Result<HashMap<&str, Vec<TaskOutput>>, RosError>{
-        let mut res:Vec<TaskOutput> = vec![];
+impl SpeedTaskBatch {
+    pub async fn run(&self){
+        for speed in self.speed_list.clone(){
 
-        let mut res_hash: HashMap<&str, Vec<TaskOutput>> =  HashMap::new();
+            let mut res:Vec<TaskOutput> = vec![];
 
-        //init new algorithms
-        for c in &self.configs{
-            res_hash.insert(c.get_algo(), Vec::new());
+            let mut res_hash: HashMap<&str, Vec<TaskOutput>> =  HashMap::new();
+    
+            //init new algorithms
+            for c in &self.configs{
+                res_hash.insert(c.get_algo(), Vec::new());
+            }
+    
+            //wrap hash in a new arc mutex
+            let mut_res: Mutex<HashMap<&str, Vec<TaskOutput>>> = Mutex::new(res_hash);
+    
+            //Repeat the configurations for the number of times specified in the batch size and wrapped in an arc mutex
+            let mut test = self.configs.clone();
+    
+    
+            let task_jobs: Vec<Config> = self.configs.clone().into_iter().cycle().take(self.configs.len() * self.iterations).collect();
+            let task_jobs: Arc<Mutex<Vec<Config>>> = Arc::new(Mutex::new(task_jobs));    
+
+            while task_jobs.lock().await.len() != 0{
+            
+                let results = (0..self.workers).map(|_| async {
+    
+                    let mut config: Option<Config> = None;
+                    config = task_jobs.lock().await.pop();
+    
+                    if let Some(c) = config{
+    
+                        info!("Running task: {:#?}", &c);
+                        c.clone().set_algo(format!("{}_{speed}", c.get_algo()));
+    
+                        let task: Task = Task::new(c.clone()).await;
+                        let res = task.run(speed).await.unwrap();
+
+                        //println!("{:?}", res.freq_avg);
+                        
+                        //This needs to be SpeedTask
+                        mut_res.lock().await.get_mut(c.get_algo()).unwrap().push(res.task_output);
+    
+                   } else{
+                        debug!("No more tasks to run");
+                   }
+                });
+                futures_util::future::join_all(results).await;
+            }
+            let res_hash = mut_res.into_inner();
+
+            //Compute APE with the metrics stuff
+            let batch_res = Metric::compute_batch(
+                &res_hash, 
+                EvoApeArg{
+                    plot: None,
+                    ..Default::default()
+                }
+            );
+
+
+            println!("For the {speed} we have the following results:");
+            //__PRINT_IN_MD_TABLE___
+            let md_batch = Metric::print_batch(&batch_res);
+            println!("{}\n ---------------------------------", md_batch);
+            //______________________
+        
+
         }
 
-        //wrap hash in a new arc mutex
-        let mut_res: Mutex<HashMap<&str, Vec<TaskOutput>>> = Mutex::new(res_hash);
-
-        //Repeat the configurations for the number of times specified in the batch size and wrapped in an arc mutex
-        let mut test = self.configs.clone();
-
-
-        let task_jobs: Vec<Config> = self.configs.clone().into_iter().cycle().take(self.configs.len() * self.iterations).collect();
-        let task_jobs: Arc<Mutex<Vec<Config>>> = Arc::new(Mutex::new(task_jobs));
-
-        while task_jobs.lock().await.len() != 0{
-
-            let results = (0..self.workers).map(|_| async {
-
-                let mut config: Option<Config> = None;
-                config = task_jobs.lock().await.pop();
-
-                if let Some(c) = config{
-
-                    info!("Running task: {:#?}", &c);
-
-                    let task: Task = Task::new(c.clone()).await;
-                    let res = task.run().await.unwrap();
-
-                    mut_res.lock().await.get_mut(c.get_algo()).unwrap().push(res);
-
-               } else{
-                    debug!("No more tasks to run");
-               }
-            });
-            futures_util::future::join_all(results).await;
-        }
-
-
-        let res_hash = mut_res.into_inner();
-
-        Ok(res_hash)
+        //Ok(res_hash)
     } 
 }

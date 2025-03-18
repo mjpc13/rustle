@@ -6,7 +6,7 @@ use yaml_rust2::Yaml;
 use std::{
     clone::Clone, 
     cmp::PartialEq,
-    fmt::{self, Debug, Display}
+    fmt::{self, Debug, Display}, ops::Sub
 };
 
 use nalgebra::{
@@ -165,6 +165,25 @@ pub struct Header{
     pub frame_id: Option<String>
 }
 
+// Implement the Sub trait for Header and &Header (to avoid consuming the Headers)
+impl Sub for Header {
+    type Output = Duration; // The result of subtraction is a Duration
+
+    fn sub(self, other: Self) -> Duration {
+        self.time - other.time
+    }
+}
+impl Sub for &Header {
+    type Output = Duration;
+
+    fn sub(self, other: Self) -> Duration {
+        self.time - other.time
+    }
+}
+
+
+
+
 #[derive(Debug, Serialize, Deserialize, Default, Clone)]
 pub struct Pose
 {
@@ -205,6 +224,9 @@ pub struct Odometry
     pub pose: Option<Pose>,
     pub twist: Option<Twist>
 }
+
+
+
 
 
 

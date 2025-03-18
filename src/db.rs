@@ -132,12 +132,39 @@ impl DB{
         Ok(namespaces)
     }
 
+    pub async fn get_frequency_avg(&self, namespace: &str, task_id: &str, table: &str) -> Result<f32, surrealdb::Error>
+    {    
+        let mut db_lock = self.db.lock().await;
+        db_lock.use_ns(namespace).use_db(task_id).await.unwrap();
+
+        let mut response = db_lock
+            .query(format!("SELECT * FROM type::table(\"{}\") ORDER BY header", table))
+            .await?;
+
+        let odoms: Vec<Odometry> = response.take(0)?;
+
+        if odoms.is_empty(){
+            warn!("Odom was empty");
+            return Ok(1.00);
+        }else{
+            let first: &Header = &odoms[0].header;
+            let last = &odoms[odoms.len()-1].header;
+            let duration = (last - first).num_seconds(); 
+    
+            let avg = duration as f32 /odoms.len() as f32;
+    
+            println!("Number of messages in database{:?}", odoms.len());
+    
+            println!("Mean frequency for {namespace} is {avg}");
+    
+            return Ok(avg);
+        }
+
+    }
+    
 }
 
-
-
 //Code to load the experiments from files
-
 async fn get_namespaces(db: Arc<Mutex<Surreal<Any>>>) -> Result<Vec<String>, surrealdb::Error> {
 
     let mut db_lock = db.lock().await;
@@ -149,11 +176,17 @@ async fn get_namespaces(db: Arc<Mutex<Surreal<Any>>>) -> Result<Vec<String>, sur
     let mut response = db_lock.query("INFO FOR ROOT;").await?;
 
     // Extract the namespaces from the response
-    let response_obj: Value = response.take(0)?; // Take the first result as an Object
+    let response_obj: Option<Value>  = response.take(0)?; // Take the first result as an Object
     
     println!("{:?}",response_obj);
 
-    let response_json = response_obj.into_json();
+    //let response_json = response_obj.into_json();
+
+    let response_json = match response_obj {
+        Some(v) => v.into_json(),
+        None => panic!("No value to be converted to JSON")
+    };
+
 
     let namespaces_dic = response_json.get("namespaces");
 
@@ -188,8 +221,15 @@ async fn get_databases(db: Arc<Mutex<Surreal<Any>>>, namespace: String) -> Resul
 
     let mut databases: Vec<String> = Vec::new();
 
-    let mut response: Value = db_lock.query("INFO FOR NS;").await?.take(0)?;
-    let response_json = response.into_json();
+    let mut response: Option<Value> = db_lock.query("INFO FOR NS;").await?.take(0)?;
+
+
+
+    let response_json = match response {
+        Some(v) => v.into_json(),
+        None => panic!("No value to be converted to JSON")
+    };
+
     let databases_dic = response_json.get("databases");
 
     match databases_dic {
@@ -226,8 +266,14 @@ async fn get_tables(db: Arc<Mutex<Surreal<Any>>>, namespace: String, database_na
         let mut tables: Vec<String> = Vec::new();
 
 
-        let mut response: Value = db_lock.query("INFO FOR DB;").await?.take(0)?;
-        let response_json = response.into_json();
+        let mut response: Option<Value> = db_lock.query("INFO FOR DB;").await?.take(0)?;
+
+
+        let response_json = match response {
+            Some(v) => v.into_json(),
+            None => panic!("No value to be converted to JSON")
+        };
+
         let tables_dic = response_json.get("tables");
 
         match tables_dic {

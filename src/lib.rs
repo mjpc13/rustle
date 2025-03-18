@@ -20,3 +20,5 @@ pub mod errors;
 pub mod db;
 mod ros_msgs;
 pub mod evo_wrapper;
+pub mod speed_task;
+pub mod config;
