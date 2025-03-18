@@ -7,7 +7,7 @@ use std::{collections::HashMap, fmt::Debug, sync::Arc};
 use tokio::sync::Mutex;
 
 use surrealdb::{
-    engine::any::{self, Any}, key::{namespace, root::all::new}, sql::{to_value, Array, Object, Thing, Value}, Response, Surreal
+    engine::any::{self, Any}, key, sql::{to_value, Array, Object, Thing, Value}, Response, Surreal
 };
 
 use bollard::container::{MemoryStats, CPUStats};
@@ -34,10 +34,12 @@ impl DB{
         
         data.created_at = Some(Utc::now());
 
-        let create: Vec<Record> = db_lock
+
+        let create: Option<Record> = db_lock
             .create("stat")
             .content(data)
-            .await.unwrap();
+            .await
+            .unwrap();
 
         let stats: Vec<Record> =  db_lock.select("stat").await.unwrap();
     }
@@ -63,7 +65,7 @@ impl DB{
         let mut db_lock = self.db.lock().await;
         db_lock.use_ns(namespace).use_db(task_id).await.unwrap();
 
-        let create: Vec<Record> = db_lock
+        let create: Option<Record> = db_lock
             .create(table)
             .content(data)
             .await
@@ -77,8 +79,7 @@ impl DB{
         db_lock.use_ns(namespace).use_db(task_id).await.unwrap();
 
         let mut response = db_lock
-            .query("SELECT * FROM type::table($table) ORDER BY header")
-            .bind(("table", table))
+            .query(format!("SELECT * FROM type::table(\"{}\") ORDER BY header", table))
             .await?;
 
         let odoms: Vec<_> = response.take(0)?;
@@ -97,8 +98,13 @@ impl DB{
         let mut response = db_lock.query("INFO FOR ROOT;").await?;
     
         // Extract the namespaces from the response
-        let response_obj: Value = response.take(0)?; // Take the first result as an Object
-        let response_json = response_obj.into_json();
+        let response_obj: Option<Value> = response.take(0)?; // Take the first result as an Object
+
+
+        let response_json = match response_obj {
+            Some(v) => v.into_json(),
+            None => panic!("No value to be converted to JSON")
+        };
 
         let namespaces_dic = response_json.get("namespaces");
 

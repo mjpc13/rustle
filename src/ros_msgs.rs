@@ -1,5 +1,6 @@
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Duration, Utc};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde_with::serde_as;
 use yaml_rust2::Yaml;
 
 use std::{
@@ -155,8 +156,10 @@ impl RosMsg{
 
 
 #[derive(Debug, Serialize, Deserialize, Default, Clone)]
+#[serde_as] // Apply the macro to the struct
 pub struct Header{
     pub seq: u32,
+    #[serde_as(as = "Option<TimestampSeconds<String>>")]
     pub time: DateTime<Utc>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub frame_id: Option<String>

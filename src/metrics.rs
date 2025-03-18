@@ -3,6 +3,8 @@ use log::{info, warn};
 use num::PrimInt;
 use plotters::{backend::{BitMapBackend, SVGBackend}, chart::{ChartBuilder, SeriesLabelPosition}, coord::ranged1d::{IntoSegmentedCoord, SegmentValue}, data::{fitting_range, Quartiles}, drawing::IntoDrawingArea, element::{Boxplot, PathElement, Rectangle}, series::LineSeries, style::{self, Color, IntoFont, Palette, Palette99, RGBColor, TextStyle, BLACK, RED, WHITE}};
 use serde::{Deserialize, Serialize};
+use serde_with::serde_as;
+use serde_with::TimestampSeconds;
 use bollard::container::{MemoryStats, CPUStats};
 use chrono::{DateTime, Utc};
 
@@ -18,12 +20,14 @@ use std::fmt;
 
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde_as]
 pub struct ContainerStats {
     pub uid: Option<u32>,
     pub memory_stats: MemoryStats,
     pub cpu_stats: CPUStats,
     pub precpu_stats: CPUStats,
     pub num_procs: u32,
+    #[serde_as(as = "Option<TimestampSeconds<String>>")]
     pub created_at: Option<DateTime<Utc>>,
 }
 
