@@ -1,6 +1,7 @@
 //Allow for user to use YAML as config options... Move the Config logic from task.rs to here!!!!
 use bollard::{container::{self, RemoveContainerOptions, StatsOptions}, exec::{CreateExecOptions, StartExecResults}, image::{self, CreateImageOptions}, models::{HostConfig, ResourcesUlimits}, Docker
 };
+use serde::{Deserialize, Serialize};
 use yaml_rust2::{parser::Parser, YamlLoader};
 
 use std::{
@@ -65,18 +66,7 @@ pub async fn pull_image(img_name: &str, docker: &Docker) -> Result<(), Box<dyn E
 pub struct AdvancedConfig{
     pub docker_socket: Docker,
     pub db_connection: Surreal<surrealdb::engine::any::Any>,
-    pub db_database: String
 }
-
-//impl Default for AdvancedConfig {
-//    fn default() -> AdvancedConfig {
-//        AdvancedConfig{
-//            kc: Docker::connect_with_local_defaults().unwrap(),
-//            db_connection: any::connect("memory").unwrap(),
-//            db_database: "database".to_string()
-//        }
-//    }
-//}
 
 #[derive(Debug, Clone)]
 struct InnerConfig {
@@ -84,6 +74,7 @@ struct InnerConfig {
     algo_name: String,
     dataset_path: String,
     params_path: String,
+    speed: u16,
     docker: Docker,
     topics: Vec<String>, //Should be &str, but lifetime issues, look at this later
     groundtruth: String, //Should be &str, but lifetime issues, look at this later
@@ -92,8 +83,9 @@ struct InnerConfig {
 }
 
 impl InnerConfig {
-    pub fn set_algo(&mut self, new_algo: String){
-        self.algo_name = new_algo;
+    
+    pub fn set_speed(&mut self, new_speed: u16){
+        self.speed = new_speed;
     }
 }
 
@@ -127,7 +119,7 @@ impl Config {
     ///        Some("file://path/to/database") //custom endpoint, this will write a persistent database
     ///    ).await;
     /// ```
-    pub async fn new (img_name: &str, algo_name: &str, dataset_path: &str, params_path: &str, topics: Vec<&str>, gt_topic: &str, advanced_args: Option<&AdvancedConfig>) -> Result<Config, &'static str> {
+    pub async fn new (img_name: &str, algo_name: &str, dataset_path: &str, params_path: &str, topics: Vec<&str>, gt_topic: &str, advanced_args: Option<&AdvancedConfig>, speed: Option<u16>) -> Result<Config, &'static str> {
         // TODO: Change the return to Result<Config, RosError>
 
         //Creates the DB
@@ -181,12 +173,18 @@ impl Config {
 
         let dir = TempDir::new().unwrap();
 
+        let speed = match speed {
+            Some(s) => s,
+            None => 1
+        };
+
         let config: InnerConfig = InnerConfig{
             img_name: img_name.into(), 
             algo_name: algo_name.into(), 
             dataset_path: dataset_path.into(), 
             params_path: params_path.into(), 
             topics, 
+            speed,
             groundtruth: gt_topic.into(), 
             docker: docker, 
             db, 
@@ -233,9 +231,13 @@ impl Config {
         self.config.topics.clone()
     }
 
-    // Setter for algo_name
-    pub fn set_algo(&mut self, new_algo: String) {
+    pub fn get_speed(&self) -> u16 {
+        self.config.speed.clone()
+    }
+
+    // Setter for speed
+    pub fn set_speed(&mut self, new_speed: u16) {
         // Use Arc::make_mut to get a mutable reference to InnerConfig
-        Arc::make_mut(&mut self.config).set_algo(new_algo);
+        Arc::make_mut(&mut self.config).set_speed(new_speed);
     }
 }

@@ -26,6 +26,7 @@ struct Record{
 pub struct DB{
     pub db: Arc<Mutex<Surreal<Any>>>,
 }
+
 impl DB{
     pub async fn add_stat(&self, namespace: &str, task_id: &str, mut data: ContainerStats){
 
@@ -70,7 +71,30 @@ impl DB{
             .content(data)
             .await
             .unwrap();
+    }
 
+    pub async fn add_odom1(&self, namespace: &str, database: &str, mut data: Odometry, table: &str)
+    {
+        let mut db_lock = self.db.lock().await;
+
+        let table = table.replace("/", "_");
+        let database = database.replace("-", "_");
+
+        let query = format!("USE NS {namespace}; USE DB {database}; CREATE {table} CONTENT $data");
+
+        // Execute the query and handle errors
+        if let Err(e) = db_lock
+            .query(&query)
+            .bind(("data", data))
+            .await
+        {
+            error!(
+                "Error executing adding odom message to database: {}. Please ensure that the algorithm name does not contain special characters (&,!,-,|,...).",
+                e
+            );
+        } else {
+            info!("Query executed successfully for table: {}", table);
+        }
     }
 
     pub async fn query_odom(&self, namespace: &str, task_id: &str, table: &str) -> Result<Vec<Odometry>, surrealdb::Error>
@@ -86,6 +110,22 @@ impl DB{
 
         Ok(odoms)
     }
+
+    pub async fn query_odom1(&self, namespace: &str, database: &str, table: &str) -> Result<Vec<Odometry>, surrealdb::Error>
+    {    
+        let mut db_lock = self.db.lock().await;
+        db_lock.use_ns(namespace).use_db(database).await.unwrap();
+
+        let mut response = db_lock
+            .query(format!("SELECT * FROM type::table(\"{}\") ORDER BY header", table))
+            .await?;
+
+        let odoms: Vec<_> = response.take(0)?;
+
+        Ok(odoms)
+    }
+
+
 
     pub async fn get_namespaces(&self) -> Result<Vec<String>, surrealdb::Error> {
 

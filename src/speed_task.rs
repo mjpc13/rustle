@@ -46,19 +46,19 @@ impl Ord for SpeedTaskOutput {
 
 pub struct Task{
     pub task_id: String,
+    pub container_id: String,
     pub config: Config,
 }
-
-
 
 
 impl Task {
     pub async fn new(config: Config) -> Task {
 
         //Create a random container name, unique for each task
-        let mut rng = rand::thread_rng();
-        let n1: u16 = rng.gen();
-        let container_id = format!("rustle-speed-{}-{}", config.get_algo(), n1);
+        let mut rng = rand::rng();
+        let n1: u16 = rng.random();
+        let task_id = format!("{n1}");
+        let container_id = format!("rustle-speed-{}-{}", config.get_algo(), &task_id);
         
         //TODO Parse the parameters of yaml? Or mount the YAML file into Docker container 
         let options = Some(container::CreateContainerOptions{
@@ -97,19 +97,18 @@ impl Task {
         };
 
         config.get_docker().create_container(options, config_docker).await.unwrap();
-        Task{task_id: container_id, config}
+        Task{task_id, container_id, config}
     }
 
 
     pub async fn run(&self, bag_speed: u16) -> Result<SpeedTaskOutput, RosError>{
         //Start the container
-        debug!("Starting container: {:#?}", self.task_id);
-        let _ = self.config.get_docker().start_container::<String>(&self.task_id, None).await;
+        debug!("Starting container: {:#?}", self.container_id);
+        let _ = self.config.get_docker().start_container::<String>(&self.container_id, None).await;
 
 
-        //let cmd = format!("rosbag play -d 9 -r {} --clock -u 40 /rustle/dataset/*.bag", bag_speed);
+        //let cmd = format!("rosbag play -d 9 -r {} --clock -u 20 /rustle/dataset/*.bag", bag_speed);
         let cmd = format!("rosbag play -r {} --clock /rustle/dataset/*.bag", bag_speed);
-
 
         //Vector of commands to run inside the container
         let commands: Vec<_> = vec![
@@ -121,7 +120,7 @@ impl Task {
             .map(|command| async {
                 self.config.get_docker()
                     .create_exec(
-                        &self.task_id,
+                        &self.container_id,
                         CreateExecOptions {
                             attach_stdout: Some(true),
                             attach_stderr: Some(true),
@@ -142,7 +141,7 @@ impl Task {
         let config_clone = self.config.clone();
         let roslaunch_id = execs[0].id.clone();
         let task_token = token.clone();
-        let id = self.task_id.clone();
+        let id = self.container_id.clone();
 
         //spawn a task for roslaunch
         let roslaunch_task = tokio::spawn(async move {
@@ -190,10 +189,11 @@ impl Task {
             .map( |s| {
                 let config_clone = self.config.clone();
                 let token = token.clone();
+                let container_id_clone = self.container_id.clone();
                 let task_id_clone = self.task_id.clone();
 
                 tokio::spawn(async move {
-                    Self::record_task(config_clone, task_id_clone, &s, token).await;
+                    Self::record_task(config_clone, container_id_clone, task_id_clone, &s, token, bag_speed).await;
                 })
 
             })
@@ -205,7 +205,7 @@ impl Task {
 
         let rosplay_id = execs[1].id.clone();
         let config_clone = self.config.clone();
-        let task_id_clone = self.task_id.clone();
+        let task_id_clone = self.container_id.clone();
 
         //spawn a task for rosplay
         let rosplay_task = tokio::spawn(async move {
@@ -232,8 +232,9 @@ impl Task {
         let mut odoms_result = Arc::new(Mutex::new(HashMap::<String, Vec<Odometry>>::new()));
         let mut freq_result = Arc::new(Mutex::new(HashMap::<String, f32>::new()));
 
-        let  gt_result: Vec<Odometry> = self.config.get_db().query_odom(self.config.get_algo(), &self.task_id, "groundtruth").await.unwrap();
-        
+        let  gt_result: Vec<Odometry> = self.config.get_db().query_odom1("SpeedTask", self.config.get_algo(), "groundtruth").await.unwrap();
+        //config.get_db().add_odom1("SpeedTask", config.get_algo(), odom, &format!("{}x_{}_{}",config.get_speed(), topic, &task_id)).await;
+
         let write_results:Vec<_> = self.config.get_topics()
             .into_iter()
             .map(|s|{
@@ -241,9 +242,10 @@ impl Task {
                 let task_id_clone = self.task_id.clone();
                 let mut odoms_result_clone = odoms_result.clone();
                 tokio::spawn(async move {
+
                     let odoms: Vec<Odometry> = config_clone
                         .get_db()
-                        .query_odom(config_clone.get_algo(), &task_id_clone, &s)
+                        .query_odom("SpeedTask", config_clone.get_algo(), &format!("{}x_{}_{}",config_clone.get_speed(), &s, &task_id_clone))
                         .await
                         .expect("Unable to find odometry data on table!");
 
@@ -264,7 +266,7 @@ impl Task {
         
         //Remove the containers
         self.config.get_docker().remove_container(
-            &self.task_id,
+            &self.container_id,
             Some(
                 RemoveContainerOptions{
                     force: true,
@@ -306,14 +308,14 @@ impl Task {
     }
 
 
-    async fn record_task(config: Config, task_id: String, topic: &str, record_token: CancellationToken){
+    async fn record_task(config: Config, container_id: String, task_id: String, topic: &str, record_token: CancellationToken, speed: u16){
 
         let cmd = format!("rostopic echo {topic}");
 
          // Check how I'm gonna record the localization
         let record_options_future = config.get_docker()
             .create_exec(
-            &task_id,
+            &container_id,
             CreateExecOptions {
                 attach_stdout: Some(true),
                 attach_stderr: Some(true),
@@ -333,10 +335,12 @@ impl Task {
                                 Ok(r) => {
                                     let odom = r.as_odometry().unwrap();
                                     if topic.eq(config.get_gt()){
-                                        config.get_db().add_odom(config.get_algo(), &task_id, odom, "groundtruth").await;
+                                        if speed == 1 {
+                                            config.get_db().add_odom1("SpeedTask", config.get_algo(), odom, "groundtruth").await;
+                                        }
                                     }
                                     else{
-                                        config.get_db().add_odom(config.get_algo(), &task_id, odom, topic).await;
+                                        config.get_db().add_odom1("SpeedTask", config.get_algo(), odom, &format!("{}x_{}_{}",speed, topic, &task_id)).await;
                                     }
                                 }
                                 Err(e) => {
@@ -349,7 +353,7 @@ impl Task {
                             
                             let record_options_future = config.get_docker()
                                 .create_exec(
-                                &task_id,
+                                &container_id,
                                 CreateExecOptions {
                                     attach_stderr: Some(true),
                                     cmd: Some(vec!["/bin/bash", "-l", "-c", "rosnode", "kill", "-a", "2>/dev/null"]),
@@ -438,15 +442,14 @@ impl SpeedTaskBatch {
                     if let Some(c) = config{
     
                         info!("Running task: {:#?}", &c);
-                        c.clone().set_algo(format!("{}_{speed}", c.get_algo()));
-    
-                        let task: Task = Task::new(c.clone()).await;
-                        let res = task.run(speed).await.unwrap();
 
-                        //println!("{:?}", res.freq_avg);
+                        let algo = c.get_algo();
+    
+                        let task: Task = Task::new(c).await;
+                        let res = task.run(speed).await.unwrap();
                         
                         //This needs to be SpeedTask
-                        mut_res.lock().await.get_mut(c.get_algo()).unwrap().push(res.task_output);
+                        //mut_res.lock().await.get_mut(algo).unwrap().push(res.task_output);
     
                    } else{
                         debug!("No more tasks to run");

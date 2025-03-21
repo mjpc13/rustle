@@ -7,6 +7,7 @@ use rustle::evo_wrapper::PlotArg;
 use rustle::metrics::ContainerPlot;
 use rustle::metrics::Metric;
 use rustle::config::AdvancedConfig;
+use rustle::speed_task;
 use rustle::speed_task::SpeedTaskBatch;
 use rustle::task::TaskBatch;
 use rustle::task::TaskOutput;
@@ -34,7 +35,7 @@ async fn main() {
     //let batch_task = TaskBatch{ configs: configs.clone(), iterations: 1, workers: 4};
     //let batch_output = batch_task.run().await.unwrap();
 
-    let speed_task = SpeedTaskBatch{configs:configs.clone(),iterations:1,workers:4, speed_list: [1,1000,100,10].to_vec() };
+    let speed_task = SpeedTaskBatch{configs:configs.clone(),iterations:1,workers:4, speed_list: [1,10,100,1000].to_vec() };
     let out = speed_task.run().await;
 
 
@@ -88,9 +89,8 @@ async fn config_setup() -> Vec<Config> {
     let test = db_connection.clone();
 
 
-    let adv_ig = AdvancedConfig{
+    let adv = AdvancedConfig{
         db_connection: test,
-        db_database: String::from("ig_lio"),
         docker_socket: Docker::connect_with_local_defaults().unwrap(),
     };
 
@@ -109,20 +109,25 @@ async fn config_setup() -> Vec<Config> {
             vec!["/lio_odom"], //Vector of topics to record
             gt_topic, //topic of the ground truth
             //None
-            Some(&adv_ig) //Advanced arguments (database and docker stuff) replace with None for default config
+            Some(&adv), //Advanced arguments (database and docker stuff) replace with None for default config
+            Some(1)
         ).await.unwrap()
     );
 
-    //----------------//
-
-    let test = db_connection.clone();
-
-    // LIO-SAM-6AXIS //
-    let adv_lio_sam = AdvancedConfig{
-        db_connection: test,
-        db_database: String::from("lio_sam"),
+    //Dataset related
+    let dataset_path = "/home/mjpc13/Documents/rustle/test/dataset/";
+    
+    
+    //let db_connection1 = any::connect("file://test/db").await.unwrap();
+    let test1 = db_connection.clone();
+    
+    
+    let adv2 = AdvancedConfig{
+        db_connection: test1,
         docker_socket: Docker::connect_with_local_defaults().unwrap(),
     };
+
+    //LIO-SAM//
     configs.push(
         Config::new(
             "mjpc13/rustle:lio-sam-6axis", 
@@ -132,18 +137,10 @@ async fn config_setup() -> Vec<Config> {
             vec!["/lio_sam_6axis/mapping/odometry_incremental"], 
             gt_topic,  
             //None
-            Some(&adv_lio_sam)
+            Some(&adv2),
+            None
         ).await.unwrap()
     );
-
-    //----------------//
-    let test = db_connection.clone();
-
-    let adv_ig = AdvancedConfig{
-        db_connection: test,
-        db_database: String::from("point_lio"),
-        docker_socket: Docker::connect_with_local_defaults().unwrap(),
-    };
 
     // POINT-LIO //
     configs.push(
@@ -154,7 +151,8 @@ async fn config_setup() -> Vec<Config> {
             "/home/mjpc13/Documents/rustle/test/config/point-lio/params.yaml", 
             vec!["/aft_mapped_to_init"], 
             gt_topic,  
-            None 
+            Some(&adv),
+            None
         ).await.unwrap()
     );
 
@@ -166,7 +164,8 @@ async fn config_setup() -> Vec<Config> {
         "/home/mjpc13/Documents/rustle/test/config/dlo/params.yaml",  //Yaml config file for the algorithm 
         vec!["/dlo/odom_node/odom"], //Vector of topics to record
         gt_topic, //topic of the ground truth
-        None //Advanced arguments (database and docker stuff) replace with None for default config
+        Some(&adv), //Advanced arguments (database and docker stuff) replace with None for default config
+        None
         ).await.unwrap()
     );
 
