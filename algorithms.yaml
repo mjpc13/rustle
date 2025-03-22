@@ -1,0 +1,15 @@
+algorithms:
+  - name: "ORB-SLAM3"
+    version: "1.0"
+    parameters:
+      feature_extractor: "ORB"
+      max_features: 1000
+      loop_closure: true
+
+#Update parameters to be a file path
+  - name: "LIO-SAM"
+    version: "2.1"
+    parameters:
+      imu_topic: "/imu/data"
+      lidar_topic: "/velodyne_points"
+      mapping: true

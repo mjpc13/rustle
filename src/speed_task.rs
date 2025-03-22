@@ -233,7 +233,6 @@ impl Task {
         let mut freq_result = Arc::new(Mutex::new(HashMap::<String, f32>::new()));
 
         let  gt_result: Vec<Odometry> = self.config.get_db().query_odom1("SpeedTask", self.config.get_algo(), "groundtruth").await.unwrap();
-        //config.get_db().add_odom1("SpeedTask", config.get_algo(), odom, &format!("{}x_{}_{}",config.get_speed(), topic, &task_id)).await;
 
         let write_results:Vec<_> = self.config.get_topics()
             .into_iter()
@@ -245,7 +244,7 @@ impl Task {
 
                     let odoms: Vec<Odometry> = config_clone
                         .get_db()
-                        .query_odom("SpeedTask", config_clone.get_algo(), &format!("{}x_{}_{}",config_clone.get_speed(), &s, &task_id_clone))
+                        .query_odom("SpeedTask", config_clone.get_algo(), &format!("{}_{}x_{}",config_clone.get_speed(), &s, &task_id_clone))
                         .await
                         .expect("Unable to find odometry data on table!");
 

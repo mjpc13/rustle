@@ -61,33 +61,29 @@ pub async fn pull_image(img_name: &str, docker: &Docker) -> Result<(), Box<dyn E
 }
 
 
-
 #[derive(Debug, Clone)]
 pub struct AdvancedConfig{
     pub docker_socket: Docker,
     pub db_connection: Surreal<surrealdb::engine::any::Any>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 struct InnerConfig {
     img_name: String,
     algo_name: String,
     dataset_path: String,
     params_path: String,
     speed: u16,
+    #[serde(skip_serializing, skip_deserializing)]
     docker: Docker,
-    topics: Vec<String>, //Should be &str, but lifetime issues, look at this later
-    groundtruth: String, //Should be &str, but lifetime issues, look at this later
+    topics: Vec<String>,
+    groundtruth: String,
+    #[serde(skip_serializing, skip_deserializing)]
     db: DB,
+    #[serde(skip_serializing, skip_deserializing)]
     dir: TempDir
 }
 
-impl InnerConfig {
-    
-    pub fn set_speed(&mut self, new_speed: u16){
-        self.speed = new_speed;
-    }
-}
 
 /// Wraps InnerConfig in an `Arc<InnerConfig>`
 #[derive(Debug, Clone)]
@@ -235,9 +231,4 @@ impl Config {
         self.config.speed.clone()
     }
 
-    // Setter for speed
-    pub fn set_speed(&mut self, new_speed: u16) {
-        // Use Arc::make_mut to get a mutable reference to InnerConfig
-        Arc::make_mut(&mut self.config).set_speed(new_speed);
-    }
 }
