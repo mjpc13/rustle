@@ -15,3 +15,11 @@ algorithms:
       imu_topic: "/imu/data"
       lidar_topic: "/velodyne_points"
       mapping: true
+      
+  - name: "DLIO"
+    version: "2.1"
+    image_name: "mjpc13/rustle:dlio"
+    parameters:
+      imu_topic: "/imu/data"
+      lidar_topic: "/velodyne_points"
+      mapping: true

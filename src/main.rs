@@ -1,3 +1,4 @@
+use bollard::Docker;
 use db::{test_definition, TestDefinitionRepo};
 use models::{TestDefinitionsConfig, TestExecutionStatus};
 use serde_yaml::from_reader;
@@ -28,10 +29,14 @@ struct DatasetConfig {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::init();
 
+    // Initialize Docker client
+    let docker = Docker::connect_with_local_defaults()
+        .map_err(|e| format!("Failed to connect to Docker: {}", e))?;
+
     // Connect to SurrealDB This probably will have to be inside a Arc<Mutex>
     let conn = Surreal::new::<RocksDb>("test/db").await?;
-
     let conn_m = Arc::new(Mutex::new(conn));
+    let docker_m = Arc::new(Mutex::new(docker));
 
 
     conn_m.lock().await.use_ns("rustle")
@@ -47,7 +52,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let test_exec_repo = db::test_execution::TestExecutionRepo::new(conn_m.clone());
 
     // Initialize services
-    let algo_service = AlgorithmService::new(algo_repo);
+    let algo_service = AlgorithmService::new(algo_repo, docker_m.clone());
+
+
+
     let dataset_service = DatasetService::new(dataset_repo);
     let test_def_service = TestDefinitionService::new(test_def_repo.clone());
     let test_exec_service = TestExecutionService::new(test_exec_repo, test_def_repo.clone());

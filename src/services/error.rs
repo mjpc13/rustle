@@ -110,6 +110,12 @@ pub enum ProcessingError {
     #[error("Test definition mismatch: {0}")]
     DefinitionMismatch(String),
 
+    #[error("Docker image not found: {0}")]
+    ImageNotFound(String),
+    
+    #[error("Docker operation failed: {0}")]
+    DockerOperation(String),
+
 }
 
 // Implement conversion from other error types if needed
