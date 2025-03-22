@@ -12,7 +12,7 @@ pub mod test_execution;
 pub use self::{
     dataset::Dataset,
     algorithm::Algorithm,
-    test_definition::{TestDefinition, TestType, SimpleTestParams, SpeedTestParams},
+    test_definition::{TestDefinition, TestType, SimpleTestParams, SpeedTestParams, TestDefinitionsConfig},
     metric::{
         Metric,
         MetricType,

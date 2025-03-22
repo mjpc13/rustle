@@ -1,12 +1,15 @@
+use std::sync::Arc;
+
 use surrealdb::{Surreal, engine::remote::ws::Client};
+use tokio::sync::Mutex;
 use crate::{models::algorithm_run::AlgorithmRun, services::error::DbError};
 
 pub struct AlgorithmRunRepo {
-    conn: Surreal<Client>,
+    conn: Arc<Mutex<Surreal<Client>>>,
 }
 
 impl AlgorithmRunRepo {
-    pub fn new(conn: Surreal<Client>) -> Self {
+    pub fn new(conn: Arc<Mutex<Surreal<Client>>>) -> Self {
         Self { conn }
     }
 

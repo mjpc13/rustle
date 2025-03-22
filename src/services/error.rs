@@ -15,32 +15,38 @@ pub enum AlgorithmError {
     Io(#[from] std::io::Error),
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Error)]
 pub enum TestDefinitionError {
-    #[error("Validation error: {0}")]
-    Validation(String),
-    
-    #[error("YAML parsing error: {0}")]
-    Yaml(#[from] serde_yaml::Error),
-    
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
+    
+    #[error("YAML error: {0}")]
+    Yaml(#[from] serde_yaml::Error),
+    
+    #[error("Validation error: {0}")]
+    Validation(String),
     
     #[error("Database error: {0}")]
     Database(#[from] surrealdb::Error),
 }
 
-// ValidationError now wraps String directly
 #[derive(Debug)]
 pub struct ValidationError(pub String);
+
+impl From<ValidationError> for TestDefinitionError {
+    fn from(err: ValidationError) -> Self {
+        TestDefinitionError::Validation(err.0)
+    }
+}
 
 impl std::fmt::Display for ValidationError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
     }
 }
-
 impl std::error::Error for ValidationError {}
+
+
 
 //Metric Errors
 #[derive(Debug, thiserror::Error)]
@@ -65,7 +71,7 @@ pub enum RosProcessingError {
     //Conversion(#[from] crate::models::ros::RosError),
 }
 
-//Db errors
+
 #[derive(Debug, thiserror::Error)]
 pub enum DbError {
     #[error("Database operation failed: {0}")]
@@ -73,6 +79,12 @@ pub enum DbError {
     
     #[error("Record not found: {0}")]
     NotFound(String),
+    
+    #[error("Missing required field: {0}")]
+    MissingField(&'static str),
+    
+    #[error("Validation failed: {0}")]
+    Validation(String),
 }
 
 #[derive(Debug, Error)]

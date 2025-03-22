@@ -6,7 +6,7 @@ use crate::{
 
 pub struct TestExecutionService {
     execution_repo: TestExecutionRepo,
-    definition_repo: TestDefinitionRepo,
+    definition_repo: TestDefinitionRepo
 }
 
 impl TestExecutionService {
@@ -14,22 +14,21 @@ impl TestExecutionService {
         Self { execution_repo, definition_repo }
     }
 
+
+    //THIS IS MY TASK BATCH!!!
     pub async fn start_execution(
         &self,
-        mut execution: TestExecution
+        mut execution: TestExecution,
+        def: &TestDefinition
     ) -> Result<TestExecution, ProcessingError> {
-        let definition = self.definition_repo.get(&execution.test_definition_id)
-            .await?
-            .ok_or(ProcessingError::NotFound("Test definition".into()))?;
 
-        self.validate_parameters(&execution.parameters, &definition)?;
-        
-        execution.status = TestExecutionStatus::Running;
-        execution.start_time = Some(Utc::now());
-        
-        //self.execution_repo.save(&execution).await?;
+
+        let _ = &self.execution_repo.save(&mut execution, def).await;
+
+        // Validate definition exists
         Ok(execution)
     }
+
 
     pub async fn complete_execution(
         &self,
@@ -44,58 +43,4 @@ impl TestExecutionService {
         Ok(())
     }
 
-    fn validate_parameters(
-        &self,
-        params: &serde_json::Value,
-        definition: &TestDefinition
-    ) -> Result<(), ProcessingError> {
-        match &definition.test_type {
-            TestType::Simple(expected_params) => {
-                // Validate against SimpleTestParams structure
-                let received_params: SimpleTestParams = serde_json::from_value(params.clone())
-                    .map_err(|e| ProcessingError::Validation(
-                        format!("Invalid simple test parameters: {}", e)
-                    ))?;
-                
-                // Example validation: Ensure iterations match definition
-                if received_params.iterations != expected_params.iterations {
-                    return Err(ProcessingError::Validation(
-                        "Iteration count mismatch with test definition".into()
-                    ));
-                }
-                
-                Ok(())
-            },
-            TestType::Speed(expected_params) => {
-                // Validate against SpeedTestParams structure
-                let received_params: SpeedTestParams = serde_json::from_value(params.clone())
-                    .map_err(|e| ProcessingError::Validation(
-                        format!("Invalid speed test parameters: {}", e)
-                    ))?;
-    
-                // Example validation: Check speed factors
-                if received_params.speed_factors != expected_params.speed_factors {
-                    return Err(ProcessingError::Validation(
-                        "Speed factors mismatch with test definition".into()
-                    ));
-                }
-                
-                Ok(())
-            },
-            // Add Drop variant when implemented
-            _ => Err(ProcessingError::Validation(
-                "Unsupported test type".into()
-            ))
-        }
-    }
-}
-
-// Validation helpers
-fn validate_simple_params(params: &serde_json::Value) -> Result<(), ProcessingError> {
-    if params.get("iterations").is_none() {
-        return Err(ProcessingError::Validation(
-            "Simple test requires iterations parameter".into()
-        ));
-    }
-    Ok(())
 }

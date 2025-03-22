@@ -1,5 +1,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Serialize, Deserialize};
+use surrealdb::sql::Thing;
+
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum TestExecutionStatus {
@@ -11,14 +13,14 @@ pub enum TestExecutionStatus {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TestExecution {
-    pub id: String,                   // Format: "test_execution:<ulid>"
-    pub test_definition_id: String,   // Reference to TestDefinition
-    pub dataset_id: String,           // Reference to Dataset
+    pub id: Option<Thing>,                   // Format: "test_execution:<ulid>"
+    //pub test_definition_id: String,   // Reference to TestDefinition
+    //pub dataset_id: String,           // Reference to Dataset
     pub status: TestExecutionStatus,
     pub start_time: Option<DateTime<Utc>>,
     pub end_time: Option<DateTime<Utc>>,
-    pub environment: Environment,
-    pub parameters: serde_json::Value,// Test-specific parameters
+    //pub environment: Environment,
+    //pub parameters: serde_json::Value,// Test-specific parameters
     pub results: Option<TestResults>, 
 }
 
@@ -45,20 +47,12 @@ pub struct TestMetric {
 
 impl TestExecution {
     pub fn new(
-        test_definition_id: &str,
-        dataset_id: &str,
-        environment: Environment,
-        parameters: serde_json::Value
     ) -> Self {
         Self {
-            id: format!("test_execution:{}", ulid::Ulid::new()),
-            test_definition_id: test_definition_id.to_string(),
-            dataset_id: dataset_id.to_string(),
+            id: None,
             status: TestExecutionStatus::Scheduled,
-            start_time: None,
+            start_time: Some(Utc::now()),
             end_time: None,
-            environment,
-            parameters,
             results: None,
         }
     }

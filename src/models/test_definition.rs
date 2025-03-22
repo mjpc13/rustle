@@ -1,5 +1,7 @@
 use chrono::Utc;
 use serde::{Serialize, Deserialize};
+use surrealdb::sql::Thing;
+
 //use serde_json::Value;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -11,14 +13,32 @@ pub enum TestType {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SimpleTestParams {
-    pub iterations: u32,
-}
+pub struct SimpleTestParams {}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SpeedTestParams {
     pub speed_factors: Vec<f32>,
-    pub max_allowed_delay: Option<f32>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct TestDefinitionsConfig {
+    pub test_definitions: Vec<TestDefinition>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TestDefinition {
+    pub id: Option<Thing>,
+    pub name: String,
+    pub workers: u32,
+    pub iterations: u32,
+    pub dataset_name: String,
+    pub algo_list: Vec<String>,
+    #[serde(rename = "test_type")]
+    pub test_type: TestType,
+    #[serde(default = "Utc::now")]
+    pub created_at: chrono::DateTime<Utc>,
+    #[serde(default = "Utc::now")]
+    pub updated_at: chrono::DateTime<Utc>,
 }
 
 //#[derive(Debug, Clone, Serialize, Deserialize)]
@@ -32,12 +52,3 @@ pub struct SpeedTestParams {
 //    pub percentage: f32,
 //    pub duration_ms: u64,
 //}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TestDefinition {
-    pub id: String,
-    pub name: String,
-    pub test_type: TestType,
-    pub created_at: chrono::DateTime<Utc>,
-    pub updated_at: chrono::DateTime<Utc>,
-}

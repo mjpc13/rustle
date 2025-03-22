@@ -1,5 +1,5 @@
 datasets:
-  - name: "Office Dataset"
+  - name: "botanic_garden"
     groundtruth_topic: "/gt_poses"
     dataset_path: "./test/dataset/"
     tag: ["Botanic"]

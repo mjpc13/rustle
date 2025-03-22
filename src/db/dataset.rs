@@ -1,19 +1,23 @@
+use std::sync::Arc;
+
 use surrealdb::{engine::local::Db, Surreal};
+use tokio::sync::Mutex;
 use crate::models::Dataset;
 use crate::services::DbError; 
 
 pub struct DatasetRepo {
-    conn: Surreal<Db>,
+    conn: Arc<Mutex<Surreal<Db>>>,
 }
 
 impl DatasetRepo {
-    pub fn new(conn: Surreal<Db>) -> Self {
+    pub fn new(conn: Arc<Mutex<Surreal<Db>>>) -> Self {
         Self { conn }
     }
 
     pub async fn save(&self, dataset: &mut Dataset) -> Result<(), surrealdb::Error> {
 
         let created: Option<Dataset> = self.conn
+            .lock().await
             .create("dataset")
             .content(dataset.clone())
             .await?;
@@ -26,7 +30,7 @@ impl DatasetRepo {
     }
 
     pub async fn get_by_name(&self, name: String) -> Result<Option<Dataset>, DbError> {
-        self.conn
+        self.conn.lock().await
             .query("SELECT * FROM dataset WHERE name = $name")
             .bind(("name", name))
             .await?
@@ -36,10 +40,10 @@ impl DatasetRepo {
 
 
     pub async fn load(&self, id: &str) -> Result<Option<Dataset>, surrealdb::Error> {
-        self.conn.select(("dataset", id)).await
+        self.conn.lock().await.select(("dataset", id)).await
     }
 
     pub async fn list_all(&self) -> Result<Vec<Dataset>, surrealdb::Error> {
-        self.conn.query("SELECT * FROM dataset").await?.take(0)
+        self.conn.lock().await.query("SELECT * FROM dataset").await?.take(0)
     }
 }

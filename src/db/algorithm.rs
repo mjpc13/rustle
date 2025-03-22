@@ -1,19 +1,22 @@
+use std::sync::Arc;
+
 use surrealdb::{engine::local::Db, Surreal};
+use tokio::sync::Mutex;
 
 use crate::{models::Algorithm, services::DbError};
 
 pub struct AlgorithmRepo {
-    conn: Surreal<Db>,
+    conn: Arc<Mutex<Surreal<Db>>>,
 }
 
 
 impl AlgorithmRepo {
-    pub fn new(conn: Surreal<Db>) -> Self {
+    pub fn new(conn: Arc<Mutex<Surreal<Db>>>) -> Self {
         Self { conn }
     }
 
     pub async fn save(&self, algorithm: &mut Algorithm) -> Result<(), surrealdb::Error> {
-        let created: Option<Algorithm> = self.conn
+        let created: Option<Algorithm> = self.conn.lock().await
             .create("algorithm")
             .content(algorithm.clone())
             .await?;
@@ -27,7 +30,7 @@ impl AlgorithmRepo {
     }  
 
     pub async fn get_by_name(&self, name: String) -> Result<Option<Algorithm>, DbError> {
-        self.conn
+        self.conn.lock().await
             .query("SELECT * FROM algorithm WHERE name = $name")
             .bind(("name", name))
             .await?
@@ -36,10 +39,10 @@ impl AlgorithmRepo {
     }
 
     pub async fn load(&self, id: &str) -> Result<Option<Algorithm>, surrealdb::Error> {
-        self.conn.select(("algorithm", id)).await
+        self.conn.lock().await.select(("algorithm", id)).await
     }
 
     pub async fn list_all(&self) -> Result<Vec<Algorithm>, surrealdb::Error> {
-        self.conn.query("SELECT * FROM algorithm").await?.take(0)
+        self.conn.lock().await.query("SELECT * FROM algorithm").await?.take(0)
     }
 }
