@@ -50,7 +50,7 @@ impl TestDefinitionService {
             
             // Validate test type parameters
             match &def.test_type {
-                TestType::Simple(params) => self.validate(def)?,
+                TestType::Simple => self.validate(def)?,
                 TestType::Speed(params) => self.validate_speed(&params)?,
             }
         }
@@ -64,7 +64,7 @@ impl TestDefinitionService {
         def: &TestDefinition
     ) -> Result<(), ValidationError> {
         match &def.test_type {
-            TestType::Simple(params) => self.validate(def),
+            TestType::Simple => self.validate(def),
             TestType::Speed(params) => {
                 let _ = self.validate(def)?;
                 self.validate_speed(params)

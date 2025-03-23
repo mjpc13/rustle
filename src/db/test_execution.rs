@@ -93,17 +93,18 @@ impl TestExecutionRepo {
             format!("Dataset with name '{}' not found", db_name)
         ))
     }
-
-    pub async fn get_algorithm_by_name(&self, db_name: String) -> Result<Algorithm, DbError> {
+    
+    pub async fn get_algorithm_by_name(&self, name: String) -> Result<Algorithm, DbError> {
         let mut response = self.conn.lock().await
             .query("SELECT * FROM algorithm WHERE name = $name LIMIT 1")
-            .bind(("name", db_name.clone()))
+            .bind(("name", name.clone()))
             .await?;
     
-        let dataset_id: Option<Algorithm> = response.take(0)?;
-        
-        dataset_id.ok_or_else(|| DbError::NotFound(
-            format!("Algorithm with name '{}' not found", db_name)
+        // First take the first result from the first query statement
+        let algorithm: Option<Algorithm> = response.take(0)?; 
+    
+        algorithm.ok_or_else(|| DbError::NotFound(
+            format!("Algorithm with name '{}' not found", name)
         ))
     }
 
@@ -144,11 +145,19 @@ impl TestExecutionRepo {
             .ok_or(DbError::MissingField("TestExecution ID"))?;
 
         let mut result = self.conn.lock().await
-            .query("SELECT ->compares->algorithm AS algorithms FROM $exec_id")
+            .query("
+                SELECT ->compares->algorithm.* AS algorithms 
+                FROM $exec_id
+            ")
             .bind(("exec_id", execution_id.clone()))
             .await?;
 
-        let algorithms: Vec<Algorithm> = result.take("algorithms")?;
+        // Get the first query result (index 0)
+        let raw_algorithms: Vec<Vec<Algorithm>> = result.take("algorithms")?;
+
+        // Flatten the nested results
+        let algorithms: Vec<Algorithm> = raw_algorithms.into_iter().flatten().collect();
+
         if algorithms.is_empty() {
             Err(DbError::NotFound(
                 format!("Algorithms for execution {}", execution_id)

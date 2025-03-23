@@ -9,12 +9,12 @@ pub struct Algorithm {
     pub name: String,
     pub image_name: String,
     pub version: String,
-    pub parameters: Value,    // Flexible YAML/JSON configuration
+    pub parameters: String,    // Probably will be better for Francisco to be a Value...
 }
 
 impl Algorithm {
     /// Constructor with automatic ID generation
-    pub fn new(name: String, version: String, image_name: String, parameters: Value) -> Self {
+    pub fn new(name: String, version: String, image_name: String, parameters: String) -> Self {
         Self {
             id: None,
             name,

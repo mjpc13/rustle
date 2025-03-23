@@ -1,27 +1,30 @@
 use chrono::{DateTime, Utc};
-use serde::{Serialize, Deserialize};
-use crate::models::{Algorithm, ros::Odometry};
+use serde::{Deserialize, Serialize};
+use surrealdb::sql::Thing;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AlgorithmRun {
-    pub id: String,                 // Format: "algorithm_run:<ulid>"
-    //pub test_execution_id: String,  // Reference to TestExecution
-    //pub algorithm_id: String,       // Reference to Algorithm
-    pub iterations: Vec<RunIteration>,
+    pub id: Option<Thing>,
+    pub bag_speed: f32,
     pub aggregates: RunAggregates,
     pub created_at: DateTime<Utc>,
     pub duration_secs: f64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RunIteration {
-    pub iteration_num: u32,
-    pub ape: f64,
-    pub rpe: f64,
-    pub cpu_usage: f32,
-    pub memory_usage_mb: f32,
-    pub odometry_estimates: Vec<Odometry>,
+impl AlgorithmRun {
+    pub fn new(bag_speed: f32) -> Self {
+
+        Self{
+            id: None,
+            bag_speed,
+            created_at: Utc::now(),
+            duration_secs: 0.0,
+            aggregates: RunAggregates::default()
+        }
+
+    }
 }
+
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RunAggregates {
@@ -30,20 +33,6 @@ pub struct RunAggregates {
     pub max_cpu: f32,
     pub avg_memory: f32,
     pub total_estimates: usize,
-}
-
-impl AlgorithmRun {
-    pub fn new(test_execution_id: &str, algorithm_id: &str) -> Self {
-        Self {
-            id: format!("algorithm_run:{}", ulid::Ulid::new()),
-            //test_execution_id: test_execution_id.to_string(),
-            //algorithm_id: algorithm_id.to_string(),
-            iterations: Vec::new(),
-            aggregates: RunAggregates::default(),
-            created_at: Utc::now(),
-            duration_secs: 0.0,
-        }
-    }
 }
 
 impl Default for RunAggregates {

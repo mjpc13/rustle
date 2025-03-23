@@ -50,6 +50,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let dataset_repo = db::dataset::DatasetRepo::new(conn_m.clone());
     let test_def_repo = db::test_definition::TestDefinitionRepo::new(conn_m.clone());
     let test_exec_repo = db::test_execution::TestExecutionRepo::new(conn_m.clone());
+    let algo_run_repo = db::algorithm_run::AlgorithmRunRepo::new(conn_m.clone());
+
 
     // Initialize services
     let algo_service = AlgorithmService::new(algo_repo, docker_m.clone());
@@ -58,7 +60,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let dataset_service = DatasetService::new(dataset_repo);
     let test_def_service = TestDefinitionService::new(test_def_repo.clone());
-    let test_exec_service = TestExecutionService::new(test_exec_repo, test_def_repo.clone());
+    let test_exec_service = TestExecutionService::new(test_exec_repo, test_def_repo.clone(), algo_run_repo);
 
 
     // Load and process algorithms
