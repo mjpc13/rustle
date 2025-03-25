@@ -1,31 +1,49 @@
 use crate::{
-    models::algorithm_run::{AlgorithmRun, RunAggregates},
-    db::AlgorithmRunRepo,
-    services::error::ProcessingError
+    db::AlgorithmRunRepo, models::algorithm_run::{AlgorithmRun, RunAggregates}, services::error::ProcessingError
 };
 
+use log::warn;
 use surrealdb::sql::Thing;
+
+use super::IterationService;
 
 pub struct AlgorithmRunService {
     repo: AlgorithmRunRepo,
+    iter_service: IterationService
 }
 
 impl AlgorithmRunService {
-    pub fn new(repo: AlgorithmRunRepo) -> Self {
-        Self { repo }
+    pub fn new(repo: AlgorithmRunRepo, iter_service: IterationService) -> Self {
+        Self { repo, iter_service }
     }
 
     pub async fn create_run(
         &self,
         bag_speed: f32,
+        num_iterations: u8,
         test_execution_id: &Thing,
         algorithm_id: &Thing
     ) -> Result<AlgorithmRun, ProcessingError> {
 
-        let mut run = AlgorithmRun::new(bag_speed);
+        let mut run = AlgorithmRun::new(bag_speed, num_iterations);
         self.repo.save(&mut run, test_execution_id, algorithm_id).await?;
-        Ok(run)
 
+        
+        // Create The different iterations
+        for i in 0..num_iterations {
+
+            // Save each iteration
+            let algo = self.repo.get_algorithm(&run).await?;
+
+            match run.id.clone(){
+                Some(thing) => self.iter_service.create(i, algo, &thing).await?,
+                None => warn!("ID of algorithm_run was empty")
+            };
+
+        }
+
+
+        Ok(run)
     }
 
     //pub async fn add_iteration(

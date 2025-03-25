@@ -7,6 +7,7 @@ pub mod container;
 pub mod odometry;
 pub mod algorithm_run;
 pub mod test_execution;
+pub mod iteration;
 
 // Re-export repositories
 pub use self::{
@@ -17,5 +18,6 @@ pub use self::{
     container::ContainerRepo,
     odometry::OdometryRepo,
     algorithm_run::AlgorithmRunRepo,
-    test_execution::TestExecutionRepo
+    test_execution::TestExecutionRepo,
+    iteration::IterationRepo
 };

@@ -12,11 +12,11 @@ use super::error::ProcessingError;
 
 pub struct AlgorithmService {
     repo: AlgorithmRepo,
-    docker: Arc<Mutex<Docker>>
+    docker: Arc<Docker>
 }
 
 impl AlgorithmService {
-    pub fn new(repo: AlgorithmRepo, docker: Arc<Mutex<Docker>>) -> Self {
+    pub fn new(repo: AlgorithmRepo, docker: Arc<Docker>) -> Self {
         Self { repo, docker }
     }
 
@@ -77,9 +77,8 @@ impl AlgorithmService {
     }
     
     async fn verify_docker_image(&self, image: &str) -> Result<(), ProcessingError> {
-        let docker = self.docker.lock().await;
         
-        match docker.inspect_image(image).await {
+        match self.docker.inspect_image(image).await {
             Ok(_) => Ok(()),
             Err(DockerError::DockerResponseServerError { status_code, .. }) if status_code == 404 => {
                 Err(ProcessingError::ImageNotFound(image.to_string()))
@@ -101,7 +100,7 @@ impl AlgorithmService {
     
         info!("Pulling Docker image '{}' from registry", img_name);
         
-        let mut pull_stream = self.docker.lock().await.create_image(options, None, None);
+        let mut pull_stream = self.docker.create_image(options, None, None);
         let mut last_progress = None;
     
         while let Some(result) = pull_stream.next().await {

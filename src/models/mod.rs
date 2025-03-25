@@ -7,6 +7,7 @@ pub mod container;
 pub mod ros;
 pub mod algorithm_run;
 pub mod test_execution;
+pub mod iteration;
 
 // Re-export main structs for ergonomic imports
 pub use self::{
@@ -21,7 +22,8 @@ pub use self::{
     },
     container::Container,
     ros::{Odometry, Header, Pose, Twist},
-    algorithm_run::{AlgorithmRun, RunIteration, RunAggregates},
-    test_execution::{TestExecution, TestExecutionStatus, Environment, TestResults}
+    algorithm_run::{AlgorithmRun},
+    test_execution::{TestExecution, TestExecutionStatus, Environment, TestResults},
+    iteration::Iteration
 };
 

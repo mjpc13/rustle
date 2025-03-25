@@ -46,8 +46,6 @@ impl std::fmt::Display for ValidationError {
 }
 impl std::error::Error for ValidationError {}
 
-
-
 //Metric Errors
 #[derive(Debug, thiserror::Error)]
 pub enum MetricError {
@@ -60,15 +58,27 @@ pub enum MetricError {
 
 //ROS errors
 #[derive(Debug, thiserror::Error)]
-pub enum RosProcessingError {
+pub enum RosError {
     #[error("Storage error: {0}")]
     Storage(String),
     
     #[error("Query error: {0}")]
     Query(String),
+
+    #[error("Parse error: failed to convert from {from} to {to}")]
+    ParseError { from: String, to: String },
     
-    //#[error("Conversion error: {0}")]
-    //Conversion(#[from] crate::models::ros::RosError),
+    #[error("Missing header for ROS type {rostype}")]
+    MissingHeader { rostype: String },
+    
+    #[error("Database error: {0}")]
+    DatabaseError(#[from] surrealdb::Error),
+    
+    #[error("Serialization error: {0}")]
+    SerializationError(#[from] serde_json::Error),
+
+    #[error("Format error: {0}")]
+    FormatError(String),
 }
 
 
@@ -116,6 +126,9 @@ pub enum ProcessingError {
     #[error("Docker operation failed: {0}")]
     DockerOperation(String),
 
+    #[error("Missing required field: {0}")]
+    MissingField(String),
+
 }
 
 // Implement conversion from other error types if needed
@@ -123,4 +136,18 @@ impl From<surrealdb::Error> for ProcessingError {
     fn from(e: surrealdb::Error) -> Self {
         Self::Database(crate::services::error::DbError::Operation(e))
     }
+}
+
+// RUN errors
+#[derive(Debug, Error)]
+pub enum RunError {
+    
+    #[error("Docker operation failed: {0}")]
+    Docker(#[from] bollard::errors::Error),
+    
+    #[error("Execution error: {0}")]
+    Execution(String),
+    
+    #[error("Task failed to complete: {0}")]
+    Join(#[from] tokio::task::JoinError),
 }

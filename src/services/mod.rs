@@ -4,20 +4,22 @@ pub mod algorithm;
 pub mod test_definition;
 pub mod metrics;
 pub mod container;
-pub mod odometry;
+pub mod ros;
 pub mod algorithm_run;
 pub mod test_execution;
+pub mod iteration;
 
 
 // Re-export key components
 pub use self::{
-    error::{ValidationError, AlgorithmError, TestDefinitionError, MetricError, RosProcessingError, DbError},
+    error::{ValidationError, AlgorithmError, TestDefinitionError, MetricError, RosError, DbError},
     dataset::DatasetService,
     algorithm::AlgorithmService,
     test_definition::TestDefinitionService,
     metrics::MetricService,
     container::ContainerService,
-    odometry::OdometryService,
+    ros::RosService,
     algorithm_run::AlgorithmRunService,
-    test_execution::TestExecutionService
+    test_execution::TestExecutionService,
+    iteration::IterationService
 };

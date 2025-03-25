@@ -15,7 +15,7 @@ pub enum TestExecutionStatus {
 pub struct TestExecution {
     pub id: Option<Thing>,                   // Format: "test_execution:<ulid>"
     //pub test_definition_id: String,   // Reference to TestDefinition
-    //pub dataset_id: String,           // Reference to Dataset
+    pub num_iterations: u8,           // Reference to Dataset
     pub status: TestExecutionStatus,
     pub start_time: Option<DateTime<Utc>>,
     pub end_time: Option<DateTime<Utc>>,
@@ -46,11 +46,11 @@ pub struct TestMetric {
 }
 
 impl TestExecution {
-    pub fn new(
-    ) -> Self {
+    pub fn new(num_iterations: u8) -> Self {
         Self {
             id: None,
             status: TestExecutionStatus::Scheduled,
+            num_iterations,
             start_time: Some(Utc::now()),
             end_time: None,
             results: None,

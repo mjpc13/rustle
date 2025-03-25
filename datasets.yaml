@@ -1,5 +1,5 @@
 datasets:
   - name: "botanic_garden"
-    groundtruth_topic: "/gt_poses"
-    dataset_path: "./test/dataset/"
+    ground_truth_topic: "/gt_poses"
+    dataset_path: "/home/mjpc13/Documents/rustle/test/dataset/"
     tag: ["Botanic"]

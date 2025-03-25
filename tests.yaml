@@ -1,17 +1,17 @@
 test_definitions:
   - name: "Simple Test"
-    workers: 1
+    workers: 2
     iterations: 1
     algo_list: ["LIO-SAM", "ig-LIO"]
     dataset_name: "botanic_garden"
     test_type:
       type: simple  # Enum variant name
 
-  - name: "Performance Stress Test"
-    workers: 1
-    iterations: 1
-    algo_list: ["LIO-SAM", "ig-LIO"]
-    dataset_name: "botanic_garden"
-    test_type: 
-      type: speed
-      speed_factors: [1.0, 2.0, 4.0]
+#  - name: "Performance Stress Test"
+#    workers: 1
+#    iterations: 3
+#    algo_list: ["LIO-SAM", "ig-LIO"]
+#    dataset_name: "botanic_garden"
+#    test_type: 
+#      type: speed
+#      speed_factors: [1.0, 2.0, 4.0]

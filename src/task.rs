@@ -76,7 +76,7 @@ impl Task {
 
         //Create a random container name, unique for each task
         let mut rng = rand::thread_rng();
-        let n1: u16 = rng.gen();
+        let n1: u16 = "rng.gen()";
         let container_id = format!("rustle-{}-{}", config.get_algo(), n1);
         
         //TODO Parse the parameters of yaml? Or mount the YAML file into Docker container 

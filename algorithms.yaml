@@ -2,15 +2,17 @@ algorithms:
   - name: "ig-LIO"
     version: "1.0"
     image_name: "mjpc13/rustle:ig-lio"
-    parameters: "my_path"
+    parameters: "/home/mjpc13/Documents/rustle/test/config/ig-lio/params.yaml"
+    odom_topics: ["/lio_odom"]
 
   #Update parameters to be a file path
   - name: "LIO-SAM"
     version: "2.1"
     image_name: "mjpc13/rustle:lio-sam"
-    parameters: "my_path"
+    parameters: "/home/mjpc13/Documents/rustle/test/config/lio-sam/params.yaml"
+    odom_topics: ["/lio_sam/mapping/odometry_incremental"]
 
-  - name: "DLIO"
-    version: "2.1"
-    image_name: "mjpc13/rustle:dlio"
-    parameters: "my_path"
+#  - name: "DLIO"
+#    version: "2.1"
+#    image_name: "mjpc13/rustle:dlio"
+#    parameters: "my_path"

@@ -1,10 +1,11 @@
 use std::sync::Arc;
 
-use surrealdb::{engine::local::Db, Surreal};
+use surrealdb::{engine::local::Db, Surreal, sql::Thing};
 use tokio::sync::Mutex;
-use crate::models::Dataset;
+use crate::models::{Dataset, Odometry};
 use crate::services::DbError; 
 
+#[derive(Clone)]
 pub struct DatasetRepo {
     conn: Arc<Mutex<Surreal<Db>>>,
 }
@@ -36,6 +37,27 @@ impl DatasetRepo {
             .await?
             .take(0)
             .map_err(|e| DbError::Operation(e))
+    }
+
+    pub async fn append_ground_truth(
+        &self,
+        dataset_id: &Thing,
+        odom: Odometry,
+    ) -> Result<(), DbError> {
+        self.conn
+            .lock()
+            .await
+            .query("
+                UPDATE dataset 
+                SET ground_truth = array::concat(ground_truth ?? [], $odom) 
+                WHERE id = $id
+            ")
+            .bind(("id", dataset_id.clone()))
+            .bind(("odom", vec![odom]))  // Wrap in vec to handle array concat
+            .await
+            .map_err(|e| DbError::Operation(e))?;
+
+        Ok(())
     }
 
 

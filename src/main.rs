@@ -2,7 +2,7 @@ use bollard::Docker;
 use db::{test_definition, TestDefinitionRepo};
 use models::{TestDefinitionsConfig, TestExecutionStatus};
 use serde_yaml::from_reader;
-use services::{AlgorithmService, DatasetService, TestDefinitionService, TestExecutionService};
+use services::{AlgorithmRunService,RosService, AlgorithmService, DatasetService, IterationService, TestDefinitionService, TestExecutionService};
 use tokio::sync::Mutex;
 use std::{fs::File, sync::Arc};
 use surrealdb::engine::local::RocksDb;
@@ -36,7 +36,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Connect to SurrealDB This probably will have to be inside a Arc<Mutex>
     let conn = Surreal::new::<RocksDb>("test/db").await?;
     let conn_m = Arc::new(Mutex::new(conn));
-    let docker_m = Arc::new(Mutex::new(docker));
+    let docker_m = Arc::new(docker);
 
 
     conn_m.lock().await.use_ns("rustle")
@@ -50,17 +50,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let dataset_repo = db::dataset::DatasetRepo::new(conn_m.clone());
     let test_def_repo = db::test_definition::TestDefinitionRepo::new(conn_m.clone());
     let test_exec_repo = db::test_execution::TestExecutionRepo::new(conn_m.clone());
+    let odom_repo = db::odometry::OdometryRepo::new(conn_m.clone());
+
+    
     let algo_run_repo = db::algorithm_run::AlgorithmRunRepo::new(conn_m.clone());
+    
+    let iteration_repo = db::iteration::IterationRepo::new(conn_m.clone());
+
 
 
     // Initialize services
     let algo_service = AlgorithmService::new(algo_repo, docker_m.clone());
-
-
-
     let dataset_service = DatasetService::new(dataset_repo);
     let test_def_service = TestDefinitionService::new(test_def_repo.clone());
-    let test_exec_service = TestExecutionService::new(test_exec_repo, test_def_repo.clone(), algo_run_repo);
+    let ros_service = RosService::new(odom_repo);
+    let iteration_service = IterationService::new(iteration_repo, docker_m.clone(), ros_service, dataset_service.clone());
+    let algo_run_service = AlgorithmRunService::new(algo_run_repo, iteration_service.clone());
+
+
+
+    let test_exec_service = TestExecutionService::new(test_exec_repo, test_def_repo.clone(), algo_run_service, iteration_service);
 
 
     // Load and process algorithms
@@ -139,6 +148,7 @@ async fn execute_all_tests(
         let mut execution = models::TestExecution {
             id: None,
             status: TestExecutionStatus::Scheduled,
+            num_iterations: def.iterations,
             start_time: None,
             end_time: None,
             results: None,

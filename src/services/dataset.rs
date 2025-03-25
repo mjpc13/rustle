@@ -1,8 +1,9 @@
 use std::fs::File;
-use crate::{db::DatasetRepo, models::Dataset};
+use crate::{db::DatasetRepo, models::{Dataset, Odometry}};
 
 use super::error::ProcessingError; 
 
+#[derive(Clone)]
 pub struct DatasetService{
     repo: DatasetRepo,
 }
@@ -21,6 +22,7 @@ impl DatasetService {
         Ok(dataset)
     }
 
+
     pub async fn create_dataset(&self, dataset: &mut Dataset) -> Result<(), ProcessingError> {
         // Check for existing algorithm
         if let Some(existing) = self.repo.get_by_name(dataset.name.clone()).await? {
@@ -36,6 +38,23 @@ impl DatasetService {
         
         Ok(())
     }
+
+
+        pub async fn add_ground_truth(
+            &self,
+            dataset: &Dataset,
+            odom: Odometry,
+        ) -> Result<(), ProcessingError> {
+            let dataset_id = dataset.id.as_ref()
+                .ok_or(ProcessingError::MissingField("Dataset ID".to_owned()))?;
+        
+            self.repo.append_ground_truth(dataset_id, odom)
+                .await
+                .map_err(|e| ProcessingError::Database(e))
+        }
+
+
+
 
     // Add validation logic
     //pub fn validate_ground_truth(dataset: &Dataset) -> Result<(), ValidationError> {
