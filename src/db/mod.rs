@@ -8,6 +8,7 @@ pub mod odometry;
 pub mod algorithm_run;
 pub mod test_execution;
 pub mod iteration;
+pub mod stat;
 
 // Re-export repositories
 pub use self::{
@@ -19,5 +20,6 @@ pub use self::{
     odometry::OdometryRepo,
     algorithm_run::AlgorithmRunRepo,
     test_execution::TestExecutionRepo,
-    iteration::IterationRepo
+    iteration::IterationRepo,
+    stat::StatRepo
 };

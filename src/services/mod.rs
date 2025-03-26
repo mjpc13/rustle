@@ -8,6 +8,7 @@ pub mod ros;
 pub mod algorithm_run;
 pub mod test_execution;
 pub mod iteration;
+pub mod stat;
 
 
 // Re-export key components
@@ -21,5 +22,6 @@ pub use self::{
     ros::RosService,
     algorithm_run::AlgorithmRunService,
     test_execution::TestExecutionService,
-    iteration::IterationService
+    iteration::IterationService,
+    stat::StatService
 };

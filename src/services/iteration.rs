@@ -1,6 +1,6 @@
 use std::{collections::HashMap, sync::Arc, thread, time};
 
-use bollard::{container::{self, RemoveContainerOptions}, exec::{CreateExecOptions, StartExecResults}, secret::{HostConfig, ResourcesUlimits}, Docker};
+use bollard::{container::{self, RemoveContainerOptions, StatsOptions}, exec::{CreateExecOptions, StartExecResults}, secret::{HostConfig, ResourcesUlimits}, Docker};
 use chrono::Utc;
 use clap::error;
 use futures_util::{future, StreamExt};
@@ -14,21 +14,22 @@ use yaml_rust2::YamlLoader;
 
 
 use crate::{
-    db::{iteration::IterationRepo, OdometryRepo}, models::{iteration::{DockerContainer, Iteration}, ros::ros_msg::RosMsg, Algorithm, Dataset, Odometry}, services::error::{DbError, ProcessingError, RosError}
+    db::{iteration::IterationRepo, OdometryRepo}, models::{iteration::{DockerContainer, Iteration}, ros::ros_msg::RosMsg, Algorithm, ContainerStats, Dataset, Odometry}, services::error::{DbError, ProcessingError, RosError}
 };
 
-use super::{dataset, error::RunError, DatasetService, RosService};
+use super::{dataset, error::RunError, DatasetService, RosService, StatService};
 #[derive(Clone)]
 pub struct IterationService {
     repo: IterationRepo,
     ros_service: RosService,
     dataset_service: DatasetService,
+    stat_service: StatService,
     docker: Arc<Docker>,  // Assuming you have Docker client setup
 }
 
 impl IterationService {
-    pub fn new(repo: IterationRepo, docker: Arc<Docker>, ros_service: RosService, dataset_service: DatasetService) -> Self {
-        Self { repo, docker, ros_service, dataset_service }
+    pub fn new(repo: IterationRepo, docker: Arc<Docker>, ros_service: RosService, dataset_service: DatasetService, stat_service: StatService) -> Self {
+        Self { repo, docker, ros_service, dataset_service, stat_service }
     }
 
     pub async fn create(&self, iter_number: u8, algo:Algorithm, algorithm_run_id: &Thing) -> Result<(), DbError> {
@@ -63,7 +64,6 @@ impl IterationService {
     }
 
     pub async fn run(&self, iter: Iteration) -> Result<(), RunError> {
-
 
         let algorithm = self.repo.get_algorithm(&iter).await.unwrap(); //Maybe wrap in an Arc<>, Also, maybe wrap iter in an Arc
     
@@ -150,8 +150,7 @@ impl IterationService {
         let is_gt_empty = match dataset.ground_truth{
             Some(_) => false,
             None => {
-                //LOGIC TO TAKE GROUNDTRUTH TOPIC.
-                true //Replace with Some(vector)
+                true
             },
         };
 
@@ -199,6 +198,49 @@ impl IterationService {
 
             })
             .collect();
+
+
+       // Wait a certain number of seconds for the algorithm to init
+       let ten_sec = time::Duration::from_secs(10);
+       thread::sleep(ten_sec);
+
+       //Start the STATS collection
+       let task_id_clone = iter.container.container_name.clone();
+       let iteration_id_clone = iter.id
+            .clone()  // Clone the Option first
+            .ok_or_else(|| ProcessingError::NotFound("Iteration ID".into())).unwrap();       let stream_token = token.clone();
+       let docker_clone = self.docker.clone();
+       let stat_service_clone = self.stat_service.clone();
+
+       let stream_task = tokio::spawn(async move{
+           let stream= &mut docker_clone
+                   .stats(
+                       &task_id_clone,
+                       Some(StatsOptions {
+                           stream: true,
+                           one_shot: false
+                       }),
+                   );
+           let mut count=0;
+           loop{
+               count+=1;
+               select!{
+                   Some(Ok(msg)) = stream.next() => {
+
+                       let stats = ContainerStats::new(msg.memory_stats, msg.cpu_stats, msg.precpu_stats, msg.num_procs);
+
+                       // Add stats the the database;
+                       let _ = stat_service_clone.record_stats(stats, &iteration_id_clone).await;
+
+                   },
+                   _ = stream_token.cancelled()=>{
+                       break;
+                   }
+
+               }
+           }
+       });
+
 
         let rosplay_id = execs[1].id.clone();
         let docker_clone = self.docker.clone();
