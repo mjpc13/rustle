@@ -44,6 +44,15 @@ RUN git clone --depth 1 --recurse-submodules https://github.com/zijiechenrobotic
 ### CLONE SLAM ALGORITHM
 
 
+### CLONE ANOTHER VERSION TO REDUCE THE QUEUE SIZE TO 1 FOR THE SPEED TEST
+RUN git clone --depth 1 --recurse-submodules https://github.com/zijiechenrobotics/ig_lio.git src/ig_lio_speed
+
+#Replaces their subscriber queue to 1
+RUN sed -i '549s/10000/1/g;566s/10000/1/g;568s/10000/1/g' src/ig_lio_speed/src/ig_lio_node.cpp
+RUN sed -i 's/^project(ig_lio)$/project(ig_lio_speed)/' src/ig_lio_speed/CMakeLists.txt
+RUN sed -i 's/<name>ig_lio<\/name>/<name>ig_lio_speed<\/name>/g' src/ig_lio_speed/package.xml
+
+
 # Build ros package source (compiles every package in the workspace, don't change this!)
 RUN catkin config --extend /opt/ros/$ROS_DISTRO && catkin create pkg -p src/ rustle
 

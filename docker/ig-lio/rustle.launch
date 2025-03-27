@@ -1,8 +1,17 @@
 <launch>
 
     <!--Don't change this file!!!-->
+
+    <arg name="test_type" default="simple"/>  <!-- or any default value -->
+    
     <rosparam command="load" file="/rustle/config/params.yaml" />
 
-    <node pkg="ig_lio" type="ig_lio_node" name="ig_lio_node" output="screen" />
+    <node pkg="ig_lio" type="ig_lio_node" name="ig_lio_node" 
+      if="$(eval arg('test_type') == 'simple')" output="screen"/>
+
+    <node pkg="ig_lio_speed" type="ig_lio_speed_node" name="ig_lio_node" 
+      if="$(eval arg('test_type') == 'speed')" output="screen"/>
+
+
     
 </launch>
