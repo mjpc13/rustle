@@ -1,215 +1,170 @@
-use std::sync::Arc;
-
 use bollard::Docker;
-use rustle::db::load_from_file;
-use rustle::evo_wrapper::EvoApeArg;
-use rustle::evo_wrapper::PlotArg;
-use rustle::metrics::ContainerPlot;
-use rustle::metrics::Metric;
-use rustle::task::AdvancedConfig;
-use rustle::task::TaskBatch;
-use rustle::task::TaskOutput;
-use rustle::db::DB;
-use surrealdb::engine::any;
-use tokio;
+use db::{test_definition, MetricRepo, TestDefinitionRepo};
+use models::{TestDefinitionsConfig, TestExecutionStatus};
+use serde_yaml::from_reader;
+use services::{AlgorithmRunService, MetricService, AlgorithmService, DatasetService, IterationService, RosService, StatService, TestDefinitionService, TestExecutionService};
 use tokio::sync::Mutex;
+use std::{fs::File, sync::Arc};
+use surrealdb::engine::local::RocksDb;
 
+use surrealdb::Surreal;
+use log::{info, error};
+use chrono::Utc;
 
-use rustle::task::Config;
+mod models;
+mod db;
+mod services;
+mod utils;
 
-use env_logger::init;
-
-#[tokio::main]
-async fn main() {
-    
-    init();
-    
-    //===========RUN=THE=ALGORITHMS=========//
-
-    //------ASYNC-BATCH------// (all running at the same time multiple times)
-
-    //let configs = config_setup().await;
-
-    //let batch_task = TaskBatch{ configs: configs.clone(), iterations: 1, workers: 4};
-
-    //let batch_output = batch_task.run().await.unwrap();
-
-
-    //============LOAD=FROM=FILE==============//
-    //instead of running the algorithms from 0 you can load a previously saved database.
-
-    //let batch_output = load_from_file().await;
-
-    //===========COMPUTE=METRICS=============//
-
-    //let batch_res = Metric::compute_batch(
-    //    &batch_output, 
-    //    EvoApeArg{
-    //        //plot: Some(PlotArg::default()),
-    //        plot: None,
-    //        ..Default::default()
-    //    }
-    //);
-
-    //__PRINT_IN_MD_TABLE___
-    //let md_batch = Metric::print_batch(&batch_res);
-    //println!("{}", md_batch);
-    //______________________
-
-
-    //_____PLOT_BOXPLOT_____
-    //Metric::box_plot(&batch_res, "/home/mjpc13/Documents/rustle/test/results/box_plot_large.svg");
-    //______________________
-
-    //__PLOT_COMPUTER_STATS__
-    //let mut task_vec: Vec<TaskOutput> = batch_output
-    //    .into_iter()
-    //    .map(|(k,v)| {
-    //        v.into_iter().next().unwrap()
-    //    })
-    //    .collect();
-
-    //task_vec.sort(); //sorts the algorithm to ensure that they have the same colors;
-
-    //ContainerPlot::MemoryUsage.plot(&task_vec, "/home/mjpc13/Documents/rustle/test/results/memory_usage_large.svg");
-    //ContainerPlot::LoadPercentage.plot(&task_vec, "/home/mjpc13/Documents/rustle/test/results/load_percentage_large.svg");
-
+#[derive(Debug, serde::Deserialize)]
+struct AlgorithmConfig {
+    algorithms: Vec<models::Algorithm>,
 }
 
-async fn config_setup() -> Vec<Config> {
+#[derive(Debug, serde::Deserialize)]
+struct DatasetConfig {
+    datasets: Vec<models::Dataset>,
+}
 
-    //Dataset related
-    let dataset_path = "/home/mjpc13/Documents/rustle/test/dataset/";
-    let gt_topic: &str = "/gt_poses";
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    env_logger::init();
 
+    // Initialize Docker client
+    let docker = Docker::connect_with_local_defaults()
+        .map_err(|e| format!("Failed to connect to Docker: {}", e))?;
 
-    let db_connection = any::connect("file://test/db").await.unwrap();
-    let test = db_connection.clone();
-
-
-    let adv_ig = AdvancedConfig{
-        db_connection: test,
-        db_database: String::from("ig_lio"),
-        docker_socket: Docker::connect_with_local_defaults().unwrap(),
-    };
-
-    //Put algorithms I want to run in a Vector
-    let mut configs: Vec<Config> = Vec::new();
-
-    //====ALGORITHMS=CONFIGS======//
-
-    // iG-LIO //
-    configs.push(
-        Config::new(
-            "mjpc13/rustle:ig-lio", //docker image name
-            "iG-LIO", //algorithm name
-            dataset_path, // path to the directory of the rosbag
-            "/home/mjpc13/Documents/rustle/test/config/ig-lio/params.yaml",  //Yaml config file for the algorithm 
-            vec!["/lio_odom"], //Vector of topics to record
-            gt_topic, //topic of the ground truth
-            Some(&adv_ig) //Advanced arguments (database and docker stuff) replace with None for default config
-        ).await.unwrap()
-    );
-
-    //----------------//
-
-    let test = db_connection.clone();
-
-    // LIO-SAM-6AXIS //
-    let adv_lio_sam = AdvancedConfig{
-        db_connection: test,
-        db_database: String::from("lio_sam"),
-        docker_socket: Docker::connect_with_local_defaults().unwrap(),
-    };
-    configs.push(
-        Config::new(
-            "mjpc13/rustle:lio-sam-6axis", 
-            "LIO-SAM", 
-            dataset_path, 
-            "/home/mjpc13/Documents/rustle/test/config/lio-sam-6axis/params.yaml",   
-            vec!["/lio_sam_6axis/mapping/odometry_incremental"], 
-            gt_topic,  
-            Some(&adv_lio_sam)
-        ).await.unwrap()
-    );
-
-    //----------------//
-
-    // POINT-LIO //
-    configs.push(
-        Config::new(
-            "mjpc13/rustle:point-lio", 
-            "Point-LIO", 
-            dataset_path, 
-            "/home/mjpc13/Documents/rustle/test/config/point-lio/params.yaml", 
-            vec!["/aft_mapped_to_init"], 
-            gt_topic,  
-            None 
-        ).await.unwrap()
-    );
-
-    // DLO //
-    configs.push(Config::new(
-        "mjpc13/rustle:dlo", //docker image name
-        "DLO", //algorithm name
-        dataset_path, // path to the directory of the rosbag
-        "/home/mjpc13/Documents/rustle/test/config/dlo/params.yaml",  //Yaml config file for the algorithm 
-        vec!["/dlo/odom_node/odom"], //Vector of topics to record
-        gt_topic, //topic of the ground truth
-        None //Advanced arguments (database and docker stuff) replace with None for default config
-        ).await.unwrap()
-    );
-
-   // DLIO //
-    //configs.push(Config::new(
-    //    "mjpc13/rustle:dlio", //docker image name
-    //    "DLIO", //algorithm name
-    //    dataset_path, // path to the directory of the rosbag
-    //    "/home/mjpc13/Documents/rustle/test/config/dlio/params.yaml",  //Yaml config file for the algorithm 
-    //    vec!["/dlio/odom_node/odom"], //Vector of topics to record
-    //    gt_topic, //topic of the ground truth
-    //    None //Advanced arguments (database and docker stuff) replace with None for default config
-    //    ).await.unwrap()
-    //);
+    // Connect to SurrealDB This probably will have to be inside a Arc<Mutex>
+    let conn = Surreal::new::<RocksDb>("test/db").await?;
+    let conn_m = Arc::new(Mutex::new(conn));
+    let docker_m = Arc::new(docker);
 
 
-    // SR-LIVO //
-    //configs.push(Config::new(
-    //        "mjpc13/rustle:sr-livo", //docker image name
-    //        "SR-LIVO", //algorithm name
-    //        dataset_path, // path to the directory of the rosbag
-    //        "/home/mjpc13/Documents/rustle/test/config/sr-livo/params.yaml",  //Yaml config file for the algorithm 
-    //        vec!["/Odometry_after_opt"], //Vector of topics to record
-    //        gt_topic, //topic of the ground truth
-    //        None //Advanced arguments (database and docker stuff) replace with None for default config
-    //    ).await.unwrap()
-    //);
+    conn_m.lock().await.use_ns("rustle")
+        .use_db("prod")
+        .await?;
 
-    // A-LOAM //
-    //configs.push(Config::new(
-    //        "mjpc13/rustle:a-loam", //docker image name
-    //        "Light-LOAM", //algorithm name
-    //        dataset_path, // path to the directory of the rosbag
-    //        "/home/mjpc13/Documents/rustle/test/config/a-loam/params.yaml",  //Yaml config file for the algorithm 
-    //        vec!["/aft_mapped_to_init"], //Vector of topics to record
-    //        gt_topic, //topic of the ground truth
-    //        None //Advanced arguments (database and docker stuff) replace with None for default config
-    //    ).await.unwrap()
-    //);
+    info!("Successfully connected to database");
 
-    // Faster-LIO //
-    //configs.push(Config::new(
-    //        "mjpc13/rustle:faster-lio", //docker image name
-    //        "Faster-LIO", //algorithm name
-    //        dataset_path, // path to the directory of the rosbag
-    //        "/home/mjpc13/Documents/rustle/test/config/faster-lio/params.yaml",  //Yaml config file for the algorithm 
-    //        vec!["/Odometry"], //Vector of topics to record
-    //        gt_topic, //topic of the ground truth
-    //        None //Advanced arguments (database and docker stuff) replace with None for default config
-    //    ).await.unwrap()
-    //);
+    // Initialize repositories
+    let algo_repo = db::algorithm::AlgorithmRepo::new(conn_m.clone());
+    let dataset_repo = db::dataset::DatasetRepo::new(conn_m.clone());
+    let test_def_repo = db::test_definition::TestDefinitionRepo::new(conn_m.clone());
+    let test_exec_repo = db::test_execution::TestExecutionRepo::new(conn_m.clone());
+    let odom_repo = db::odometry::OdometryRepo::new(conn_m.clone());
+    let algo_run_repo = db::algorithm_run::AlgorithmRunRepo::new(conn_m.clone());
+    let stat_repo = db::stat::StatRepo::new(conn_m.clone());
+    let iteration_repo = db::iteration::IterationRepo::new(conn_m.clone());
+    let metric_repo: MetricRepo = db::metric::MetricRepo::new(conn_m.clone());
 
-    return configs;
+    // Initialize services
+    let algo_service = AlgorithmService::new(algo_repo, docker_m.clone());
+    let dataset_service = DatasetService::new(dataset_repo);
+    let test_def_service = TestDefinitionService::new(test_def_repo.clone());
+    let ros_service = RosService::new(odom_repo);
+    let stat_service = StatService::new(stat_repo);
+    let metric_service = MetricService::new(metric_repo);
+    let iteration_service = IterationService::new(iteration_repo, docker_m.clone(), ros_service, dataset_service.clone(), stat_service, metric_service);
+    let algo_run_service = AlgorithmRunService::new(algo_run_repo, iteration_service.clone());
 
-    //----------------//
+
+
+    let test_exec_service = TestExecutionService::new(test_exec_repo, test_def_repo.clone(), algo_run_service, iteration_service);
+
+
+    // Load and process algorithms
+    let algo_config: AlgorithmConfig = load_yaml_config("algorithms.yaml")?;
+    info!("Found {} algorithms to register", algo_config.algorithms.len());
+    process_algorithms(&algo_service, algo_config).await;
+
+    // Load and process datasets
+    let dataset_config: DatasetConfig = load_yaml_config("datasets.yaml")?;
+    info!("Found {} datasets to register", dataset_config.datasets.len());
+    process_datasets(&dataset_service, dataset_config).await;
+
+    // Load and process test definitions
+    let test_def_config: TestDefinitionsConfig = load_yaml_config("tests.yaml")?;
+    info!("Processing test definitions");
+    process_test_definitions(&test_def_service, test_def_config).await;
+
+    // Execute all test definitions
+    info!("Starting test executions");
+    execute_all_tests(&test_exec_service, &test_def_service).await;
+
+
+    
+    Ok(())
+}
+
+
+
+fn load_yaml_config<T: serde::de::DeserializeOwned>(path: &str) -> Result<T, Box<dyn std::error::Error>> {
+    let file = File::open(path)?;
+    Ok(from_reader(file)?)
+}
+
+async fn process_algorithms(service: &AlgorithmService, config: AlgorithmConfig) {
+    for mut algorithm in config.algorithms {
+        match service.create_algorithm(&mut algorithm).await {
+            Ok(_) => info!("Created algorithm: {}", algorithm.name),
+            Err(e) => error!("Failed to create algorithm {}: {}", algorithm.name, e),
+        }
+    }
+}
+
+async fn process_datasets(service: &DatasetService, config: DatasetConfig) {
+    for mut dataset in config.datasets {
+        dataset.created_at = Utc::now();
+        match service.create_dataset(&mut dataset).await {
+            Ok(_) => info!("Created dataset: {}", dataset.name),
+            Err(e) => error!("Failed to create dataset {}: {}", dataset.name, e),
+        }
+    }
+}
+
+async fn process_test_definitions(service: &TestDefinitionService, config: TestDefinitionsConfig) {
+    match service.create_from_yaml("tests.yaml").await {
+        Ok(definitions) => {
+            info!("Created {} test definitions", definitions.len());
+            for def in definitions {
+                info!("- {} ({:?})", def.name, def.id.unwrap());
+            }
+        }
+        Err(e) => error!("Failed to create test definitions: {}", e),
+    }
+}
+
+async fn execute_all_tests(
+    test_exec_service: &TestExecutionService,
+    test_def_service: &TestDefinitionService,
+) {
+    // Get all test definitionsk
+    let definitions = test_def_service.get_all().await;
+
+    for def in definitions {
+        info!("Processing test definition: {}", def.name);
+        
+        // Create initial execution object
+        let mut execution = models::TestExecution {
+            id: None,
+            status: TestExecutionStatus::Scheduled,
+            num_iterations: def.iterations,
+            start_time: None,
+            end_time: None,
+            results: None,
+        };
+
+        // Start execution
+        let running_exec = match test_exec_service.start_execution(execution, &def).await {
+            Ok(exec) => {
+                info!("Started execution for {} ({})", def.name, exec.id.as_ref().unwrap());
+                exec
+            }
+            Err(e) => {
+                error!("Failed to start execution for {}: {}", def.name, e);
+                continue;
+            }
+        };
+
+    }
 }
