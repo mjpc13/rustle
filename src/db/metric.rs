@@ -1,36 +1,56 @@
-use surrealdb::{Surreal, engine::remote::ws::Client};
-use crate::models::Metric;
+use std::sync::Arc;
 
+use log::{info, warn};
+// db/metric.rs
+use surrealdb::{Surreal, engine::local::Db};
+use tokio::sync::Mutex;
+use crate::services::error::DbError;
+use crate::models::metrics::Metric;
+use surrealdb::sql::Thing;
+
+#[derive(Clone)]
 pub struct MetricRepo {
-    conn: Surreal<Client>,
+    conn: Arc<Mutex<Surreal<Db>>>,
 }
 
 impl MetricRepo {
-    pub fn new(conn: Surreal<Client>) -> Self {
+    pub fn new(conn: Arc<Mutex<Surreal<Db>>>) -> Self {
         Self { conn }
     }
 
-    //pub async fn save(&self, metric: &Metric) -> Result<(), surrealdb::Error> {
-    //    self.conn
-    //        .create(("metric", &metric.id))
-    //        .content(metric)
-    //        .await
-    //}
+    pub async fn save(&self, metric: &mut Metric, iteration_id: &Thing) -> Result<(), DbError> {
+        // Create metric record
+        let created: Option<Metric> = self.conn.lock().await
+            .create("metric")
+            .content(metric.clone())
+            .await.unwrap();
 
-    //pub async fn get_for_analysis(
+        if let Some(created) = created {
+            metric.id = created.id;
+        }
+
+        if let Some(metric_id) = &metric.id {
+            self.conn.lock().await
+                .query("RELATE $iteration->has_metric->$metric")
+                .bind(("iteration", iteration_id.clone()))
+                .bind(("metric", metric_id.clone()))
+                .await.unwrap();
+        }
+
+        Ok(())
+    }
+
+    //pub async fn get_for_iteration(
     //    &self,
-    //    test_run_id: &str,
-    //    algorithm_id: &str,
-    //    metric_type: &str
-    //) -> Result<Vec<Metric>, surrealdb::Error> {
+    //    iteration_id: &Thing
+    //) -> Result<Vec<Metric>, DbError> {
     //    self.conn
-    //        .query("SELECT * FROM metric 
-    //                WHERE test_run_id = $test_run_id 
-    //                AND algorithm_id = $algorithm_id 
-    //                AND metric_type.type = $metric_type")
-    //        .bind(("test_run_id", test_run_id))
-    //        .bind(("algorithm_id", algorithm_id))
-    //        .bind(("metric_type", metric_type))
+    //        .query("
+    //            SELECT <-has_metric<-iteration.* 
+    //            FROM metric 
+    //            WHERE <-has_metric<-iteration INSIDE $iter_id
+    //        ")
+    //        .bind(("iter_id", iteration_id.clone()))
     //        .await?
     //        .take(0)
     //}

@@ -1,10 +1,10 @@
-use core::f32;
+use core::f64;
 use std::process::Command;
 use std::fmt;
 use log::{debug, error, info, trace, warn};
 use struct_iterable::Iterable;
 
-use crate::errors::{EvoError, RosError};
+use crate::services::error::{EvoError, RosError};
 
 pub trait EvoArg {
     fn compute<'a>(&self, groundtruth: &str, data: &str) -> Result<String, EvoError>;
@@ -248,18 +248,18 @@ impl EvoArg for EvoApeArg{
         let stderr = std::str::from_utf8(&output.stderr).unwrap();
 
         if stdout.contains("[ERROR]"){
-            return Err(EvoError::CommandError { stderr: stdout.into() });
+            return Err(EvoError::CommandError(stdout.into()));
             
         } else if !stderr.is_empty(){
             log::warn!("The evo_ape command gave an error. This might be a bad parameter setup or a bad file location");
-            return Err(EvoError::CommandError { stderr: stderr.into() });
+            return Err(EvoError::CommandError(stderr.into()));
 
         } else if !stdout.is_empty(){
             
             return Ok(stdout.to_string());
 
         } else{
-            return Err(EvoError::CommandError { stderr: stderr.into() });
+            return Err(EvoError::CommandError(stderr.into()));
         }
     }
     
@@ -267,17 +267,16 @@ impl EvoArg for EvoApeArg{
 
 
 #[derive(Iterable)]
-
 pub struct EvoRpeArg{
-    t_max_diff: Option<f32>,
-    t_offset: Option<f32>,
-    t_start: Option<f32>,
-    t_end: Option<f32>,
-    pose_relation: Option<PoseRelation>,// full,trans_part,rot_part,angle_deg,angle_rad,point_distance
-    align: bool,
-    scale: bool,
-    n_to_align: Option<f32>,
-    plot: Option<PlotArg>
+    pub t_max_diff: Option<f32>,
+    pub t_offset: Option<f32>,
+    pub t_start: Option<f32>,
+    pub t_end: Option<f32>,
+    pub pose_relation: Option<PoseRelation>,// full,trans_part,rot_part,angle_deg,angle_rad,point_distance
+    pub align: bool,
+    pub scale: bool,
+    pub n_to_align: Option<f32>,
+    pub plot: Option<PlotArg>
 }
 
 
@@ -302,6 +301,7 @@ impl EvoRpeArg {
                         match s{
                             "align" => commands.push("-a".to_string()),
                             "scale" => commands.push("-s".to_string()),
+                            "align_origin" => commands.push("--align_origin".to_string()),
                             _ => (),
                         }
                     }
@@ -364,45 +364,21 @@ impl EvoArg for EvoRpeArg{
     
         let stdout = std::str::from_utf8(&output.stdout).unwrap();
         let stderr = std::str::from_utf8(&output.stderr).unwrap();
-        
-        trace!("STDOUT {}", stdout);
-        trace!("STDERR {}", stderr);
-    
-        if stderr.is_empty() && !stdout.is_empty(){
-    
+
+        if stdout.contains("[ERROR]"){
+            return Err(EvoError::CommandError(stdout.into()));
+            
+        } else if !stderr.is_empty(){
+            log::warn!("The evo_ape command gave an error. This might be a bad parameter setup or a bad file location");
+            return Err(EvoError::CommandError(stderr.into()));
+
+        } else if !stdout.is_empty(){
+            
             return Ok(stdout.to_string());
-    
-            //parse
+
         } else{
-            return Err(EvoError::CommandError { stderr: stderr.into() });
+            return Err(EvoError::CommandError(stderr.into()));
         }
     }
     
-}
-
-
-pub fn evo_rpe<'a>(groundtruth: &str, data: &str, args: EvoRpeArg) -> Result<String, EvoError>{
-
-    let output = Command::new("evo_rpe")
-        .arg("tum")
-        .arg(groundtruth)
-        .arg(data)
-        .args(args.get_commands())
-        .output()
-        .unwrap();
-
-    let stdout = std::str::from_utf8(&output.stdout).unwrap();
-    let stderr = std::str::from_utf8(&output.stderr).unwrap();
-    
-    trace!("STDOUT {}", stdout);
-    trace!("STDERR {}", stderr);
-
-    if stderr.is_empty() && !stdout.is_empty(){
-
-        return Ok(stdout.to_string());
-
-        //parse
-    } else{
-        return Err(EvoError::CommandError { stderr: stderr.into() });
-    }
 }

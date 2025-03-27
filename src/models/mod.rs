@@ -1,7 +1,7 @@
 pub mod dataset;
 pub mod algorithm;
 pub mod test_definition;
-pub mod metric;
+pub mod metrics;
 pub mod container;
 
 pub mod ros;
@@ -15,12 +15,7 @@ pub use self::{
     dataset::Dataset,
     algorithm::Algorithm,
     test_definition::{TestDefinition, TestType, SimpleTestParams, SpeedTestParams, TestDefinitionsConfig},
-    metric::{
-        Metric,
-        MetricType,
-        StatisticalMetrics,
-        SingleValueMetric
-    },
+    metrics::metric,
     container::Container,
     ros::{Odometry, Header, Pose, Twist},
     algorithm_run::{AlgorithmRun},

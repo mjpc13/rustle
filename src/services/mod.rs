@@ -13,7 +13,7 @@ pub mod stat;
 
 // Re-export key components
 pub use self::{
-    error::{ValidationError, AlgorithmError, TestDefinitionError, MetricError, RosError, DbError},
+    error::{ValidationError, AlgorithmError, TestDefinitionError, RosError, DbError},
     dataset::DatasetService,
     algorithm::AlgorithmService,
     test_definition::TestDefinitionService,

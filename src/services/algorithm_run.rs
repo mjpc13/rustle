@@ -42,8 +42,11 @@ impl AlgorithmRunService {
 
         }
 
-
         Ok(run)
+    }
+
+    pub async fn set_aggregate_metrics(&self, run: &AlgorithmRun){
+        self.repo.set_aggregate_metrics(run).await;
     }
 
     //pub async fn add_iteration(

@@ -33,21 +33,20 @@ impl TestExecutionService {
 
         let _ = &self.execution_repo.save(&mut execution, def).await;
 
-        // Validate definition exists
-        //Implement the TaskBatch Logic!
-
         let list_algos = self.execution_repo.get_algos(&execution).await?;
+
+        let execution_id = execution.id.as_ref()  // Get reference to inner Thing
+            .ok_or(ProcessingError::General("TestExecution ID".into()))?;
 
         // Create algorithm runs and their iterations and based on test type
         match &def.test_type {
             TestType::Simple => self.create_simple_runs(&execution, &list_algos).await?,
-            TestType::Speed(params) => (), // TODO: need to do this...
+            TestType::Speed(params) => self.create_speedbag_runs(&execution, &list_algos, params).await?,
         }
 
         let mut list_iterations = self.execution_repo
             .get_iterations(
-                execution.id.as_ref()  // Get reference to inner Thing
-                    .ok_or(ProcessingError::General("TestExecution ID".into()))?
+                &execution_id
             ).await?;
 
         //debug!("List of iterations: {:?}", list_iterations);
@@ -69,7 +68,15 @@ impl TestExecutionService {
                }
             });
             futures_util::future::join_all(results).await;
-            info!("This should only run after all the things ran")
+        }
+
+
+        //get all algorithm runs
+        let algo_run_list = self.execution_repo.get_algorithm_runs(execution_id).await?;
+        
+        for algo_run in algo_run_list{
+            info!("One AR!!!");
+            self.algorithm_run_service.set_aggregate_metrics(&algo_run).await;
         }
 
 
@@ -95,35 +102,28 @@ impl TestExecutionService {
         Ok(())
     }
 
+    async fn create_speedbag_runs(
+        &self,
+        execution: &TestExecution,
+        algo_list: &Vec<Algorithm>,
+        params: &SpeedTestParams,
+    ) -> Result<(), ProcessingError> {
+        // Implementation for speed bag tests
+        // Create multiple runs with different parameters
+        // Example: 1 run per speed setting
+        for speed_setting in &params.speed_factors {
+            for algorithm in algo_list {
 
-
-
-    //async fn create_speedbag_runs(
-    //    &self,
-    //    execution: &TestExecution,
-    //    definition: &TestDefinition,
-    //    params: SpeedTestParams,
-    //) -> Result<(), ProcessingError> {
-    //    // Implementation for speed bag tests
-    //    // Create multiple runs with different parameters
-    //    // Example: 1 run per speed setting
-    //    for speed_setting in params.speed_levels {
-    //        for algorithm_name in &definition.algo_list {
-    //            // Similar to simple runs but with speed parameters
-    //            let mut run = AlgorithmRun {
-    //                id: None,
-    //                test_execution_id: execution.id.as_ref().unwrap().clone(),
-    //                algorithm_id: algorithm.id.unwrap().clone(),
-    //                aggregates: RunAggregates::default(),
-    //                created_at: Utc::now(),
-    //                duration_secs: 0.0,
-    //                speed_setting: Some(speed_setting), // Add this field if needed
-    //            };
-    //            // Save run
-    //        }
-    //    }
-    //    Ok(())
-    //}
+                self.algorithm_run_service.create_run(
+                    *speed_setting,
+                    execution.num_iterations,
+                    &execution.id.as_ref().unwrap(),
+                    &algorithm.id.clone().unwrap()
+                ).await?;
+            }
+        }
+        Ok(())
+    }
 
 
 

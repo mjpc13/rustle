@@ -3,7 +3,7 @@ use std::{fmt::format, sync::Arc};
 use log::{info, warn};
 use surrealdb::{engine::local::Db, Surreal};
 use tokio::sync::Mutex;
-use crate::{models::{test_execution::TestExecution, Algorithm, Dataset, Iteration, TestDefinition}, services::error::DbError};
+use crate::{models::{test_execution::TestExecution, Algorithm, AlgorithmRun, Dataset, Iteration, TestDefinition}, services::error::DbError};
 use surrealdb::sql::Thing;
 
 pub struct TestExecutionRepo {
@@ -200,4 +200,40 @@ impl TestExecutionRepo {
             Ok(iterations)
         }
     }
+
+
+    pub async fn get_algorithm_runs(
+        &self,
+        test_execution_id: &Thing,
+    ) -> Result<Vec<AlgorithmRun>, DbError> {
+        let mut result = self.conn.lock().await
+            .query("
+                SELECT ->has_run->algorithm_run.* AS algorithm_runs
+                FROM $test_execution_id
+            ")
+            .bind(("test_execution_id", test_execution_id.clone()))
+            .await?;
+
+        // Handle nested array structure from graph traversal
+        let nested_algorithm_run: Vec<Vec<AlgorithmRun>> = result.take("algorithm_runs")?;
+
+        
+        // Flatten the results
+        let algorithm_run = nested_algorithm_run
+            .into_iter()
+            .flatten()
+            .collect::<Vec<AlgorithmRun>>();
+
+        if algorithm_run.is_empty() {
+            Err(DbError::NotFound(format!(
+                "No iterations found for test execution {}",
+                test_execution_id
+            )))
+        } else {
+            Ok(algorithm_run)
+        }
+    }
+
+
+
 }

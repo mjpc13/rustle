@@ -1,8 +1,8 @@
 use bollard::Docker;
-use db::{test_definition, TestDefinitionRepo};
+use db::{test_definition, MetricRepo, TestDefinitionRepo};
 use models::{TestDefinitionsConfig, TestExecutionStatus};
 use serde_yaml::from_reader;
-use services::{AlgorithmRunService, AlgorithmService, DatasetService, IterationService, RosService, StatService, TestDefinitionService, TestExecutionService};
+use services::{AlgorithmRunService, MetricService, AlgorithmService, DatasetService, IterationService, RosService, StatService, TestDefinitionService, TestExecutionService};
 use tokio::sync::Mutex;
 use std::{fs::File, sync::Arc};
 use surrealdb::engine::local::RocksDb;
@@ -14,6 +14,7 @@ use chrono::Utc;
 mod models;
 mod db;
 mod services;
+mod utils;
 
 #[derive(Debug, serde::Deserialize)]
 struct AlgorithmConfig {
@@ -54,6 +55,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let algo_run_repo = db::algorithm_run::AlgorithmRunRepo::new(conn_m.clone());
     let stat_repo = db::stat::StatRepo::new(conn_m.clone());
     let iteration_repo = db::iteration::IterationRepo::new(conn_m.clone());
+    let metric_repo: MetricRepo = db::metric::MetricRepo::new(conn_m.clone());
 
     // Initialize services
     let algo_service = AlgorithmService::new(algo_repo, docker_m.clone());
@@ -61,7 +63,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let test_def_service = TestDefinitionService::new(test_def_repo.clone());
     let ros_service = RosService::new(odom_repo);
     let stat_service = StatService::new(stat_repo);
-    let iteration_service = IterationService::new(iteration_repo, docker_m.clone(), ros_service, dataset_service.clone(), stat_service);
+    let metric_service = MetricService::new(metric_repo);
+    let iteration_service = IterationService::new(iteration_repo, docker_m.clone(), ros_service, dataset_service.clone(), stat_service, metric_service);
     let algo_run_service = AlgorithmRunService::new(algo_run_repo, iteration_service.clone());
 
 

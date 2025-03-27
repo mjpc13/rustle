@@ -1,4 +1,6 @@
-use std::{collections::HashMap, sync::Arc, thread, time};
+use std::str::FromStr;
+use std::{collections::HashMap, env, fs::OpenOptions, path::PathBuf, sync::Arc, thread, time};
+use std::io::Write;
 
 use bollard::{container::{self, RemoveContainerOptions, StatsOptions}, exec::{CreateExecOptions, StartExecResults}, secret::{HostConfig, ResourcesUlimits}, Docker};
 use chrono::Utc;
@@ -12,11 +14,21 @@ use surrealdb::sql::Thing;
 use tokio_util::sync::CancellationToken;
 use yaml_rust2::YamlLoader;
 
+use crate::models::metric::Metric;
+use crate::models::metrics::metric::StatisticalMetrics;
 
+use crate::models::metrics::pose_error::PoseErrorMetrics;
+use crate::utils::evo_wrapper::{EvoApeArg, EvoRpeArg};
 use crate::{
-    db::{iteration::IterationRepo, OdometryRepo}, models::{iteration::{DockerContainer, Iteration}, ros::ros_msg::RosMsg, Algorithm, ContainerStats, Dataset, Odometry}, services::error::{DbError, ProcessingError, RosError}
+    db::{iteration::IterationRepo, OdometryRepo}, 
+    models::{iteration::{DockerContainer, Iteration}, 
+    ros::ros_msg::RosMsg, Algorithm, ContainerStats, Dataset, Odometry}, 
+    services::error::{DbError, ProcessingError, RosError}, 
+    utils::evo_wrapper::EvoArg
 };
 
+use super::error::EvoError;
+use super::{MetricService};
 use super::{dataset, error::RunError, DatasetService, RosService, StatService};
 #[derive(Clone)]
 pub struct IterationService {
@@ -24,12 +36,13 @@ pub struct IterationService {
     ros_service: RosService,
     dataset_service: DatasetService,
     stat_service: StatService,
+    metric_service: MetricService,
     docker: Arc<Docker>,  // Assuming you have Docker client setup
 }
 
 impl IterationService {
-    pub fn new(repo: IterationRepo, docker: Arc<Docker>, ros_service: RosService, dataset_service: DatasetService, stat_service: StatService) -> Self {
-        Self { repo, docker, ros_service, dataset_service, stat_service }
+    pub fn new(repo: IterationRepo, docker: Arc<Docker>, ros_service: RosService, dataset_service: DatasetService, stat_service: StatService, metric_service: MetricService,) -> Self {
+        Self { repo, docker, ros_service, dataset_service, stat_service, metric_service }
     }
 
     pub async fn create(&self, iter_number: u8, algo:Algorithm, algorithm_run_id: &Thing) -> Result<(), DbError> {
@@ -74,7 +87,7 @@ impl IterationService {
         let algorithm_run = self.repo.get_algorithm_run(&iter).await.unwrap();
 
         //let cmd = format!("rosbag play -r {} --clock /rustle/dataset/*.bag", algorithm_run.bag_speed);
-        let cmd = format!("rosbag play -d 9 -r {} --clock -u 20 /rustle/dataset/*.bag", algorithm_run.bag_speed);
+        let cmd = format!("rosbag play -d 9 -r {} --clock -u 50 /rustle/dataset/*.bag", algorithm_run.bag_speed);
 
 
 
@@ -205,12 +218,14 @@ impl IterationService {
        thread::sleep(ten_sec);
 
        //Start the STATS collection
-       let task_id_clone = iter.container.container_name.clone();
-       let iteration_id_clone = iter.id
+        let task_id_clone = iter.container.container_name.clone();
+        let iteration_id_clone = iter.id
             .clone()  // Clone the Option first
-            .ok_or_else(|| ProcessingError::NotFound("Iteration ID".into())).unwrap();       let stream_token = token.clone();
-       let docker_clone = self.docker.clone();
-       let stat_service_clone = self.stat_service.clone();
+            .ok_or_else(|| ProcessingError::NotFound("Iteration ID".into())).unwrap();       
+        let stream_token = token.clone();
+
+        let docker_clone = self.docker.clone();
+        let stat_service_clone = self.stat_service.clone();
 
        let stream_task = tokio::spawn(async move{
            let stream= &mut docker_clone
@@ -241,7 +256,6 @@ impl IterationService {
            }
        });
 
-
         let rosplay_id = execs[1].id.clone();
         let docker_clone = self.docker.clone();
 
@@ -265,7 +279,35 @@ impl IterationService {
         tokio::join!(roslaunch_task);
         debug!("Stopped roslaunch");
 
-        self.remove_container(&iter.container.container_name);
+        let _ = self.remove_container(&iter.container.container_name).await;
+
+        let ape_args = EvoApeArg{
+                    //plot: Some(PlotArg::default()),
+                    plot: None,
+                    ..Default::default()
+                };
+
+        let rpe_args = EvoRpeArg{
+            //plot: Some(PlotArg::default()),
+            plot: None,
+            ..Default::default()
+        };
+
+        let ape = self.compute_metrics(&iter, &ape_args, None).await.unwrap();
+        let rpe = self.compute_metrics(&iter, &rpe_args, None).await.unwrap();
+
+        //Create a metric object.
+        //let metric = Metr
+
+        let iteration_id_clone = iter.id
+            .clone()  // Clone the Option first
+            .ok_or_else(|| ProcessingError::NotFound("Iteration ID".into())).unwrap();
+
+
+
+
+        let metric = self.metric_service.create_pose_error_metric(iteration_id_clone, ape, rpe).await.unwrap();
+
 
         Ok(())
     }
@@ -348,11 +390,10 @@ impl IterationService {
                             match Self::convert_to_ros(msg.to_string()){
                                 Ok(r) => {
                                     //let odom = r.as_odometry().unwrap();
-                                    //WRITE CODE TO ADD ODOMETRY MESSAGE TO DB
                                     let _ = ros_service.process_message(r, &iteration_id).await;
                                 }
                                 Err(e) => {
-                                    warn!("{e:}");
+                                    info!("{e:}");
                                 }
                             }
 
@@ -461,8 +502,6 @@ impl IterationService {
 
     fn convert_to_ros(msg: String) -> Result<RosMsg, RosError> {
 
-        warn!("My msg: {msg}");
-
         let yaml = match YamlLoader::load_from_str(&msg.replace("\n---\n", "")){
             Ok(y) => y,
             Err(e) => {
@@ -470,7 +509,9 @@ impl IterationService {
             },
         };
         
-        let ros_msg = yaml[0].as_hash().unwrap();
+        let ros_msg = yaml[0].as_hash().ok_or_else(|| RosError::FormatError(format!("YAML msg: {:?}", yaml[0])))?;
+
+
 
         let top_fields: Vec<_> = ros_msg
             .keys()
@@ -498,5 +539,57 @@ impl IterationService {
             )
         ).await;
     }
+
+
+    async fn compute_metrics<R: EvoArg>(&self, iter: &Iteration, args: &R, output_path: Option<&str>) -> Result<StatisticalMetrics, EvoError>{
+
+        //Write TUM files to temporary directory
+        let mut path = match output_path{
+            Some(p) => {
+                PathBuf::from(p)
+            },
+            None => {
+                env::temp_dir()
+            }
+        };
+
+        //WRITE GT TO A FILE -> THIS SHOULD NOT BE NEEDED IF THERE IS ALREADY A GT FILE. TODO
+        let mut path_gt = path.clone();
+
+        let ground_truth_data = self.repo.get_dataset(iter)
+            .await.unwrap()
+            .ground_truth  // Clone the Option first
+            .ok_or_else(|| ProcessingError::NotFound("Dataset Odometries were not found".into())).unwrap();       
+
+        
+        Self::write_file(&ground_truth_data, "groundtruth", &mut path_gt);
+
+
+        let odoms: Vec<Odometry> = self.repo.get_odometries(iter).await.unwrap();
+        Self::write_file(&odoms, &iter.container.container_name, &mut path);
+
+        let evo_ape_str = args.compute(path_gt.to_str().unwrap(), path.to_str().unwrap())?;
+        
+        let metric = StatisticalMetrics::from_str(&evo_ape_str); //TODO Dont unwrap() this
+        metric
+
+    }
+
+    fn write_file<'a>(data: &[Odometry], name: &str, path: &mut PathBuf) -> Result<(), std::io::Error>{
+
+        path.push(name.replace("/", "_"));
+
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(path)?;
+        
+            for odom in data {
+                writeln!(file, "{}", odom)?;
+            };
+        Ok(())
+    }
+
 
 }

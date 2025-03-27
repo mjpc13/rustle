@@ -53,7 +53,6 @@ impl AlgorithmRunRepo {
         Ok(())
     }
 
-
     pub async fn get_algorithm(
         &self,
         run: &AlgorithmRun
@@ -85,6 +84,82 @@ impl AlgorithmRunRepo {
 
     }
 
+    pub async fn set_aggregate_metrics(&self, run: &AlgorithmRun){
+
+        let run_id = run.id.clone()
+        .ok_or(DbError::MissingField("AlgorithmRun ID")).unwrap();
+
+        let result = self.conn.lock().await
+            .query("
+                SELECT
+                math::mean(
+                    array::union(
+                        array::union(
+                            (SELECT VALUE stats.mean FROM ->has_iteration->iteration->has_metric->metric WHERE metric_type = 'Cpu'),
+                            (SELECT VALUE ape.mean FROM ->has_iteration->iteration->has_metric->metric WHERE metric_type = 'PoseError')
+                        ),
+                        (SELECT VALUE rpe.mean FROM ->has_iteration->iteration->has_metric->metric WHERE metric_type = 'PoseError')
+                    )
+                ) AS mean_of_means,
+
+                math::max(
+                    array::union(
+                        array::union(
+                            (SELECT VALUE stats.max FROM ->has_iteration->iteration->has_metric->metric WHERE metric_type = 'Cpu'),
+                            (SELECT VALUE ape.max FROM ->has_iteration->iteration->has_metric->metric WHERE metric_type = 'PoseError')
+                        ),
+                        (SELECT VALUE rpe.max FROM ->has_iteration->iteration->has_metric->metric WHERE metric_type = 'PoseError')
+                    )
+                ) AS max_of_maxs,
+
+                math::min(
+                    array::union(
+                        array::union(
+                            (SELECT VALUE stats.min FROM ->has_iteration->iteration->has_metric->metric WHERE metric_type = 'Cpu'),
+                            (SELECT VALUE ape.min FROM ->has_iteration->iteration->has_metric->metric WHERE metric_type = 'PoseError')
+                        ),
+                        (SELECT VALUE rpe.min FROM ->has_iteration->iteration->has_metric->metric WHERE metric_type = 'PoseError')
+                    )
+                ) AS min_of_mins,
+
+                math::mean(
+                    array::filter(
+                        array::union(
+                            (SELECT VALUE ape.rmse FROM ->has_iteration->iteration->has_metric->metric WHERE metric_type = 'PoseError'),
+                            (SELECT VALUE rpe.rmse FROM ->has_iteration->iteration->has_metric->metric WHERE metric_type = 'PoseError')
+                        ),
+                        $value != NONE
+                    )
+                ) AS mean_rmse,
+
+                math::mean(
+                    array::filter(
+                        array::union(
+                            (SELECT VALUE ape.sse FROM ->has_iteration->iteration->has_metric->metric WHERE metric_type = 'PoseError'),
+                            (SELECT VALUE rpe.sse FROM ->has_iteration->iteration->has_metric->metric WHERE metric_type = 'PoseError')
+                        ),
+                        $value != NONE
+                    )
+                ) AS mean_sse,
+
+                math::stddev(
+                    array::filter(
+                        array::union(
+                            (SELECT VALUE ape.rmse FROM ->has_iteration->iteration->has_metric->metric WHERE metric_type = 'PoseError'),
+                            (SELECT VALUE rpe.rmse FROM ->has_iteration->iteration->has_metric->metric WHERE metric_type = 'PoseError')
+                        ),
+                        $value != NONE
+                    )
+                ) AS std_rmse
+                FROM $algorithm_run_id
+            ")
+            .bind(("run_id", run_id.clone()))
+            .await.unwrap();
+
+        warn!("My thing: {:?}", result);
+
+    }
+
 
 }
 
@@ -113,3 +188,5 @@ impl AlgorithmRunRepo {
     //        .take(0)
     //        .map_err(|e| DbError::Operation(e))
     //}
+
+

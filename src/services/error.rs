@@ -47,14 +47,14 @@ impl std::fmt::Display for ValidationError {
 impl std::error::Error for ValidationError {}
 
 //Metric Errors
-#[derive(Debug, thiserror::Error)]
-pub enum MetricError {
-    #[error("Validation error: {0}")]
-    Validation(String),
-    
-    #[error("Database error: {0}")]
-    Database(#[from] surrealdb::Error),
-}
+//#[derive(Debug, thiserror::Error)]
+//pub enum MetricError {
+//    #[error("Validation error: {0}")]
+//    Validation(String),
+//    
+//    #[error("Database error: {0}")]
+//    Database(#[from] surrealdb::Error),
+//}
 
 //ROS errors
 #[derive(Debug, thiserror::Error)]
@@ -150,4 +150,15 @@ pub enum RunError {
     
     #[error("Task failed to complete: {0}")]
     Join(#[from] tokio::task::JoinError),
+}
+
+#[derive(Debug,Error)]
+pub enum EvoError{
+
+    #[error("Could not run evo tool: {0}")]
+    MissingEvo(String),
+
+    #[error("Evo command error: {0}")]
+    CommandError(String),
+
 }

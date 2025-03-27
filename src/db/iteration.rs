@@ -4,7 +4,7 @@ use log::{info, warn};
 // db/iteration.rs
 use surrealdb::{Surreal, engine::local::Db, sql::Thing};
 use tokio::sync::Mutex;
-use crate::{models::{iteration::Iteration, Algorithm, AlgorithmRun, Dataset, TestDefinition}, services::DbError};
+use crate::{models::{iteration::Iteration, Algorithm, AlgorithmRun, Dataset, Odometry, TestDefinition}, services::DbError};
 
 #[derive(Clone)]
 pub struct IterationRepo {
@@ -172,6 +172,40 @@ impl IterationRepo {
         }
 
 
+    }
+
+    pub async fn get_odometries(&self, iter: &Iteration) -> Result<Vec<Odometry>, DbError>{
+
+
+        let iteration_id = iter.id.clone()
+        .ok_or(DbError::MissingField("Iteration ID"))?;
+
+        let mut result = self.conn.lock().await
+            .query("
+                SELECT ->has_odometry->odometry.* AS odometries
+                FROM $iteration_id
+            ")
+            .bind(("iteration_id", iteration_id.clone()))
+            .await?;
+
+        //let odoms: Option<Vec<Odometry>> = result.take("odometries")?;
+
+        // Handle nested array structure from graph query
+        let nested_odoms: Vec<Vec<Odometry>> = result.take("odometries")?;
+    
+        // Flatten the results
+        let odometries = nested_odoms
+            .into_iter()
+            .flatten()
+            .collect::<Vec<Odometry>>();
+
+        if odometries.is_empty() {
+            Err(DbError::NotFound(
+                format!("No odometry data found for iteration {}", iteration_id)
+            ))
+        } else {
+            Ok(odometries)
+        }
     }
 
 
