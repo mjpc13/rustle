@@ -2,7 +2,7 @@ test_definitions:
   - name: "Simple Test"
     workers: 2
     iterations: 2
-    algo_list: ["ig-LIO"]
+    algo_list: ["LIO-SAM", "ig-LIO"]
     dataset_name: "botanic_garden"
     test_type:
       type: simple  # Enum variant name
@@ -14,4 +14,4 @@ test_definitions:
 #    dataset_name: "botanic_garden"
 #    test_type: 
 #      type: speed
-#      speed_factors: [1.0, 2.0, 4.0]
+#      speed_factors: [1.0, 4.0, 10]
