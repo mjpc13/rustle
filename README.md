@@ -1,65 +1,154 @@
-# RustLE -  Reliable Unitary Simple Tests for Localization Experiments - WIP
+# RUSTLE -  Reliable User-friendly and Simple Tests for Localization Experiments - Work In Progress
 
-## Getting Starting to develop
+## Getting Start
 
-The only non-cargo dependency is the [evo evaluation tool](https://github.com/MichaelGrupp/evo), that can be installed with pip:
+### Using Nix
 
+The easiest way to start is with the [nix package manager](https://nixos.org/)
+
+You can install the Nix package manager with:
 ```
-pip install evo
+sh <(curl -L https://nixos.org/nix/install) --daemon
 ```
+Then, in the directory of the rust project just run:
+```
+nix develop
+```
+This will install every dependency needed and link them into your current shell. Be carefull, as the dependencies will not 
+be available elsewhere! If you need the dependencies in multiple terminal windows you should use the nix shell command in
+all of them.
 
-During initial tests I am using the the [park_dataset.bag](https://drive.google.com/drive/folders/1gJHwfdHCRdjP7vuT556pv8atqrCJPbUq) (3.22GB)
+### Non-nix instalation
+
+You need to install manually the following dependencies:
+- [evo](https://github.com/MichaelGrupp/evo)
+- pkg-config
+- fontconfig
+- [surrealdb](https://surrealdb.com/install)
 
 
+### Initial developing dataset
 
-## Dependencies
-
-pkg-config fontconfig
-
+It is also required to download a rosbag dataset to start working with this tool. During initial development I am using the the [park_dataset.bag](https://drive.google.com/drive/folders/1gJHwfdHCRdjP7vuT556pv8atqrCJPbUq) (3.22GB) from the [Botanic Garden dataset](https://github.com/robot-pesg/BotanicGarden).
 
 ## Running code
 
-To build:
-```
-cargo build
+
+To start running this tool you need to provide the following YAML files:
+- datasets.yaml
+- algorithms.yaml
+- tests.yaml
+
+Examples of these files:
+
+```yaml
+#datasets.yaml
+datasets:
+  - name: "botanic_garden"
+    ground_truth_topic: "/gt_poses"
+    dataset_path: "/home/mjpc13/Documents/rustle/test/dataset/"
+    tag: ["Botanic"]
 ```
 
-To run with all log levels:
+```yaml
+#algorithms.yaml
+algorithms:
+  - name: "ig-LIO"
+    version: "1.0"
+    image_name: "mjpc13/rustle:ig-lio"
+    parameters: "/home/mjpc13/Documents/rustle/test/config/ig-lio/params.yaml"
+    odom_topics: ["/lio_odom"]
+
+  - name: "LIO-SAM"
+    version: "2.1"
+    image_name: "mjpc13/rustle:lio-sam"
+    parameters: "/home/mjpc13/Documents/rustle/test/config/lio-sam/params.yaml"
+    odom_topics: ["/lio_sam/mapping/odometry_incremental"]
+```
+
+```yaml
+#tests.yaml
+test_definitions:
+  - name: "Simple Test"
+    workers: 2
+    iterations: 2
+    algo_list: ["ig-LIO", LIO-SAM]
+    dataset_name: "botanic_garden"
+    test_type:
+      type: simple
+
+  - name: "Performance Stress Test"
+    workers: 1
+    iterations: 1
+    algo_list: ["ig-LIO"]
+    dataset_name: "botanic_garden"
+    test_type: 
+      type: speed
+      speed_factors: [1.0, 2.0, 4.0]
+```
+
+
+To run the code with all log levels use:
 ```
 RUST_LOG=rustle cargo run
 ```
 
-At the end of each try you must manually remove the docker container created (latter in the development I will make this automatic, 
-for now its usefull to be able to access the container afterwards):
-```
-docker rm -f rustle-task
-```
-
 ## Project Structure
 
+This is a high-level view of the codebase:
 ```bash
 ├── Cargo.toml
-├── docker/ --> Folder for the dockers of different algorithms (like lio-sam or robot-localization)
+├── docker/ --> Folder for the dockers of different algorithms
 │   ├── lio-sam/
 │   │   ├── Dockerfile --> Dockerfile to build the algorithm
-│   │   ├── entrypoint.sh --> entrypoint of the docker file (maybe not needed anymore)
-│   │   └── rustle.launch --> Default launch for the algorithm (loads our custom params)
-│   ├── mars/
-│   │   └── Dockerfile
-│   └── robot-localization/
+│   │   └── rustle.launch --> Default launch for the algorithm
+│   └── ig-lio/
 │       ├── Dockerfile
-│       ├── entrypoint.sh
 │       └── rustle.launch
 ├── src/ -> Folder where the main code is stored
-│   ├── db.rs -> implements methods for storing and fetching data from SurrealDB
-│   ├── errors.rs -> file where our custom errors are declared
+│   ├── db/ -> Handles access/requests to the database
+│   ├── models/ -> defines the structs/objects used in RUSTLE
+│   │   ├── metrics/ --> Structs for different metrics
+│   │   └── ros/ --> Structs to define/parse different ROS messages
+│   ├── services/ -> Contains the main business logic
+│   │   └── errors.rs -> file where our custom errors are declared
+│   ├── utils/ -> Contains some usefull functions/methods
+│   │   └── evo_wrapper.rs --> Wrapper on the EVO tool
 │   ├── lib.rs -> library API file
 │   ├── main.rs -> execution file
-│   ├── metrics.rs -> responsible to extract the metrics from the algorithm
 │   └── task.rs -> Responsible to create and run the algorithms and statistics
 └── test/ -> folder with some configurations to test in development
     └── config/
         └── params.yaml
     └── dataset/
         └── park_dataset.bag
+```
+
+### Database structure
+
+![Database Structure](images/rustle_db_structure.png)
+
+
+
+## Developing guides
+
+### Access the database
+
+If you chose to use nix you have a nice command available:
+`rustle_db`
+
+This spins an instance of test/db/ (the default location of the surreal database). To connect to the database instance use an 
+application such as [surrealist](https://surrealist.app/c/oro4XQ0Oq/designer) and start a new connection in *localhost*. The user and password are both *root*. Now you are free to see, add, delete the database records.
+
+If you are not using nix, use the following command:
+```
+surreal start --log debug --user root --pass root "rocksdb://$RUSTLE_ROOT/test/db/"
+```
+
+### Clean residual artifacts
+
+If you are using nix you can run the clean command to clean **ALL** the docker containers, the database and the results.
+
+```
+rustle_clean
 ```
