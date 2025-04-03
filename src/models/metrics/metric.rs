@@ -18,6 +18,60 @@ pub struct Metric {
 }
 
 
+impl Metric {
+    pub fn mean(metrics: Vec<Metric>) -> Vec<Metric> {
+
+        let mut result: Vec<Metric> = Vec::new();
+
+        //Vec of pose metrics
+        let pose_metrics: Vec<&PoseErrorMetrics> = metrics.iter()
+        .filter_map(|m| match &m.metric_type {
+            MetricType::PoseError(p) => Some(p),
+            _ => None
+        })
+        .collect();
+
+        //Vec with only CPU metrics
+        let cpu_metrics: Vec<&CpuMetrics> = metrics.iter()
+        .filter_map(|m| match &m.metric_type {
+            MetricType::Cpu(p) => Some(p),
+            _ => None
+        })
+        .collect();
+
+        //Add more possible future metrics here
+
+        //Compute mean of vector of PoseMetrics
+        let agg_pose = PoseErrorMetrics::mean(&pose_metrics);
+
+        if let Some(pose) = agg_pose {
+
+            let metric = Metric {
+                id: None,
+                metric_type: MetricType::PoseError(pose),
+
+            };
+
+            result.push(metric);
+        }
+        
+        //Compute mean of vector of CPU metrics
+        let agg_cpu = CpuMetrics::mean(&cpu_metrics);
+
+        if let Some(cpu) = agg_cpu {
+            let metric = Metric {
+                id: None,
+                metric_type: MetricType::Cpu(cpu),
+
+            };
+            result.push(metric);        
+        }
+        
+        result
+    }
+}
+
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "PascalCase")]
 pub enum MetricType{
@@ -75,8 +129,6 @@ impl StatisticalMetrics{
         }
     }
 }
-
-
 
 
 impl FromStr for StatisticalMetrics {
