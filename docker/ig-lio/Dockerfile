@@ -11,7 +11,6 @@ LABEL maintainer="Mario Cristovao <mario.cristovao@isr.uc.pt>"
 LABEL description="iG-LIO Environment for Rustle"
 ### END METADATA ###
 
-
 ### INSTALL DEPENDENCIES ###
 RUN apt-get update \
   && apt-get install -y curl git \

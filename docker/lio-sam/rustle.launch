@@ -1,18 +1,21 @@
 <launch>
 
-    <arg name="project" default="lio_sam"/>
     <param name="/use_sim_time" value="true"/>
+    <arg name="test_type" default="simple"/>  <!-- or any default value -->
+
+    <arg name="project" if="$(eval arg('test_type') == 'simple')" value="lio_sam"/>
+    <arg name="project" if="$(eval arg('test_type') == 'speed')" value="lio_sam_speed"/>
 
     <!-- Parameters -->
     <rosparam file="/rustle/config/params.yaml" command="load" />
 
     <!--- LOAM -->
-    <include file="$(find lio_sam)/launch/include/module_loam.launch" />
+    <include file="$(eval find(arg('project')))/launch/include/module_loam.launch" />
 
     <!--- Robot State TF -->
-    <include file="$(find lio_sam)/launch/include/module_robot_state_publisher.launch" />
+    <include file="$(eval find(arg('project')))/launch/include/module_robot_state_publisher.launch"/>
 
     <!--- Run Navsat -->
-    <include file="$(find lio_sam)/launch/include/module_navsat.launch" />
+    <include file="$(eval find(arg('project')))/launch/include/module_navsat.launch" />
 
 </launch>
