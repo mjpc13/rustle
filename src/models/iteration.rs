@@ -8,6 +8,7 @@ use surrealdb::sql::Thing;
 pub struct Iteration {
     pub id: Option<Thing>,
     pub iteration_num: u8,
+    pub test_type: String,
     pub container: DockerContainer,
     pub created_at: DateTime<Utc>,
     //pub docker_socket: Arc<Docker>
@@ -20,7 +21,7 @@ pub struct DockerContainer{
 }
 
 impl Iteration {
-    pub fn new(iteration_num: u8, container: DockerContainer) -> Self {
+    pub fn new(iteration_num: u8, container: DockerContainer, test_type: String) -> Self {
 
         let docker = Docker::connect_with_local_defaults()
         .map_err(|e| format!("Failed to connect to Docker: {}", e)).unwrap();
@@ -32,6 +33,7 @@ impl Iteration {
             id: None,
             iteration_num,
             container,
+            test_type,
             created_at: Utc::now(),
             //docker_socket: docker
         }
