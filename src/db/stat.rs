@@ -1,8 +1,9 @@
 use std::sync::Arc;
 
+use log::warn;
 use surrealdb::{engine::local::Db, Surreal, sql::Thing};
 use tokio::sync::Mutex;
-use crate::{models::stat::ContainerStats, services::error::DbError};
+use crate::{models::{metrics::stat::ContainerStats, Iteration}, services::{error::DbError, iteration}};
 
 #[derive(Clone)]
 pub struct StatRepo {
@@ -38,11 +39,28 @@ impl StatRepo {
         Ok(())
     }
 
-    //pub async fn get_by_iteration(&self, iteration_id: &Thing) -> Result<Vec<ContainerStats>, DbError> {
-    //    self.conn
-    //        .query("SELECT <-has_stat<-iteration.* FROM stat WHERE iteration_id = $iteration_id")
-    //        .bind(("iteration_id", iteration_id))
-    //        .await?
-    //        .take(0)
-    //}
+    pub async fn get_by_iteration(&self, iteration: &Iteration) -> Result<Vec<ContainerStats>, DbError> {
+        
+        let iteration_id = iteration.id.clone()
+        .ok_or(DbError::MissingField("Iteration ID"))?;
+
+        warn!("POIS {:?}", iteration_id);
+
+
+        let mut result = self.conn.lock().await
+            .query("SELECT 
+                        (SELECT * FROM $iteration_id->has_stat->stat ORDER BY created_at ASC) AS stats
+                    FROM $iteration_id"
+                )
+            .bind(("iteration_id", iteration_id.clone()))
+            .await.unwrap();
+
+
+        let stats_opt: Option<Vec<ContainerStats>> = result.take("stats").unwrap();
+
+        warn!("My result for stats: {:?}", stats_opt);
+
+        stats_opt.ok_or(DbError::NotFound("No stat was found for iteration.".to_owned()))
+
+        }
 }

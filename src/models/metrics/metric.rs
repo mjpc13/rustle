@@ -78,7 +78,6 @@ pub enum MetricType{
     Cpu(CpuMetrics),
     PoseError(PoseErrorMetrics),
 }
-
 impl MetricType {
     pub fn type_name(&self) -> &'static str {
         match self {

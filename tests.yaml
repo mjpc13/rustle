@@ -1,8 +1,8 @@
 test_definitions:
   - name: "Simple Test"
-    workers: 2
+    workers: 4
     iterations: 2
-    algo_list: ["LIO-SAM", "ig-LIO"]
+    algo_list: ["ig-LIO", "LIO-SAM"]
     dataset_name: "botanic_garden"
     test_type:
       type: simple  # Enum variant name

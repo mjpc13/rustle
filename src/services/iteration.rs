@@ -18,11 +18,12 @@ use crate::models::metric::Metric;
 use crate::models::metrics::metric::StatisticalMetrics;
 
 use crate::models::metrics::pose_error::PoseErrorMetrics;
+use crate::models::metrics::{ContainerStats, CpuMetrics};
 use crate::utils::evo_wrapper::{EvoApeArg, EvoRpeArg};
 use crate::{
     db::{iteration::IterationRepo, OdometryRepo}, 
     models::{iteration::{DockerContainer, Iteration}, 
-    ros::ros_msg::RosMsg, Algorithm, ContainerStats, Dataset, Odometry}, 
+    ros::ros_msg::RosMsg, Algorithm, Dataset, Odometry}, 
     services::error::{DbError, ProcessingError, RosError}, 
     utils::evo_wrapper::EvoArg
 };
@@ -87,8 +88,8 @@ impl IterationService {
         //get the corresponding algorithm run
         let algorithm_run = self.repo.get_algorithm_run(&iter).await.unwrap();
 
-        //let cmd = format!("rosbag play -r {} --clock /rustle/dataset/*.bag", algorithm_run.bag_speed);
-        let cmd = format!("rosbag play -d 9 -r {} --clock -u 50 /rustle/dataset/*.bag", algorithm_run.bag_speed);
+        let cmd = format!("rosbag play -r {} --clock /rustle/dataset/*.bag", algorithm_run.bag_speed);
+        //let cmd = format!("rosbag play -d 9 -r {} --clock -u 50 /rustle/dataset/*.bag", algorithm_run.bag_speed);
         let rustle_cmd = format!("roslaunch rustle rustle.launch --wait test_type:={}", &iter.test_type);
 
         
@@ -286,7 +287,20 @@ impl IterationService {
         let ten_sec = time::Duration::from_secs(5);
         thread::sleep(ten_sec);
 
+        let iteration_id_clone = iter.id
+            .clone()  // Clone the Option first
+            .ok_or_else(|| ProcessingError::NotFound("Iteration ID".into())).unwrap();
+
         let _ = self.remove_container(&iter.container.container_name).await;
+
+        let stats = self.stat_service.get_stats(&iter).await.unwrap();
+
+        let cpu_metric_opt = CpuMetrics::from_stats(&stats);
+
+        if let Some(cpu_metric) = cpu_metric_opt {
+            let _ = self.metric_service.create_cpu_metric(iteration_id_clone.clone(), cpu_metric).await.unwrap();  
+        }
+
 
         let ape_args = EvoApeArg{
                     //plot: Some(PlotArg::default()),
@@ -302,14 +316,6 @@ impl IterationService {
 
         let ape = self.compute_metrics(&iter, &ape_args, None).await.unwrap();
         let rpe = self.compute_metrics(&iter, &rpe_args, None).await.unwrap();
-
-        //Create a metric object.
-        //let metric = Metr
-
-        let iteration_id_clone = iter.id
-            .clone()  // Clone the Option first
-            .ok_or_else(|| ProcessingError::NotFound("Iteration ID".into())).unwrap();
-
 
 
 

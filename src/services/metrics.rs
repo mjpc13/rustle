@@ -66,6 +66,25 @@ impl MetricService {
         Ok(metric)
     }
 
+
+    pub async fn create_cpu_metric(
+        &self,
+        iteration_id: Thing,
+        cpu_metric: CpuMetrics,
+    ) -> Result<Metric, ProcessingError> {
+        
+        let mut metric = Metric{
+            id: None,
+            metric_type: MetricType::Cpu(cpu_metric)
+        };
+        
+        self.repo.save(&mut metric, &iteration_id).await?;
+        Ok(metric)
+    }
+
+
+
+
     fn compute_stats(values: &[f64], is_pose_error: bool) -> StatisticalMetrics {
         let mut sorted = values.to_vec();
         sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
