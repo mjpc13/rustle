@@ -75,7 +75,6 @@ impl TestExecutionService {
         let algo_run_list = self.execution_repo.get_algorithm_runs(execution_id).await?;
         
         for algo_run in algo_run_list{
-            info!("One AR!!!");
             self.algorithm_run_service.set_aggregate_metrics(&algo_run).await;
         }
 
@@ -95,7 +94,8 @@ impl TestExecutionService {
                 1.0,
                 execution.num_iterations,
                 &execution.id.as_ref().unwrap(),
-                &algorithm.id.clone().unwrap()
+                &algorithm.id.clone().unwrap(),
+                "simple"
             ).await?;
 
         }
@@ -118,7 +118,8 @@ impl TestExecutionService {
                     *speed_setting,
                     execution.num_iterations,
                     &execution.id.as_ref().unwrap(),
-                    &algorithm.id.clone().unwrap()
+                    &algorithm.id.clone().unwrap(),
+                    "speed"
                 ).await?;
             }
         }

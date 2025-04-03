@@ -45,7 +45,7 @@ impl IterationService {
         Self { repo, docker, ros_service, dataset_service, stat_service, metric_service }
     }
 
-    pub async fn create(&self, iter_number: u8, algo:Algorithm, algorithm_run_id: &Thing) -> Result<(), DbError> {
+    pub async fn create(&self, iter_number: u8, algo:Algorithm, algorithm_run_id: &Thing, test_type: String) -> Result<(), DbError> {
         
         let sanitized = algo.name.replace(|c: char| !c.is_alphanumeric(), "_")
         .to_lowercase();
@@ -67,7 +67,8 @@ impl IterationService {
             id: None,
             iteration_num: iter_number,
             container: docker_container,
-            created_at: Utc::now()
+            created_at: Utc::now(),
+            test_type,
         };
 
 
@@ -88,12 +89,15 @@ impl IterationService {
 
         //let cmd = format!("rosbag play -r {} --clock /rustle/dataset/*.bag", algorithm_run.bag_speed);
         let cmd = format!("rosbag play -d 9 -r {} --clock -u 50 /rustle/dataset/*.bag", algorithm_run.bag_speed);
+        let rustle_cmd = format!("roslaunch rustle rustle.launch --wait test_type:={}", &iter.test_type);
 
+        
 
+        
 
         //Vector of commands to run inside the container
         let commands: Vec<_> = vec![
-            "roslaunch rustle rustle.launch --wait",
+            &rustle_cmd,
             &cmd
         ];
         let execs: Vec<_> = future::try_join_all(commands
@@ -214,7 +218,7 @@ impl IterationService {
 
 
        // Wait a certain number of seconds for the algorithm to init
-       let ten_sec = time::Duration::from_secs(10);
+       let ten_sec = time::Duration::from_secs(5);
        thread::sleep(ten_sec);
 
        //Start the STATS collection
@@ -272,12 +276,15 @@ impl IterationService {
                 //Loop to give the prints;
         });
                 
-        tokio::join!(rosplay_task);
+        let _ = tokio::join!(rosplay_task);
         debug!("Stopped rosbag play, send cancel signal to the other tasks");
         token.cancel(); // the end of the rosbag will be the first point where the other tasks need
         // to stop
-        tokio::join!(roslaunch_task);
+        let _ = tokio::join!(roslaunch_task);
         debug!("Stopped roslaunch");
+
+        let ten_sec = time::Duration::from_secs(5);
+        thread::sleep(ten_sec);
 
         let _ = self.remove_container(&iter.container.container_name).await;
 

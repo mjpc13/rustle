@@ -1,11 +1,12 @@
 use std::sync::Arc;
 
 use log::warn;
+use serde_json::Value;
 // db/algorithm_run.rs
 use surrealdb::{engine::local::Db, sql::Thing, Response, Surreal};
 use tokio::sync::Mutex;
 
-use crate::{models::{Algorithm, AlgorithmRun}, services::DbError};
+use crate::{models::{metric::Metric, Algorithm, AlgorithmRun}, services::DbError};
 
 pub struct AlgorithmRunRepo {
     conn: Arc<Mutex<Surreal<Db>>>,
@@ -84,80 +85,61 @@ impl AlgorithmRunRepo {
 
     }
 
-    pub async fn set_aggregate_metrics(&self, run: &AlgorithmRun){
+//    pub async fn get_metrics(
+//        &self,
+//        run: &AlgorithmRun
+//    ) -> Result<Vec<Metric>, DbError> {
+//        let run_id = run.id.clone()
+//            .ok_or(DbError::MissingField("AlgorithmRun ID"))?;
+//
+//            //let mut result = self.conn.lock().await
+//            //.query("
+//            //    SELECT 
+//            //        id,
+//            //        metric_type.* 
+//            //    FROM $run_id->has_iteration->iteration->has_metric->metric
+//            //")
+//            //.bind(("run_id", run_id.clone()))
+//            //.await?;
+//
+//        //let metric: Option<Vec<Thing>> = result.take(0)?;
+//
+//        let mut result = self.conn.lock().await
+//        .query("
+//            SELECT 
+//                id,
+//                metric_type.* 
+//            FROM $run_id->has_iteration->iteration->has_metric->metric
+//        ")
+//        .bind(("run_id", run_id.clone()))
+//        .await?;
+//
+//        //warn!("My vec metrics: {:?}", result);
+//        let metrics: Vec<Metric> = result.take(0).unwrap();
+//
+//        if metrics.is_empty() {
+//            Err(DbError::NotFound(format!("No metrics found for run {}", run_id)))
+//        } else {
+//            Ok(metrics)
+//        }
+//
+//    }
 
+    pub async fn get_metrics(&self, run: &AlgorithmRun) -> Result<Vec<Metric>, DbError> {
         let run_id = run.id.clone()
-        .ok_or(DbError::MissingField("AlgorithmRun ID")).unwrap();
-
-        let result = self.conn.lock().await
+            .ok_or(DbError::MissingField("AlgorithmRun ID"))?;
+    
+        let mut result = self.conn.lock().await
             .query("
-                SELECT
-                math::mean(
-                    array::union(
-                        array::union(
-                            (SELECT VALUE stats.mean FROM ->has_iteration->iteration->has_metric->metric WHERE metric_type = 'Cpu'),
-                            (SELECT VALUE ape.mean FROM ->has_iteration->iteration->has_metric->metric WHERE metric_type = 'PoseError')
-                        ),
-                        (SELECT VALUE rpe.mean FROM ->has_iteration->iteration->has_metric->metric WHERE metric_type = 'PoseError')
-                    )
-                ) AS mean_of_means,
-
-                math::max(
-                    array::union(
-                        array::union(
-                            (SELECT VALUE stats.max FROM ->has_iteration->iteration->has_metric->metric WHERE metric_type = 'Cpu'),
-                            (SELECT VALUE ape.max FROM ->has_iteration->iteration->has_metric->metric WHERE metric_type = 'PoseError')
-                        ),
-                        (SELECT VALUE rpe.max FROM ->has_iteration->iteration->has_metric->metric WHERE metric_type = 'PoseError')
-                    )
-                ) AS max_of_maxs,
-
-                math::min(
-                    array::union(
-                        array::union(
-                            (SELECT VALUE stats.min FROM ->has_iteration->iteration->has_metric->metric WHERE metric_type = 'Cpu'),
-                            (SELECT VALUE ape.min FROM ->has_iteration->iteration->has_metric->metric WHERE metric_type = 'PoseError')
-                        ),
-                        (SELECT VALUE rpe.min FROM ->has_iteration->iteration->has_metric->metric WHERE metric_type = 'PoseError')
-                    )
-                ) AS min_of_mins,
-
-                math::mean(
-                    array::filter(
-                        array::union(
-                            (SELECT VALUE ape.rmse FROM ->has_iteration->iteration->has_metric->metric WHERE metric_type = 'PoseError'),
-                            (SELECT VALUE rpe.rmse FROM ->has_iteration->iteration->has_metric->metric WHERE metric_type = 'PoseError')
-                        ),
-                        $value != NONE
-                    )
-                ) AS mean_rmse,
-
-                math::mean(
-                    array::filter(
-                        array::union(
-                            (SELECT VALUE ape.sse FROM ->has_iteration->iteration->has_metric->metric WHERE metric_type = 'PoseError'),
-                            (SELECT VALUE rpe.sse FROM ->has_iteration->iteration->has_metric->metric WHERE metric_type = 'PoseError')
-                        ),
-                        $value != NONE
-                    )
-                ) AS mean_sse,
-
-                math::stddev(
-                    array::filter(
-                        array::union(
-                            (SELECT VALUE ape.rmse FROM ->has_iteration->iteration->has_metric->metric WHERE metric_type = 'PoseError'),
-                            (SELECT VALUE rpe.rmse FROM ->has_iteration->iteration->has_metric->metric WHERE metric_type = 'PoseError')
-                        ),
-                        $value != NONE
-                    )
-                ) AS std_rmse
-                FROM $algorithm_run_id
+                SELECT *
+                FROM $run_id->has_iteration->iteration->has_metric->metric
             ")
             .bind(("run_id", run_id.clone()))
-            .await.unwrap();
-
-        warn!("My thing: {:?}", result);
-
+            .await?;
+    
+        let metrics: Vec<Metric> = result.take(0)?;
+    
+        Ok(metrics)
     }
 
 

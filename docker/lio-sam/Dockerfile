@@ -35,6 +35,22 @@ WORKDIR ${ROS_WS}
 #Clone only latest commit, initialize and update nested submodules 
 RUN git clone --depth 1 --recurse-submodules https://github.com/TixiaoShan/LIO-SAM.git src/LIO-SAM
 
+
+### CLONE ANOTHER VERSION TO REDUCE THE QUEUE SIZE TO 1 FOR THE SPEED TEST
+RUN git clone --depth 1 --recurse-submodules https://github.com/TixiaoShan/LIO-SAM.git src/LIO-SAM_speed
+
+#Replaces their subscriber queue to 1
+RUN sed -i '59s/5/1/;60s/2000/1/;209s/2000/1/;210s/5/1/;' src/LIO-SAM_speed/src/imuPreintegration.cpp
+RUN sed -i '171s/200/1/;' src/LIO-SAM_speed/src/mapOptmization.cpp
+RUN sed -i '94s/2000/1/;95s/2000/1/;96s/5/1/;' src/LIO-SAM_speed/src/imageProjection.cpp
+RUN sed -i 's/^project(lio_sam)$/project(lio_sam_speed)/' src/LIO-SAM_speed/CMakeLists.txt
+RUN sed -i 's/<name>lio_sam<\/name>/<name>lio_sam_speed<\/name>/g' src/LIO-SAM_speed/package.xml
+RUN sed -i 's/lio_sam/lio_sam_speed/g'   src/LIO-SAM_speed/src/imageProjection.cpp
+RUN sed -i 's/lio_sam/lio_sam_speed/g'   src/LIO-SAM_speed/src/featureExtraction.cpp
+RUN sed -i 's/lio_sam/lio_sam_speed/g'   src/LIO-SAM_speed/src/mapOptmization.cpp
+
+
+
 # Build ros package source
 RUN catkin config --extend /opt/ros/$ROS_DISTRO && catkin create pkg -p src/ rustle
 

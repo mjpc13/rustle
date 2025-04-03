@@ -1,5 +1,7 @@
+use std::collections::HashMap;
+
 use crate::{
-    db::AlgorithmRunRepo, models::algorithm_run::{AlgorithmRun, RunAggregates}, services::error::ProcessingError
+    db::AlgorithmRunRepo, models::{algorithm_run::{AlgorithmRun, RunAggregates}, metric::{Metric, MetricType}, metrics::{CpuMetrics, PoseErrorMetrics}}, services::error::ProcessingError
 };
 
 use log::warn;
@@ -22,7 +24,8 @@ impl AlgorithmRunService {
         bag_speed: f32,
         num_iterations: u8,
         test_execution_id: &Thing,
-        algorithm_id: &Thing
+        algorithm_id: &Thing, 
+        test_type: &str
     ) -> Result<AlgorithmRun, ProcessingError> {
 
         let mut run = AlgorithmRun::new(bag_speed, num_iterations);
@@ -36,7 +39,7 @@ impl AlgorithmRunService {
             let algo = self.repo.get_algorithm(&run).await?;
 
             match run.id.clone(){
-                Some(thing) => self.iter_service.create(i, algo, &thing).await?,
+                Some(thing) => self.iter_service.create(i, algo, &thing, test_type.to_string()).await?,
                 None => warn!("ID of algorithm_run was empty")
             };
 
@@ -46,8 +49,63 @@ impl AlgorithmRunService {
     }
 
     pub async fn set_aggregate_metrics(&self, run: &AlgorithmRun){
-        self.repo.set_aggregate_metrics(run).await;
+
+        let metric_list = self.repo.get_metrics(run).await.unwrap(); //get metrics associated with the algo run (metrics of the iterations)
+
+
+        //Vec of pose metrics
+        let pose_metrics: Vec<&PoseErrorMetrics> = metric_list.iter()
+        .filter_map(|m| match &m.metric_type {
+            MetricType::PoseError(p) => Some(p),
+            _ => None
+        })
+        .collect();
+
+        //Vec with only CPU metrics
+        let cpu_metrics: Vec<&CpuMetrics> = metric_list.iter()
+        .filter_map(|m| match &m.metric_type {
+            MetricType::Cpu(p) => Some(p),
+            _ => None
+        })
+        .collect();
+
+        //Compute mean of vector of PoseMetrics
+        let agg_pose = PoseErrorMetrics::mean(&pose_metrics);
+
+
+        //Compute mean of vector of CPU metrics
+        let agg_cpu = CpuMetrics::mean(&cpu_metrics);
+
+
+        warn!("My agg pose for a run of: {:?}", agg_pose);
+
+
+
+
+
+
+
+
+
+        //APPROACH DEUX
+        //let groups = group_metrics(metric_list);
+        // Access CPU metrics
+        //if let Some(cpu_metrics) = groups.get::<CpuMetrics>() {
+        //    // cpu_metrics is Vec<&CpuMetrics>
+        //}
+
+        //// Access pose error metrics
+        //if let Some(pose_metrics) = groups.get::<PoseErrorMetrics>() {
+        //    // pose_metrics is Vec<&PoseErrorMetrics>
+        //}
+
+
+
+        //warn!("My metrics: {:?}", metric_list);
+
+
     }
+
 
     //pub async fn add_iteration(
     //    &mut self,
@@ -78,4 +136,40 @@ impl AlgorithmRunService {
     //            secs.max(acc)
     //        });
     //}
+
+
+
+}
+
+
+
+fn group_metrics(metrics: Vec<Metric>) -> MetricGroups {
+    let mut groups = MetricGroups::default();
+    for metric in metrics {
+        groups.add(&metric);
+    }
+    groups
+}
+
+
+//A Struct to easily get the multiple metrics in a Vec<Metric>
+#[derive(Default)]
+struct MetricGroups {
+    inner: HashMap<&'static str, Vec<Box<dyn std::any::Any>>>,
+}
+
+impl MetricGroups {
+    pub fn add(&mut self, metric: &Metric) {
+        let type_name = metric.metric_type.type_name();
+        let entry = self.inner.entry(type_name).or_default();
+        entry.push(Box::new(metric.metric_type.clone()));
+    }
+
+    pub fn get<T: 'static>(&self) -> Option<Vec<&T>> {
+        self.inner.get(std::any::type_name::<T>())
+            .map(|vec| vec.iter()
+                .filter_map(|any| any.downcast_ref::<T>())
+                .collect()
+            )
+    }
 }

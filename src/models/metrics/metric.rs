@@ -3,8 +3,9 @@ use std::{collections::HashMap, str::FromStr};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use itertools::Itertools;
+use serde_json::Value;
 
-use crate::services;
+use crate::services::{self, DbError};
 use surrealdb::sql::Thing;
 use super::{cpu::CpuMetrics, pose_error::PoseErrorMetrics};
 
@@ -12,14 +13,36 @@ use super::{cpu::CpuMetrics, pose_error::PoseErrorMetrics};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Metric {
     pub id: Option<Thing>,
+    #[serde(rename = "metric_type")] // Matches SurrealDB's field name
     pub metric_type: MetricType
 }
 
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "PascalCase")]
 pub enum MetricType{
     Cpu(CpuMetrics),
     PoseError(PoseErrorMetrics),
+}
+
+impl MetricType {
+    pub fn type_name(&self) -> &'static str {
+        match self {
+            MetricType::Cpu(_) => "cpu",
+            MetricType::PoseError(_) => "pose_error",
+        }
+    }
+    
+    pub fn as_any(&self) -> &dyn std::any::Any {
+        match self {
+            MetricType::Cpu(m) => m,
+            MetricType::PoseError(m) => m,
+        }
+    }
+}
+pub trait MetricTypeInfo {
+    fn type_name(&self) -> &'static str;
+    fn as_any(&self) -> &dyn std::any::Any;
 }
 
 
@@ -34,6 +57,27 @@ pub struct StatisticalMetrics {
     pub rmse: Option<f64>,    // Only for pose errors
     pub sse: Option<f64>,     // Only for pose errors
 }
+
+
+impl StatisticalMetrics{
+    // Helper to compute mean of StatisticalMetrics
+    pub fn mean(stats_metrics: &[&Self]) -> StatisticalMetrics {
+
+        let count = stats_metrics.len() as f64;
+        StatisticalMetrics {
+            mean: stats_metrics.iter().map(|s| s.mean).sum::<f64>() / count,
+            median: stats_metrics.iter().map(|s| s.median).sum::<f64>() / count,
+            min: stats_metrics.iter().map(|s| s.min).sum::<f64>() / count,
+            max: stats_metrics.iter().map(|s| s.max).sum::<f64>() / count,
+            std: stats_metrics.iter().map(|s| s.std).sum::<f64>() / count,
+            rmse: Some(stats_metrics.iter().filter_map(|s| s.rmse).sum::<f64>() / count),
+            sse: Some(stats_metrics.iter().filter_map(|s| s.sse).sum::<f64>() / count),
+        }
+    }
+}
+
+
+
 
 impl FromStr for StatisticalMetrics {
     type Err = services::error::EvoError;
