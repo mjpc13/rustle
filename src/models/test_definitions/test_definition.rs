@@ -2,22 +2,13 @@ use chrono::Utc;
 use serde::{Serialize, Deserialize};
 use surrealdb::sql::Thing;
 
-//use serde_json::Value;
+use super::speed::SpeedTestParams;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum TestType {
     Simple,
     Speed(SpeedTestParams),
-    //Drop(DropTestParams),
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SimpleTestParams {}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SpeedTestParams {
-    pub speed_factors: Vec<f32>,
 }
 
 #[derive(Debug, Deserialize)]

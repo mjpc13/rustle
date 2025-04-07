@@ -2,7 +2,7 @@ use std::fs::File;
 
 use chrono::Utc;
 
-use crate::{db::TestDefinitionRepo, models::{test_definition::{TestDefinitionsConfig}, SpeedTestParams, TestDefinition, TestType}};
+use crate::{db::TestDefinitionRepo, models::{test_definitions::test_definition::{TestDefinitionsConfig}, SpeedTestParams, TestDefinition, TestType}};
 use super::{error::ValidationError, TestDefinitionError};
 
 pub struct TestDefinitionService {

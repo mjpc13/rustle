@@ -6,7 +6,7 @@ use tokio::sync::Mutex;
 
 use crate::{
     db::{TestDefinitionRepo, TestExecutionRepo}, 
-    models::{test_definition::{TestDefinition, TestType}, test_execution::{TestExecution, TestExecutionStatus}, Algorithm, AlgorithmRun, Iteration, SimpleTestParams, SpeedTestParams, TestResults}, services::error::ProcessingError
+    models::{test_definitions::test_definition::{TestDefinition, TestType}, test_execution::{TestExecution, TestExecutionStatus}, Algorithm, AlgorithmRun, Iteration, SimpleTestParams, SpeedTestParams, TestResults}, services::error::ProcessingError
 };
 
 use super::{AlgorithmRunService, DatasetService, IterationService};
