@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::{
-    db::AlgorithmRunRepo, models::{algorithm_run::{AlgorithmRun, RunAggregates}, metric::{Metric, MetricType}, metrics::{CpuMetrics, PoseErrorMetrics}}, services::error::ProcessingError
+    db::AlgorithmRunRepo, models::{algorithm_run::{AlgorithmRun}, metric::{Metric, MetricType}, metrics::{CpuMetrics, PoseErrorMetrics}}, services::error::ProcessingError
 };
 
 use log::warn;
@@ -48,60 +48,15 @@ impl AlgorithmRunService {
         Ok(run)
     }
 
-    pub async fn set_aggregate_metrics(&self, run: &AlgorithmRun){
+    pub async fn set_aggregate_metrics(&self, run: &AlgorithmRun) {
 
         let metric_list = self.repo.get_metrics(run).await.unwrap(); //get metrics associated with the algo run (metrics of the iterations)
 
+        let aggregate_metrics = Metric::mean(metric_list);
 
-        //Vec of pose metrics
-        let pose_metrics: Vec<&PoseErrorMetrics> = metric_list.iter()
-        .filter_map(|m| match &m.metric_type {
-            MetricType::PoseError(p) => Some(p),
-            _ => None
-        })
-        .collect();
-
-        //Vec with only CPU metrics
-        let cpu_metrics: Vec<&CpuMetrics> = metric_list.iter()
-        .filter_map(|m| match &m.metric_type {
-            MetricType::Cpu(p) => Some(p),
-            _ => None
-        })
-        .collect();
-
-        //Compute mean of vector of PoseMetrics
-        let agg_pose = PoseErrorMetrics::mean(&pose_metrics);
-
-
-        //Compute mean of vector of CPU metrics
-        let agg_cpu = CpuMetrics::mean(&cpu_metrics);
-
-
-        warn!("My agg pose for a run of: {:?}", agg_pose);
-
-
-
-
-
-
-
-
-
-        //APPROACH DEUX
-        //let groups = group_metrics(metric_list);
-        // Access CPU metrics
-        //if let Some(cpu_metrics) = groups.get::<CpuMetrics>() {
-        //    // cpu_metrics is Vec<&CpuMetrics>
-        //}
-
-        //// Access pose error metrics
-        //if let Some(pose_metrics) = groups.get::<PoseErrorMetrics>() {
-        //    // pose_metrics is Vec<&PoseErrorMetrics>
-        //}
-
-
-
-        //warn!("My metrics: {:?}", metric_list);
+        for metric in aggregate_metrics{
+            let _ = self.repo.update_aggregate_metric(run, metric).await;
+        }
 
 
     }

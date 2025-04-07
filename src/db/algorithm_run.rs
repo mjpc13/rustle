@@ -142,6 +142,24 @@ impl AlgorithmRunRepo {
         Ok(metrics)
     }
 
+    pub async fn update_aggregate_metric(&self, run: &AlgorithmRun, metric: Metric) -> Result<(), DbError> {
+
+        let run_id = run.id.clone()
+        .ok_or(DbError::MissingField("AlgorithmRun ID"))?;
+
+        let mut result = self.conn.lock().await
+            .query("
+                UPDATE $run_id SET metrics += $metric
+            ")
+            .bind(("run_id", run_id.clone()))
+            .bind(("metric", metric))
+            .await?;
+
+
+        Ok(())
+
+    }
+
 
 }
 

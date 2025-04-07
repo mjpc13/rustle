@@ -8,7 +8,6 @@ pub mod ros;
 pub mod algorithm_run;
 pub mod test_execution;
 pub mod iteration;
-pub mod stat;
 
 // Re-export main structs for ergonomic imports
 pub use self::{
@@ -21,6 +20,5 @@ pub use self::{
     algorithm_run::{AlgorithmRun},
     test_execution::{TestExecution, TestExecutionStatus, Environment, TestResults},
     iteration::Iteration,
-    stat::ContainerStats,
 };
 

@@ -1,10 +1,11 @@
 use bollard::Docker;
 use db::{test_definition, MetricRepo, TestDefinitionRepo};
+use directories::ProjectDirs;
 use models::{TestDefinitionsConfig, TestExecutionStatus};
 use serde_yaml::from_reader;
 use services::{AlgorithmRunService, MetricService, AlgorithmService, DatasetService, IterationService, RosService, StatService, TestDefinitionService, TestExecutionService};
 use tokio::sync::Mutex;
-use std::{fs::File, sync::Arc};
+use std::{fs::{self, File}, sync::Arc};
 use surrealdb::engine::local::RocksDb;
 
 use surrealdb::Surreal;
@@ -38,6 +39,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let conn = Surreal::new::<RocksDb>("test/db").await?;
     let conn_m = Arc::new(Mutex::new(conn));
     let docker_m = Arc::new(docker);
+
+    let proj_dirs = ProjectDirs::from("org", "FRUC", "RUSTLE")
+    .expect("Failed to determine project directories for FRUC/RUSTLE");
+
+    // Create directories if they don't exist (idempotent operation)
+    fs::create_dir_all(proj_dirs.config_dir())?;
+    fs::create_dir_all(proj_dirs.data_dir())?;
+    fs::create_dir_all(proj_dirs.cache_dir())?;
 
 
     conn_m.lock().await.use_ns("rustle")

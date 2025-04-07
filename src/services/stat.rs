@@ -1,6 +1,9 @@
-use crate::{db::stat::StatRepo, models::stat::ContainerStats, services::error::ProcessingError};
+use crate::{db::stat::StatRepo, models::{metrics::stat::ContainerStats, Iteration}, services::error::ProcessingError};
 
+use log::warn;
 use surrealdb::sql::Thing;
+
+use super::DbError;
 #[derive(Clone)]
 pub struct StatService {
     repo: StatRepo,
@@ -21,6 +24,11 @@ impl StatService {
             .await
             .map_err(|e| ProcessingError::Database(e))?;
         Ok(stats)
+    }
+
+    pub async fn get_stats(&self, iter: &Iteration) -> Result<Vec<ContainerStats>, DbError>{
+
+        self.repo.get_by_iteration(iter).await
     }
 
     //pub async fn get_stats_for_iteration(

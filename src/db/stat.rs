@@ -1,8 +1,9 @@
 use std::sync::Arc;
 
+use log::warn;
 use surrealdb::{engine::local::Db, Surreal, sql::Thing};
 use tokio::sync::Mutex;
-use crate::{models::stat::ContainerStats, services::error::DbError};
+use crate::{models::{metrics::stat::ContainerStats, Iteration}, services::{error::DbError, iteration}};
 
 #[derive(Clone)]
 pub struct StatRepo {
@@ -16,6 +17,10 @@ impl StatRepo {
 
     pub async fn save(&self, stat: &mut ContainerStats, iteration_id: &Thing) -> Result<(), DbError> {
 
+        //This should only happen 1 time
+        self.conn.lock().await
+        .query("DEFINE INDEX stat_created_at ON stat FIELDS created_at")
+        .await?;
         
         let created: Option<ContainerStats> = self.conn.lock().await
             .create("stat")
@@ -38,11 +43,23 @@ impl StatRepo {
         Ok(())
     }
 
-    //pub async fn get_by_iteration(&self, iteration_id: &Thing) -> Result<Vec<ContainerStats>, DbError> {
-    //    self.conn
-    //        .query("SELECT <-has_stat<-iteration.* FROM stat WHERE iteration_id = $iteration_id")
-    //        .bind(("iteration_id", iteration_id))
-    //        .await?
-    //        .take(0)
-    //}
+    pub async fn get_by_iteration(&self, iteration: &Iteration) -> Result<Vec<ContainerStats>, DbError> {
+        
+        let iteration_id = iteration.id.clone()
+        .ok_or(DbError::MissingField("Iteration ID"))?;
+
+        let mut result = self.conn.lock().await
+            .query("SELECT 
+                        (SELECT * FROM $iteration_id->has_stat->stat ORDER BY created_at ASC) AS stats
+                    FROM $iteration_id"
+                )
+            .bind(("iteration_id", iteration_id.clone()))
+            .await.unwrap();
+
+
+        let stats_opt: Option<Vec<ContainerStats>> = result.take("stats").unwrap();
+
+        stats_opt.ok_or(DbError::NotFound("No stat was found for iteration.".to_owned()))
+
+        }
 }

@@ -40,7 +40,7 @@
           # Custom cleanup script
           (writeShellScriptBin "rustle_clean" ''
             #!/bin/sh
-            echo "⚠️  This will permanently remove:"
+            echo "This will permanently remove:"
             echo "   - All database files in: $RUSTLE_ROOT/test/db/*"
             echo "   - All test results in: $RUSTLE_ROOT/test/results/*"
             echo "   - All Docker containers currently running on your system"
@@ -57,9 +57,9 @@
                     
                     # Remove Docker containers
                     echo "Stopping Docker containers..."
-                    sudo docker rm -f $(sudo docker ps -q) 2>/dev/null || true
+                    sudo docker rm -f $(sudo docker ps -aq) 2>/dev/null || true
                     
-                    echo "✅ Cleanup completed!"
+                    echo "Cleanup completed!"
                     ;;
                 *)
                     echo "Cleanup aborted"

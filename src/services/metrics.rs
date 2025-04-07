@@ -1,6 +1,6 @@
 use crate::{
     db::metric::MetricRepo,
-    models::{metric::{Metric, MetricType, StatisticalMetrics}, metrics::{CpuMetrics, PoseErrorMetrics}, Iteration},
+    models::{metric::{Metric, MetricType, StatisticalMetrics}, metrics::{memory::MemoryMetrics, CpuMetrics, PoseErrorMetrics}, Iteration},
     services::error::ProcessingError
 };
 
@@ -26,25 +26,6 @@ impl MetricService {
             .map_err(|e| ProcessingError::Database(e))
     }
 
-    // CPU-specific creation
-    //pub async fn create_cpu_metric(
-    //    &self,
-    //    iteration_id: Thing,
-    //    load_history: Vec<f64>
-    //) -> Result<Metric, ProcessingError> {
-    //    let stats = Self::compute_stats(&load_history, false);
-    //    let mut metric = Metric::Cpu(CpuMetrics {
-    //        id: None,
-    //        iteration_id,
-    //        stats,
-    //        load_history,
-    //        created_at: Utc::now(),
-    //    });
-    //    
-    //    self.repo.save(&mut metric).await?;
-    //    Ok(metric)
-    //}
-
     // Pose error-specific creation
     pub async fn create_pose_error_metric(
         &self,
@@ -65,6 +46,55 @@ impl MetricService {
         self.repo.save(&mut metric, &iteration_id).await?;
         Ok(metric)
     }
+
+
+    pub async fn create_cpu_metric(
+        &self,
+        iteration_id: Thing,
+        cpu_metric: CpuMetrics,
+    ) -> Result<Metric, ProcessingError> {
+        
+        let mut metric = Metric{
+            id: None,
+            metric_type: MetricType::Cpu(cpu_metric)
+        };
+        
+        self.repo.save(&mut metric, &iteration_id).await?;
+        Ok(metric)
+    }
+
+    pub async fn create_freq_metric(
+        &self,
+        iteration_id: Thing,
+        freq: StatisticalMetrics,
+    ) -> Result<Metric, ProcessingError> {
+        
+        let mut metric = Metric{
+            id: None,
+            metric_type: MetricType::Frequency(freq)
+        };
+        
+        self.repo.save(&mut metric, &iteration_id).await?;
+        Ok(metric)
+    }
+
+    pub async fn create_memory_metric(
+        &self,
+        iteration_id: Thing,
+        mem: MemoryMetrics,
+    ) -> Result<Metric, ProcessingError> {
+        
+        let mut metric = Metric{
+            id: None,
+            metric_type: MetricType::Memory(mem)
+        };
+        
+        self.repo.save(&mut metric, &iteration_id).await?;
+        Ok(metric)
+    }
+
+
+
 
     fn compute_stats(values: &[f64], is_pose_error: bool) -> StatisticalMetrics {
         let mut sorted = values.to_vec();

@@ -36,7 +36,7 @@ serde_as = "*"
 ulid = "*"
 
 serde_with = "*"
-#temp-dir = "0.1.13"
+directories = "6.0.0"
 struct_iterable = "0.1.1"
 itertools = "*"
 
@@ -44,6 +44,5 @@ nalgebra = { version = "0.32.4", features = ["serde-serialize"] }
 clap = { version = "*", features = ["derive"] } # Tool to pass arguments and build CLI programs
 
 
-
-#plotters = "0.3.4"
+plotters = "0.3.4"
 rand = "*"

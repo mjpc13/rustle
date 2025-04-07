@@ -7,7 +7,7 @@ use serde_json::Value;
 
 use crate::services::{self, DbError};
 use surrealdb::sql::Thing;
-use super::{cpu::CpuMetrics, pose_error::PoseErrorMetrics};
+use super::{cpu::CpuMetrics, memory::MemoryMetrics, pose_error::PoseErrorMetrics};
 
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -18,11 +18,81 @@ pub struct Metric {
 }
 
 
+impl Metric {
+    pub fn mean(metrics: Vec<Metric>) -> Vec<Metric> {
+
+        let mut result: Vec<Metric> = Vec::new();
+
+        let mut cpu_metrics = Vec::new();
+        let mut memory_metrics = Vec::new();
+        let mut pose_metrics = Vec::new();
+        let mut freq_metrics = Vec::new();
+
+        // Group metrics by type
+        for metric in &metrics {
+            match &metric.metric_type {
+                MetricType::Cpu(c) => cpu_metrics.push(c),
+                MetricType::Memory(m) => memory_metrics.push(m),
+                MetricType::PoseError(p) => pose_metrics.push(p),
+                MetricType::Frequency(f) => freq_metrics.push(f),
+            }
+        }
+
+        //Compute mean of vector of PoseMetrics
+        let agg_pose = PoseErrorMetrics::mean(&pose_metrics);
+        if let Some(pose) = agg_pose {
+
+            let metric = Metric {
+                id: None,
+                metric_type: MetricType::PoseError(pose),
+
+            };
+
+            result.push(metric);
+        }
+        
+        //Compute mean of vector of CPU metrics
+        let agg_cpu = CpuMetrics::mean(&cpu_metrics);
+        if let Some(cpu) = agg_cpu {
+            let metric = Metric {
+                id: None,
+                metric_type: MetricType::Cpu(cpu),
+
+            };
+            result.push(metric);        
+        }
+        
+        //Compute mean of vector of Freq metrics
+        let agg_freq = StatisticalMetrics::mean(&freq_metrics);
+        if let Some(freq) = agg_freq {
+            let metric = Metric {
+                id: None,
+                metric_type: MetricType::Frequency(freq),
+            };
+            result.push(metric);        
+        }
+
+        let agg_mem = MemoryMetrics::mean(&memory_metrics);
+        if let Some(mem) = agg_mem{
+            let metric = Metric{
+                id: None,
+                metric_type: MetricType::Memory(mem)
+            };
+            result.push(metric);
+        }
+
+        result
+    }
+}
+
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "PascalCase")]
 pub enum MetricType{
     Cpu(CpuMetrics),
+    Memory(MemoryMetrics),
     PoseError(PoseErrorMetrics),
+    Frequency(StatisticalMetrics)
 }
 
 impl MetricType {
@@ -30,6 +100,8 @@ impl MetricType {
         match self {
             MetricType::Cpu(_) => "cpu",
             MetricType::PoseError(_) => "pose_error",
+            MetricType::Frequency(_) => "frequency",
+            MetricType::Memory(_) => "memory"
         }
     }
     
@@ -37,6 +109,8 @@ impl MetricType {
         match self {
             MetricType::Cpu(m) => m,
             MetricType::PoseError(m) => m,
+            MetricType::Frequency(m) => m,
+            MetricType::Memory(m) => m
         }
     }
 }
@@ -61,10 +135,10 @@ pub struct StatisticalMetrics {
 
 impl StatisticalMetrics{
     // Helper to compute mean of StatisticalMetrics
-    pub fn mean(stats_metrics: &[&Self]) -> StatisticalMetrics {
+    pub fn mean(stats_metrics: &[&Self]) -> Option<StatisticalMetrics> {
 
         let count = stats_metrics.len() as f64;
-        StatisticalMetrics {
+        Some(StatisticalMetrics {
             mean: stats_metrics.iter().map(|s| s.mean).sum::<f64>() / count,
             median: stats_metrics.iter().map(|s| s.median).sum::<f64>() / count,
             min: stats_metrics.iter().map(|s| s.min).sum::<f64>() / count,
@@ -72,11 +146,64 @@ impl StatisticalMetrics{
             std: stats_metrics.iter().map(|s| s.std).sum::<f64>() / count,
             rmse: Some(stats_metrics.iter().filter_map(|s| s.rmse).sum::<f64>() / count),
             sse: Some(stats_metrics.iter().filter_map(|s| s.sse).sum::<f64>() / count),
+        })
+    }
+
+
+
+
+    pub fn from_values(values: &Vec<f64>) -> Option<Self> {
+        if values.is_empty() {
+            return None;
+        }
+
+        // Clone and sort for median/min/max calculations
+        let mut values_sorted = values.to_vec();
+        values_sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+
+        // Calculate mean
+        let mean = values_sorted.iter().sum::<f64>() / values_sorted.len() as f64;
+
+        // Calculate median
+        let median = if values_sorted.len() % 2 == 0 {
+            let mid = values_sorted.len() / 2;
+            (values_sorted[mid - 1] + values_sorted[mid]) / 2.0
+        } else {
+            values_sorted[values_sorted.len() / 2]
+        };
+
+        // Calculate standard deviation
+        let variance = values_sorted.iter()
+            .map(|x| (x - mean).powi(2))
+            .sum::<f64>() / values_sorted.len() as f64;
+        let std = variance.sqrt();
+
+        Some(Self {
+            mean,
+            median,
+            min: values_sorted[0],
+            max: *values_sorted.last().unwrap(),
+            std,
+            rmse: None,
+            sse: None,
+        })
+    }
+
+
+    pub fn from_single_value(value: f64) -> Self {
+        Self {
+            mean: value,
+            median: value,
+            min: value,
+            max: value,
+            std: 0.0,  // Standard deviation is undefined for single values, set to 0.0
+            rmse: None,
+            sse: None,
         }
     }
+
+
 }
-
-
 
 
 impl FromStr for StatisticalMetrics {

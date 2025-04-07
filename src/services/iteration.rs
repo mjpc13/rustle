@@ -1,3 +1,5 @@
+use std::fs;
+use std::path::Path;
 use std::str::FromStr;
 use std::{collections::HashMap, env, fs::OpenOptions, path::PathBuf, sync::Arc, thread, time};
 use std::io::Write;
@@ -15,17 +17,21 @@ use tokio_util::sync::CancellationToken;
 use yaml_rust2::YamlLoader;
 
 use crate::models::metric::Metric;
+use crate::models::metrics::memory::MemoryMetrics;
 use crate::models::metrics::metric::StatisticalMetrics;
 
 use crate::models::metrics::pose_error::PoseErrorMetrics;
-use crate::utils::evo_wrapper::{EvoApeArg, EvoRpeArg};
+use crate::models::metrics::{ContainerStats, CpuMetrics};
+use crate::utils::evo_wrapper::{EvoApeArg, EvoRpeArg, PlotArg};
 use crate::{
     db::{iteration::IterationRepo, OdometryRepo}, 
     models::{iteration::{DockerContainer, Iteration}, 
-    ros::ros_msg::RosMsg, Algorithm, ContainerStats, Dataset, Odometry}, 
+    ros::ros_msg::RosMsg, Algorithm, Dataset, Odometry}, 
     services::error::{DbError, ProcessingError, RosError}, 
     utils::evo_wrapper::EvoArg
 };
+
+use directories::{BaseDirs, UserDirs, ProjectDirs};
 
 use super::error::EvoError;
 use super::{MetricService};
@@ -71,9 +77,7 @@ impl IterationService {
             test_type,
         };
 
-
         let _ = self.repo.save(&mut iteration, algorithm_run_id).await;
-
         Ok(())
     }
 
@@ -90,10 +94,6 @@ impl IterationService {
         //let cmd = format!("rosbag play -r {} --clock /rustle/dataset/*.bag", algorithm_run.bag_speed);
         let cmd = format!("rosbag play -d 9 -r {} --clock -u 50 /rustle/dataset/*.bag", algorithm_run.bag_speed);
         let rustle_cmd = format!("roslaunch rustle rustle.launch --wait test_type:={}", &iter.test_type);
-
-        
-
-        
 
         //Vector of commands to run inside the container
         let commands: Vec<_> = vec![
@@ -283,41 +283,115 @@ impl IterationService {
         let _ = tokio::join!(roslaunch_task);
         debug!("Stopped roslaunch");
 
-        let ten_sec = time::Duration::from_secs(5);
+        let ten_sec = time::Duration::from_secs(1);
         thread::sleep(ten_sec);
-
-        let _ = self.remove_container(&iter.container.container_name).await;
-
-        let ape_args = EvoApeArg{
-                    //plot: Some(PlotArg::default()),
-                    plot: None,
-                    ..Default::default()
-                };
-
-        let rpe_args = EvoRpeArg{
-            //plot: Some(PlotArg::default()),
-            plot: None,
-            ..Default::default()
-        };
-
-        let ape = self.compute_metrics(&iter, &ape_args, None).await.unwrap();
-        let rpe = self.compute_metrics(&iter, &rpe_args, None).await.unwrap();
-
-        //Create a metric object.
-        //let metric = Metr
 
         let iteration_id_clone = iter.id
             .clone()  // Clone the Option first
             .ok_or_else(|| ProcessingError::NotFound("Iteration ID".into())).unwrap();
 
+        //CLEAN RESIDUAL CONTAINERS
+        let _ = self.remove_container(&iter.container.container_name).await;
 
 
+        //Compute the frequency
+        let freq = self.repo.get_odom_frequency(&iter).await.unwrap();
+        let freq_metric = StatisticalMetrics::from_single_value(freq);
 
-        let metric = self.metric_service.create_pose_error_metric(iteration_id_clone, ape, rpe).await.unwrap();
+        let _ = self.metric_service.create_freq_metric(iteration_id_clone.clone(), freq_metric).await; // add to DB
 
+
+        let stats = self.stat_service.get_stats(&iter).await.unwrap();
+
+        //Compute CPU stats
+        let cpu_metric_opt = CpuMetrics::from_stats(&stats);
+        if let Some(cpu_metric) = cpu_metric_opt {
+            let _ = self.metric_service.create_cpu_metric(iteration_id_clone.clone(), cpu_metric).await.unwrap();  
+        }
+
+        //Compute Memory stats
+        let memory_metric_opt = MemoryMetrics::from_stats(&stats).unwrap();
+        if let Some(memory_metric) = memory_metric_opt {
+            let _ = self.metric_service.create_memory_metric(iteration_id_clone.clone(), memory_metric).await.unwrap();  
+        }
+
+        if let Some(proj_dirs) = ProjectDirs::from("org", "FRUC",  "RUSTLE") {
+            let data_dir = proj_dirs.data_dir();
+
+            let data_dir_str = data_dir.to_str().ok_or(RunError::Execution("Unable to fing application path".to_owned()))?;
+
+
+            //Create the folder for this iteration:
+            // test_execution_id/algo_run_id/iteration_id/
+            //something like self.repo.get_parents_id()
+            let iter_path = self.get_parents_string(&iter).await?;
+            let dataset_path = self.get_dataset_string(&iter).await?;
+
+            let full_path = format!("{data_dir_str}/{iter_path}");
+            let full_dataset_path = format!("{data_dir_str}/{dataset_path}");
+
+            //Create the directories if they dont exist
+            fs::create_dir_all(&full_path).unwrap();
+            fs::create_dir_all(&full_dataset_path).unwrap();
+
+
+            
+
+            //Compute the APE and RPE metrics
+            let ape_args = EvoApeArg{
+                //plot: Some(PlotArg::default()),
+                plot: Some(PlotArg{
+                    path: full_path.clone(),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            };
+
+            let rpe_args = EvoRpeArg{
+                plot: Some(PlotArg{
+                    path: full_path.clone(),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            };
+
+            let ape = self.compute_metrics(&iter, &ape_args, &full_path, &full_dataset_path).await.unwrap();
+            let rpe = self.compute_metrics(&iter, &rpe_args, &full_path, &full_dataset_path).await.unwrap();
+
+            let metric = self.metric_service.create_pose_error_metric(iteration_id_clone, ape, rpe).await.unwrap();
+
+
+        };
 
         Ok(())
     }
+
+
+    async fn get_dataset_string(&self, iter: &Iteration) -> Result<String, RunError>{
+
+        let ds = self.repo.get_dataset_thing(iter).await.unwrap();
+        let ds_str = ds.to_raw().replace(|c: char| !c.is_alphanumeric(), "_").to_lowercase();
+
+        Ok(format!("{ds_str}"))
+    }
+
+
+    async fn get_parents_string(&self, iter: &Iteration) -> Result<String, RunError>{
+
+        let te = self.repo.get_test_execution_thing(iter).await.unwrap();
+        let ar = self.repo.get_algorithm_run_thing(iter).await.unwrap();
+
+        let iteration_id = iter.id.clone()
+            .ok_or_else(|| ProcessingError::NotFound("Iteration ID".into())).unwrap();
+
+        let te_str = te.to_raw().replace(|c: char| !c.is_alphanumeric(), "_").to_lowercase();
+        let ar_str = ar.to_raw().replace(|c: char| !c.is_alphanumeric(), "_").to_lowercase();
+        let it_str = iteration_id.to_raw().replace(|c: char| !c.is_alphanumeric(), "_").to_lowercase();
+
+
+        Ok(format!("{te_str}/{ar_str}/{it_str}"))
+    }
+
 
     async fn start_container(&self, iteration: &Iteration) -> Result<(), DbError> {
 
@@ -432,7 +506,6 @@ impl IterationService {
 
     }
 
-    
 
     async fn record_ground_truth(dataset_service: DatasetService, docker: Arc<Docker>, container_id: String, topic: &str, cancelation_token: Arc<CancellationToken>, dataset: &Dataset){
 
@@ -507,6 +580,7 @@ impl IterationService {
 
     }
 
+
     fn convert_to_ros(msg: String) -> Result<RosMsg, RosError> {
 
         let yaml = match YamlLoader::load_from_str(&msg.replace("\n---\n", "")){
@@ -547,35 +621,21 @@ impl IterationService {
         ).await;
     }
 
-
-    async fn compute_metrics<R: EvoArg>(&self, iter: &Iteration, args: &R, output_path: Option<&str>) -> Result<StatisticalMetrics, EvoError>{
-
-        //Write TUM files to temporary directory
-        let mut path = match output_path{
-            Some(p) => {
-                PathBuf::from(p)
-            },
-            None => {
-                env::temp_dir()
-            }
-        };
+    async fn compute_metrics<R: EvoArg>(&self, iter: &Iteration, args: &R, result_path: &String, dataset_path: &String) -> Result<StatisticalMetrics, EvoError>{
 
         //WRITE GT TO A FILE -> THIS SHOULD NOT BE NEEDED IF THERE IS ALREADY A GT FILE. TODO
-        let mut path_gt = path.clone();
 
         let ground_truth_data = self.repo.get_dataset(iter)
             .await.unwrap()
             .ground_truth  // Clone the Option first
-            .ok_or_else(|| ProcessingError::NotFound("Dataset Odometries were not found".into())).unwrap();       
-
+            .ok_or_else(|| ProcessingError::NotFound("Dataset Odometries were not found".into())).unwrap();
         
-        Self::write_file(&ground_truth_data, "groundtruth", &mut path_gt);
-
+        Self::write_file(&ground_truth_data, "groundtruth", &mut PathBuf::from_str(&dataset_path).unwrap());
 
         let odoms: Vec<Odometry> = self.repo.get_odometries(iter).await.unwrap();
-        Self::write_file(&odoms, &iter.container.container_name, &mut path);
+        Self::write_file(&odoms, &iter.container.container_name, &mut PathBuf::from_str(&result_path).unwrap());
 
-        let evo_ape_str = args.compute(path_gt.to_str().unwrap(), path.to_str().unwrap())?;
+        let evo_ape_str = args.compute(&format!("{dataset_path}/groundtruth"), &format!("{result_path}/{}",&iter.container.container_name))?;
         
         let metric = StatisticalMetrics::from_str(&evo_ape_str); //TODO Dont unwrap() this
         metric
@@ -588,8 +648,7 @@ impl IterationService {
 
         let mut file = OpenOptions::new()
             .write(true)
-            .create(true)
-            .truncate(true)
+            .create_new(true)
             .open(path)?;
         
             for odom in data {

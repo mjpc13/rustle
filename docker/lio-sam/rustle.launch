@@ -3,19 +3,19 @@
     <param name="/use_sim_time" value="true"/>
     <arg name="test_type" default="simple"/>  <!-- or any default value -->
 
-    <arg name="project" if="$(eval arg('test_type') == 'simple')" value="lio_sam"/>
-    <arg name="project" if="$(eval arg('test_type') == 'speed')" value="lio_sam_speed"/>
+    <arg name="project" if="$(eval arg('test_type') == 'simple')" value="LIO-SAM"/>
+    <arg name="project" if="$(eval arg('test_type') == 'speed')" value="LIO-SAM_speed"/>
 
     <!-- Parameters -->
     <rosparam file="/rustle/config/params.yaml" command="load" />
 
     <!--- LOAM -->
-    <include file="$(eval find(arg('project')))/launch/include/module_loam.launch" />
+    <include file="/rustle/catkin_ws/src/$(arg project)/launch/include/module_loam.launch" />
 
     <!--- Robot State TF -->
-    <include file="$(eval find(arg('project')))/launch/include/module_robot_state_publisher.launch"/>
+    <include file="/rustle/catkin_ws/src/$(arg project)/launch/include/module_robot_state_publisher.launch"/>
 
     <!--- Run Navsat -->
-    <include file="$(eval find(arg('project')))/launch/include/module_navsat.launch" />
+    <include file="/rustle/catkin_ws/src/$(arg project)/launch/include/module_navsat.launch" />
 
 </launch>

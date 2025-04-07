@@ -1,3 +1,4 @@
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use yaml_rust2::Yaml;
 
@@ -60,6 +61,7 @@ impl RosMsg{
                         child_frame_id: None,
                         pose: Some(p.pose),
                         twist: None,
+                        created_at: Utc::now()
                     }
                 )
             },
@@ -71,7 +73,9 @@ impl RosMsg{
                         header: p.poses.last().unwrap().header.clone(), 
                         child_frame_id: None, 
                         pose: Some(p.poses.last().unwrap().pose.clone()), 
-                        twist: None }
+                        twist: None,
+                        created_at: Utc::now()
+                    }
                 )
             },
             RosMsg::Odometry(o) => Ok(o),
