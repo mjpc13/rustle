@@ -1,6 +1,6 @@
 use crate::{
     db::metric::MetricRepo,
-    models::{metric::{Metric, MetricType, StatisticalMetrics}, metrics::{CpuMetrics, PoseErrorMetrics}, Iteration},
+    models::{metric::{Metric, MetricType, StatisticalMetrics}, metrics::{memory::MemoryMetrics, CpuMetrics, PoseErrorMetrics}, Iteration},
     services::error::ProcessingError
 };
 
@@ -72,6 +72,21 @@ impl MetricService {
         let mut metric = Metric{
             id: None,
             metric_type: MetricType::Frequency(freq)
+        };
+        
+        self.repo.save(&mut metric, &iteration_id).await?;
+        Ok(metric)
+    }
+
+    pub async fn create_memory_metric(
+        &self,
+        iteration_id: Thing,
+        mem: MemoryMetrics,
+    ) -> Result<Metric, ProcessingError> {
+        
+        let mut metric = Metric{
+            id: None,
+            metric_type: MetricType::Memory(mem)
         };
         
         self.repo.save(&mut metric, &iteration_id).await?;

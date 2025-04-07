@@ -7,7 +7,7 @@ use serde_json::Value;
 
 use crate::services::{self, DbError};
 use surrealdb::sql::Thing;
-use super::{cpu::CpuMetrics, pose_error::PoseErrorMetrics};
+use super::{cpu::CpuMetrics, memory::MemoryMetrics, pose_error::PoseErrorMetrics};
 
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -23,31 +23,20 @@ impl Metric {
 
         let mut result: Vec<Metric> = Vec::new();
 
-        //Vec of pose metrics
-        let pose_metrics: Vec<&PoseErrorMetrics> = metrics.iter()
-        .filter_map(|m| match &m.metric_type {
-            MetricType::PoseError(p) => Some(p),
-            _ => None
-        })
-        .collect();
+        let mut cpu_metrics = Vec::new();
+        let mut memory_metrics = Vec::new();
+        let mut pose_metrics = Vec::new();
+        let mut freq_metrics = Vec::new();
 
-        //Vec with only CPU metrics
-        let cpu_metrics: Vec<&CpuMetrics> = metrics.iter()
-        .filter_map(|m| match &m.metric_type {
-            MetricType::Cpu(p) => Some(p),
-            _ => None
-        })
-        .collect();
-
-        //Vec with only Frequency metrics
-        let freq_metrics: Vec<&StatisticalMetrics> = metrics.iter()
-        .filter_map(|m| match &m.metric_type {
-            MetricType::Frequency(p) => Some(p),
-            _ => None
-        })
-        .collect();
-
-        //Add more possible future metrics here
+        // Group metrics by type
+        for metric in &metrics {
+            match &metric.metric_type {
+                MetricType::Cpu(c) => cpu_metrics.push(c),
+                MetricType::Memory(m) => memory_metrics.push(m),
+                MetricType::PoseError(p) => pose_metrics.push(p),
+                MetricType::Frequency(f) => freq_metrics.push(f),
+            }
+        }
 
         //Compute mean of vector of PoseMetrics
         let agg_pose = PoseErrorMetrics::mean(&pose_metrics);
@@ -73,7 +62,7 @@ impl Metric {
             result.push(metric);        
         }
         
-        //Compute mean of vector of CPU metrics
+        //Compute mean of vector of Freq metrics
         let agg_freq = StatisticalMetrics::mean(&freq_metrics);
         if let Some(freq) = agg_freq {
             let metric = Metric {
@@ -83,6 +72,14 @@ impl Metric {
             result.push(metric);        
         }
 
+        let agg_mem = MemoryMetrics::mean(&memory_metrics);
+        if let Some(mem) = agg_mem{
+            let metric = Metric{
+                id: None,
+                metric_type: MetricType::Memory(mem)
+            };
+            result.push(metric);
+        }
 
         result
     }
@@ -93,6 +90,7 @@ impl Metric {
 #[serde(tag = "type", rename_all = "PascalCase")]
 pub enum MetricType{
     Cpu(CpuMetrics),
+    Memory(MemoryMetrics),
     PoseError(PoseErrorMetrics),
     Frequency(StatisticalMetrics)
 }
@@ -103,6 +101,7 @@ impl MetricType {
             MetricType::Cpu(_) => "cpu",
             MetricType::PoseError(_) => "pose_error",
             MetricType::Frequency(_) => "frequency",
+            MetricType::Memory(_) => "memory"
         }
     }
     
@@ -111,6 +110,7 @@ impl MetricType {
             MetricType::Cpu(m) => m,
             MetricType::PoseError(m) => m,
             MetricType::Frequency(m) => m,
+            MetricType::Memory(m) => m
         }
     }
 }

@@ -17,6 +17,7 @@ use tokio_util::sync::CancellationToken;
 use yaml_rust2::YamlLoader;
 
 use crate::models::metric::Metric;
+use crate::models::metrics::memory::MemoryMetrics;
 use crate::models::metrics::metric::StatisticalMetrics;
 
 use crate::models::metrics::pose_error::PoseErrorMetrics;
@@ -302,9 +303,16 @@ impl IterationService {
 
         let stats = self.stat_service.get_stats(&iter).await.unwrap();
 
+        //Compute CPU stats
         let cpu_metric_opt = CpuMetrics::from_stats(&stats);
         if let Some(cpu_metric) = cpu_metric_opt {
             let _ = self.metric_service.create_cpu_metric(iteration_id_clone.clone(), cpu_metric).await.unwrap();  
+        }
+
+        //Compute Memory stats
+        let memory_metric_opt = MemoryMetrics::from_stats(&stats).unwrap();
+        if let Some(memory_metric) = memory_metric_opt {
+            let _ = self.metric_service.create_memory_metric(iteration_id_clone.clone(), memory_metric).await.unwrap();  
         }
 
         if let Some(proj_dirs) = ProjectDirs::from("org", "FRUC",  "RUSTLE") {
