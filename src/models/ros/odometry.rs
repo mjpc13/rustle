@@ -16,6 +16,7 @@ pub struct Odometry {
     pub child_frame_id: Option<String>,
     pub pose: Option<Pose>,
     pub twist: Option<Twist>,
+    pub created_at: DateTime<Utc>
 }
 
 impl Odometry {
@@ -26,6 +27,7 @@ impl Odometry {
             child_frame_id: None,
             pose: None,
             twist: None,
+            created_at: Utc::now()
         }
     }
 }
@@ -37,7 +39,8 @@ impl Ros1 for Odometry {
             header: Header::empty(),
             child_frame_id: None,
             pose: None,
-            twist: None
+            twist: None,
+            created_at: Utc::now()
         }
     }
 
@@ -64,7 +67,8 @@ impl Ros1 for Odometry {
             header,
             pose,
             twist,
-            child_frame_id
+            child_frame_id,
+            created_at: Utc::now()
             }
         )
 

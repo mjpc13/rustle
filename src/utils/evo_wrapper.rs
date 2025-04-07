@@ -82,7 +82,7 @@ impl EvoApeArg {
         
         match &self.plot{
             Some(p) =>{
-                let plot_cmd: Vec<String> = p.get_commands();
+                let plot_cmd: Vec<String> = p.get_commands("ape");
                 commands.extend(plot_cmd);
             },
             None => ()
@@ -173,19 +173,21 @@ enum PlotMode{
 
 #[derive(Iterable)]
 pub struct PlotArg{
-    mode: PlotMode,//xy,xz,yx,yz,zx,zy,xyz
-    x_dimension: AxisUnit,//index,seconds,distances
-    colormap_max: Option<u32>,
-    colormap_min: Option<u32>,
-    colormap_max_percentile: Option<u32>, //overrides plot_colormap_max
-    path: Option<String>,//
+    pub mode: PlotMode,//xy,xz,yx,yz,zx,zy,xyz
+    pub x_dimension: AxisUnit,//index,seconds,distances
+    pub colormap_max: Option<u32>,
+    pub colormap_min: Option<u32>,
+    pub colormap_max_percentile: Option<u32>, //overrides plot_colormap_max
+    pub path: String,//
 }
 
 impl PlotArg {
-    fn get_commands(&self) -> Vec<String>{
+    fn get_commands(&self, metric_type: &str) -> Vec<String>{
         
         let mut commands: Vec<String> = Vec::new();
-        commands.push("-p".to_string());
+        commands.push(format!("--save_plot={}/{metric_type}.pdf", self.path));
+        //commands.push("-p".to_owned());
+
 
         let test: Vec<_> = self
             .iter()
@@ -195,11 +197,6 @@ impl PlotArg {
                 if o.is::<Option<u32>>(){
                     match o.downcast_ref::<Option<u32>>().unwrap(){
                         Some(val) => commands.push(format!("--plot_{s} {val}")),
-                        None => (),
-                    }
-                } else if o.is::<String>(){ //This handles all the bools
-                    match o.downcast_ref::<Option<String>>().unwrap(){
-                        Some(val) => commands.push(val.to_string()),
                         None => (),
                     }
                 } else if o.is::<PlotMode>(){ 
@@ -228,13 +225,15 @@ impl Default for PlotArg {
             colormap_max: None,
             colormap_min: None,
             colormap_max_percentile: None, //overrides plot_colormap_max
-            path: None,//
+            path: "None".to_owned(),//
         }
     }
 }
 
 impl EvoArg for EvoApeArg{
     fn compute<'a>(&self, groundtruth: &str, data: &str) -> Result<String, EvoError>{
+
+        warn!("My gt: {groundtruth} and data: {data}");
 
         let output = Command::new("evo_ape")
             .arg("tum")
@@ -326,7 +325,7 @@ impl EvoRpeArg {
         
         match &self.plot{
             Some(p) =>{
-                let plot_cmd: Vec<String> = p.get_commands();
+                let plot_cmd: Vec<String> = p.get_commands("rpe");
                 commands.extend(plot_cmd);
             },
             None => ()

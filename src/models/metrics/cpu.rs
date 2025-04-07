@@ -3,6 +3,8 @@ use std::cmp::Ordering;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
+use crate::services::error::MetricError;
+
 use super::{metric::{MetricTypeInfo, StatisticalMetrics}, ContainerStats};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -144,8 +146,8 @@ impl CpuMetrics {
         let throttle_list: Vec<&StatisticalMetrics> = metrics.iter().map(|m| &m.throttling).collect();
 
         Some(CpuMetrics {
-            load: StatisticalMetrics::mean(&load_list),
-            throttling: StatisticalMetrics::mean(&throttle_list),
+            load: StatisticalMetrics::mean(&load_list).ok_or(MetricError::ComputeError("Could not compute mean of cpu load".to_owned())).unwrap(),
+            throttling: StatisticalMetrics::mean(&throttle_list).ok_or(MetricError::ComputeError("Could not compute mean of cpu throttle".to_owned())).unwrap(),
             created_at,
         })
     }

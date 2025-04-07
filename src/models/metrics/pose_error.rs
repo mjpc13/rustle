@@ -1,6 +1,8 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
+use crate::services::error::MetricError;
+
 use super::metric::{MetricTypeInfo, StatisticalMetrics};
 use surrealdb::sql::Thing;
 
@@ -33,8 +35,8 @@ impl PoseErrorMetrics {
     
     
         Some(PoseErrorMetrics {
-            ape: StatisticalMetrics::mean(&metrics.iter().map(|m| &m.ape).collect::<Vec<_>>()),
-            rpe: StatisticalMetrics::mean(&metrics.iter().map(|m| &m.rpe).collect::<Vec<_>>()),
+            ape: StatisticalMetrics::mean(&metrics.iter().map(|m| &m.ape).collect::<Vec<_>>()).ok_or(MetricError::ComputeError("Could not compute mean of ape".to_owned())).unwrap(),
+            rpe: StatisticalMetrics::mean(&metrics.iter().map(|m| &m.rpe).collect::<Vec<_>>()).ok_or(MetricError::ComputeError("Could not compute mean of rpe".to_owned())).unwrap(),
             created_at,
         })
     }

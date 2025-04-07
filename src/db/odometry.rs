@@ -15,6 +15,13 @@ impl OdometryRepo {
     }
 
     pub async fn save(&self, odom: &mut Odometry, iteration_id: &Thing) -> Result<(), DbError> {
+
+
+        //This should only happen 1 time
+        self.conn.lock().await
+            .query("DEFINE INDEX odom_created_at ON odom FIELDS created_at")
+            .await?;
+
         let created: Option<Odometry> = self.conn.lock().await
             .create("odometry")
             .content(odom.clone())

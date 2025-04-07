@@ -17,6 +17,10 @@ impl StatRepo {
 
     pub async fn save(&self, stat: &mut ContainerStats, iteration_id: &Thing) -> Result<(), DbError> {
 
+        //This should only happen 1 time
+        self.conn.lock().await
+        .query("DEFINE INDEX stat_created_at ON stat FIELDS created_at")
+        .await?;
         
         let created: Option<ContainerStats> = self.conn.lock().await
             .create("stat")
@@ -44,9 +48,6 @@ impl StatRepo {
         let iteration_id = iteration.id.clone()
         .ok_or(DbError::MissingField("Iteration ID"))?;
 
-        warn!("POIS {:?}", iteration_id);
-
-
         let mut result = self.conn.lock().await
             .query("SELECT 
                         (SELECT * FROM $iteration_id->has_stat->stat ORDER BY created_at ASC) AS stats
@@ -57,8 +58,6 @@ impl StatRepo {
 
 
         let stats_opt: Option<Vec<ContainerStats>> = result.take("stats").unwrap();
-
-        warn!("My result for stats: {:?}", stats_opt);
 
         stats_opt.ok_or(DbError::NotFound("No stat was found for iteration.".to_owned()))
 

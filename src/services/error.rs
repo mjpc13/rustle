@@ -166,3 +166,11 @@ pub enum EvoError{
     CommandError(String),
 
 }
+
+#[derive(Debug,Error)]
+pub enum MetricError{
+
+    #[error("Unable to compute metric: {0}")]
+    ComputeError(String),
+
+}

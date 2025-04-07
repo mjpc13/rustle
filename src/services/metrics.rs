@@ -26,25 +26,6 @@ impl MetricService {
             .map_err(|e| ProcessingError::Database(e))
     }
 
-    // CPU-specific creation
-    //pub async fn create_cpu_metric(
-    //    &self,
-    //    iteration_id: Thing,
-    //    load_history: Vec<f64>
-    //) -> Result<Metric, ProcessingError> {
-    //    let stats = Self::compute_stats(&load_history, false);
-    //    let mut metric = Metric::Cpu(CpuMetrics {
-    //        id: None,
-    //        iteration_id,
-    //        stats,
-    //        load_history,
-    //        created_at: Utc::now(),
-    //    });
-    //    
-    //    self.repo.save(&mut metric).await?;
-    //    Ok(metric)
-    //}
-
     // Pose error-specific creation
     pub async fn create_pose_error_metric(
         &self,
@@ -76,6 +57,21 @@ impl MetricService {
         let mut metric = Metric{
             id: None,
             metric_type: MetricType::Cpu(cpu_metric)
+        };
+        
+        self.repo.save(&mut metric, &iteration_id).await?;
+        Ok(metric)
+    }
+
+    pub async fn create_freq_metric(
+        &self,
+        iteration_id: Thing,
+        freq: StatisticalMetrics,
+    ) -> Result<Metric, ProcessingError> {
+        
+        let mut metric = Metric{
+            id: None,
+            metric_type: MetricType::Frequency(freq)
         };
         
         self.repo.save(&mut metric, &iteration_id).await?;
