@@ -1,7 +1,7 @@
 use bollard::Docker;
 use db::{test_definition, MetricRepo, TestDefinitionRepo};
 use directories::ProjectDirs;
-use models::{TestDefinitionsConfig, TestExecutionStatus};
+use models::{test_definitions::TestDefinitionsConfig, TestExecutionStatus};
 use serde_yaml::from_reader;
 use services::{AlgorithmRunService, MetricService, AlgorithmService, DatasetService, IterationService, RosService, StatService, TestDefinitionService, TestExecutionService};
 use tokio::sync::Mutex;
@@ -9,7 +9,7 @@ use std::{fs::{self, File}, sync::Arc};
 use surrealdb::engine::local::RocksDb;
 
 use surrealdb::Surreal;
-use log::{info, error};
+use log::{error, info, warn};
 use chrono::Utc;
 
 mod models;
@@ -91,6 +91,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("Found {} datasets to register", dataset_config.datasets.len());
     process_datasets(&dataset_service, dataset_config).await;
 
+
     // Load and process test definitions
     let test_def_config: TestDefinitionsConfig = load_yaml_config("tests.yaml")?;
     info!("Processing test definitions");
@@ -109,7 +110,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 fn load_yaml_config<T: serde::de::DeserializeOwned>(path: &str) -> Result<T, Box<dyn std::error::Error>> {
     let file = File::open(path)?;
+    
+    
     Ok(from_reader(file)?)
+
+
 }
 
 async fn process_algorithms(service: &AlgorithmService, config: AlgorithmConfig) {

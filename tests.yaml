@@ -1,17 +1,38 @@
 test_definitions:
-  - name: "Simple Test"
-    workers: 4
-    iterations: 2
-    algo_list: ["ig-LIO", "LIO-SAM"]
+  - name: "Hybrid Degradation"
+    workers: 1
+    iterations: 1
+    algo_list: ["ig-LIO"]
     dataset_name: "botanic_garden"
     test_type:
-      type: simple  # Enum variant name
+      type: drop
+      drop_list:  # Can add N sensors. Types of sensors are: imu, lidar, radar, camera, gps
+          - sensor: imu
+            drop_rate: [9,10] #Drop 1 message every 2 messages
+            topic: "/livox/imu"
+            active_periods:
+              - start_time: 5
+                duration: 45
+          - sensor: lidar
+            drop_rate: [9,10] #Drop 1 message every 2 messages
+            topic: "/livox/lidar"
+            active_periods:
+              - start_time: 20
+                duration: 30
 
-#  - name: "Performance Stress Test"
+#  - name: "Simple Test"
 #    workers: 1
 #    iterations: 1
 #    algo_list: ["ig-LIO"]
 #    dataset_name: "botanic_garden"
+#    test_type:
+#      type: simple  # Enum variant name
+
+#  - name: "Performance Stress Test"
+#    workers: 1
+#    iterations: 4
+#    algo_list: ["ig-LIO", "LIO-SAM"]
+#    dataset_name: "botanic_garden"
 #    test_type: 
 #      type: speed
-#      speed_factors: [1.0, 4.0, 10]
+#      speed_factors: [1.0, 4.0, 10, 100]

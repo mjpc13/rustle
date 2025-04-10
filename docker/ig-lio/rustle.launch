@@ -1,17 +1,25 @@
 <launch>
 
     <!--Don't change this file!!!-->
-
     <arg name="test_type" default="simple"/>  <!-- or any default value -->
+    <param name="use_sim_time" value="true" />
     
-    <rosparam command="load" file="/rustle/config/params.yaml" />
+    <rosparam command="load" file="/rustle/config/params.yaml"/>
 
+    <!--=================== iG-LIO for the Simple Test =======================-->
     <node pkg="ig_lio" type="ig_lio_node" name="ig_lio_node" 
       if="$(eval arg('test_type') == 'simple')" output="screen"/>
 
+    <!-- ==================  iG-LIO for the Speed Test =======================-->
     <node pkg="ig_lio_speed" type="ig_lio_speed_node" name="ig_lio_node" 
       if="$(eval arg('test_type') == 'speed')" output="screen"/>
 
+    <!-- ================== iG-LIO for the DROP TEST =========================-->
+    <node pkg="ig_lio" type="ig_lio_node" name="ig_lio_node" 
+      if="$(eval arg('test_type') == 'drop')" output="screen"/>
 
-    
+    <node pkg="rustle-ros" type="drop_manager.py" name="drop_manager" 
+          if="$(eval arg('test_type') == 'drop')" output="screen">
+    </node>
+
 </launch>
