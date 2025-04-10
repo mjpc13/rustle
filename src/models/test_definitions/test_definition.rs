@@ -1,23 +1,21 @@
+use core::fmt;
+use std::path::Display;
+
 use chrono::Utc;
 use serde::{Serialize, Deserialize};
 use surrealdb::sql::Thing;
 
-//use serde_json::Value;
+use super::{speed::SpeedTestParams, CutParams, DropParams};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum TestType {
     Simple,
     Speed(SpeedTestParams),
-    //Drop(DropTestParams),
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SimpleTestParams {}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SpeedTestParams {
-    pub speed_factors: Vec<f32>,
+    #[serde(rename = "drop")]
+    Drop(DropParams),
+    #[serde(rename = "cut")]
+    Cut(CutParams)
 }
 
 #[derive(Debug, Deserialize)]
@@ -41,14 +39,26 @@ pub struct TestDefinition {
     pub updated_at: chrono::DateTime<Utc>,
 }
 
-//#[derive(Debug, Clone, Serialize, Deserialize)]
-//pub struct DropTestParams {
-//    pub topics: Vec<String>,
-//    pub drop_patterns: Vec<DropPattern>,
-//}
-//
-//#[derive(Debug, Clone, Serialize, Deserialize)]
-//pub struct DropPattern {
-//    pub percentage: f32,
-//    pub duration_ms: u64,
-//}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Sensor {
+    Imu,
+    Lidar,
+    Camera,
+    Radar,
+    Gps
+    // Add other sensors as needed
+}
+
+impl fmt::Display for Sensor {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self{
+            Sensor::Imu => write!(f, "imu"),
+            Sensor::Lidar => write!(f, "lidar"),
+            Sensor::Camera => write!(f, "camera"),
+            Sensor::Radar => write!(f, "radar"),
+            Sensor::Gps => write!(f, "gps"),
+        }
+    }
+}

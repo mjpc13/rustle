@@ -1,6 +1,6 @@
 pub mod dataset;
 pub mod algorithm;
-pub mod test_definition;
+pub mod test_definitions;
 pub mod metrics;
 pub mod container;
 
@@ -13,7 +13,7 @@ pub mod iteration;
 pub use self::{
     dataset::Dataset,
     algorithm::Algorithm,
-    test_definition::{TestDefinition, TestType, SimpleTestParams, SpeedTestParams, TestDefinitionsConfig},
+    test_definitions::{TestDefinition, TestType, SimpleTestParams, SpeedTestParams, TestDefinitionsConfig},
     metrics::metric,
     container::Container,
     ros::{Odometry, Header, Pose, Twist},

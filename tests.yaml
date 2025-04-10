@@ -1,17 +1,57 @@
 test_definitions:
   - name: "Simple Test"
-    workers: 4
-    iterations: 2
-    algo_list: ["ig-LIO", "LIO-SAM"]
+    workers: 1
+    iterations: 1
+    algo_list: ["ig-LIO"]
     dataset_name: "botanic_garden"
     test_type:
       type: simple  # Enum variant name
-
 #  - name: "Performance Stress Test"
+#    workers: 1
+#    iterations: 4
+#    algo_list: ["ig-LIO", "LIO-SAM"]
+#    dataset_name: "botanic_garden"
+#    test_type: 
+#      type: speed
+#      speed_factors: [1.0, 4.0, 10, 100]
+
+
+#  - name: "Hybrid Cut-Off"
 #    workers: 1
 #    iterations: 1
 #    algo_list: ["ig-LIO"]
 #    dataset_name: "botanic_garden"
-#    test_type: 
-#      type: speed
-#      speed_factors: [1.0, 4.0, 10]
+#    test_type:
+#      type: cut
+#      cut_list:  # Can add N sensors. Types of sensors are: imu, lidar, radar, camera, gps
+#          - sensor: imu
+#            topic: "/livox/imu"
+#            active_periods:
+#              - start_time: 55
+#                duration: 5
+#          - sensor: lidar
+#            topic: "/livox/lidar"
+#            active_periods:
+#              - start_time: 20
+#                duration: 30
+
+#  - name: "Hybrid Drop Messages"
+#    workers: 1
+#    iterations: 1
+#    algo_list: ["ig-LIO"]
+#    dataset_name: "botanic_garden"
+#    test_type:
+#      type: drop
+#      cut_list:  # Can add N sensors. Types of sensors are: imu, lidar, radar, camera, gps
+#          - sensor: imu
+#            drop_rate: [1,4] #Drop 1 message every 2 messages
+#            topic: "/livox/imu"
+#            active_periods:
+#              - start_time: 55
+#                duration: 5
+#          - sensor: lidar
+#            drop_rate: [9,10] #Drop 1 message every 2 messages
+#            topic: "/livox/lidar"
+#            active_periods:
+#              - start_time: 20
+#                duration: 30

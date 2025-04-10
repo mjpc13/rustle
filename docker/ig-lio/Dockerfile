@@ -20,6 +20,7 @@ RUN apt-get update \
   inxi \ 
   libtbb-dev \
   ros-$ROS_DISTRO-pcl-ros \
+  ros-$ROS_DISTRO-topic-tools \
   python3-catkin-tools \
   && rm -rf /var/lib/apt/lists/* \
   && mkdir -p /rustle/catkin_ws/src
@@ -55,8 +56,11 @@ RUN sed -i 's/<name>ig_lio<\/name>/<name>ig_lio_speed<\/name>/g' src/ig_lio_spee
 # Build ros package source (compiles every package in the workspace, don't change this!)
 RUN catkin config --extend /opt/ros/$ROS_DISTRO && catkin create pkg -p src/ rustle
 
+RUN git clone --depth 1 --recurse-submodules https://github.com/mjpc13/rustle-ros.git  src/rustle-ros
+
+
 #Copy custom launch file into our package
-COPY ./rustle.launch /rustle/catkin_ws/src/rustle/launch/rustle.launch
+COPY ./rustle.launch /rustle/catkin_ws/src/rustle-ros/launch/rustle.launch
 
 #Compile packages
 RUN catkin build -s

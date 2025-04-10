@@ -91,9 +91,9 @@ impl IterationService {
         //get the corresponding algorithm run
         let algorithm_run = self.repo.get_algorithm_run(&iter).await.unwrap();
 
-        //let cmd = format!("rosbag play -r {} --clock /rustle/dataset/*.bag", algorithm_run.bag_speed);
-        let cmd = format!("rosbag play -d 9 -r {} --clock -u 50 /rustle/dataset/*.bag", algorithm_run.bag_speed);
-        let rustle_cmd = format!("roslaunch rustle rustle.launch --wait test_type:={}", &iter.test_type);
+        let cmd = format!("rosbag play -r {} --clock /rustle/dataset/*.bag", algorithm_run.bag_speed);
+        //let cmd = format!("rosbag play -d 9 -r {} --clock -u 50 /rustle/dataset/*.bag", algorithm_run.bag_speed);
+        let rustle_cmd = format!("roslaunch rustle-ros rustle.launch --wait test_type:={}", &iter.test_type);
 
         //Vector of commands to run inside the container
         let commands: Vec<_> = vec![
@@ -366,7 +366,6 @@ impl IterationService {
         Ok(())
     }
 
-
     async fn get_dataset_string(&self, iter: &Iteration) -> Result<String, RunError>{
 
         let ds = self.repo.get_dataset_thing(iter).await.unwrap();
@@ -374,7 +373,6 @@ impl IterationService {
 
         Ok(format!("{ds_str}"))
     }
-
 
     async fn get_parents_string(&self, iter: &Iteration) -> Result<String, RunError>{
 
@@ -392,7 +390,6 @@ impl IterationService {
         Ok(format!("{te_str}/{ar_str}/{it_str}"))
     }
 
-
     async fn start_container(&self, iteration: &Iteration) -> Result<(), DbError> {
 
         let options = Some(container::CreateContainerOptions{
@@ -403,11 +400,70 @@ impl IterationService {
         let dataset = self.repo.get_dataset(iteration).await?; //get the dataset
         let algorithm = self.repo.get_algorithm(iteration).await?; //get the algorithm
 
+        // get test definition, if it matches the Drop test need to mount an 
+        // additional file to /rustle/config/drop_config.yaml!
+        let test_def = self.repo.get_test_def(iteration).await?;
+
+
         //Set up the binds config to mount these volumes inside our container
-        let hm: HashMap<&str, &String> = HashMap::from([
-            ("/rustle/dataset/", &dataset.dataset_path),
-            ("/rustle/config/params.yaml", &algorithm.parameters),
+        let mut hm: HashMap<&str, &String> = HashMap::from([
+            ("/rustle/dataset/", &dataset.dataset_path)
         ]);
+
+        let mut drop_file = String::new();
+        let mut cut_file = String::new();
+
+        //Add an extra YAML file for the Drop configurations.
+        match test_def.test_type{
+            crate::models::TestType::Simple => {
+                hm.insert("/rustle/config/params.yaml", &algorithm.parameters);
+            },
+            crate::models::TestType::Speed(speed_test_params) => {
+                hm.insert("/rustle/config/params.yaml", &algorithm.parameters);
+            },
+            crate::models::TestType::Drop(drop_params) => {
+                //Add to the cache!
+                if let Some(proj_dirs) = ProjectDirs::from("org", "FRUC",  "RUSTLE") {
+                    let cache_dir = proj_dirs.cache_dir();
+                    let cache_dir_str = cache_dir.to_str().ok_or(RunError::Execution("Unable to find application path".to_owned())).unwrap();
+
+                    let mut params_string = fs::read_to_string(&algorithm.parameters).unwrap();
+
+                    let drop_yaml = drop_params.update_file(&params_string);
+
+                    let file_name = format!("{}_drop.yaml",&iteration.container.container_name);
+
+                    let full_path = format!("{}/{}", cache_dir_str, file_name);
+                    drop_file = full_path;
+
+                    let _ = fs::write(format!("{}/{}", cache_dir_str, file_name), drop_yaml);
+
+                    hm.insert("/rustle/config/params.yaml", &drop_file);
+
+                }
+            },
+            crate::models::TestType::Cut(cut_params) => {
+                //Add to the cache!
+                if let Some(proj_dirs) = ProjectDirs::from("org", "FRUC",  "RUSTLE") {
+                    let cache_dir = proj_dirs.cache_dir();
+                    let cache_dir_str = cache_dir.to_str().ok_or(RunError::Execution("Unable to find application path".to_owned())).unwrap();
+
+                    let mut params_string = fs::read_to_string(&algorithm.parameters).unwrap();
+
+                    let cut_yaml = cut_params.update_file(&params_string);
+
+                    let file_name = format!("{}_cut.yaml",&iteration.container.container_name);
+
+                    let full_path = format!("{}/{}", cache_dir_str, file_name);
+                    cut_file = full_path;
+
+                    let _ = fs::write(format!("{}/{}", cache_dir_str, file_name), cut_yaml);
+
+                    hm.insert("/rustle/config/params.yaml", &cut_file);
+
+                }
+            }
+        };
 
         let mut path_mounts = vec![];
         let _: Vec<_> = hm.
@@ -442,7 +498,6 @@ impl IterationService {
 
         Ok(())
     }
-
 
     async fn record_task(ros_service: RosService, docker: Arc<Docker>, container_id: String, topic: &str, cancelation_token: Arc<CancellationToken>, iteration_id: Thing){
 
