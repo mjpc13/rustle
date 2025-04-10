@@ -3,7 +3,7 @@ use std::fs::File;
 use chrono::Utc;
 use log::warn;
 
-use crate::{db::TestDefinitionRepo, models::{test_definitions::{test_definition::TestDefinitionsConfig, DropParams}, SpeedTestParams, TestDefinition, TestType}};
+use crate::{db::TestDefinitionRepo, models::{test_definitions::{test_definition::TestDefinitionsConfig, CutParams, DropParams}, SpeedTestParams, TestDefinition, TestType}};
 use super::{error::ValidationError, TestDefinitionError};
 
 pub struct TestDefinitionService {
@@ -54,7 +54,8 @@ impl TestDefinitionService {
             match &def.test_type {
                 TestType::Simple => self.validate(def)?,
                 TestType::Speed(params) => self.validate_speed(&params)?,
-                TestType::Drop(params) => self.validate_drop(params)?
+                TestType::Drop(params) => self.validate_drop(params)?,
+                TestType::Cut(params) => self.validate_cut(params)?
             }
         }
         
@@ -77,6 +78,12 @@ impl TestDefinitionService {
     }
 
     fn validate_drop(&self, _params: &DropParams) -> Result<(), ValidationError> {
+        let todo = true; //TODO:Check what I should validate in these params!
+
+        Ok(())
+    }
+
+    fn validate_cut(&self, _params: &CutParams) -> Result<(), ValidationError> {
         let todo = true; //TODO:Check what I should validate in these params!
 
         Ok(())

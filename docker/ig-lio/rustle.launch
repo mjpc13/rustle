@@ -22,4 +22,12 @@
           if="$(eval arg('test_type') == 'drop')" output="screen">
     </node>
 
+    <!-- ================== iG-LIO for the Cut-Off TEST ======================-->
+    <node pkg="ig_lio" type="ig_lio_node" name="ig_lio_node" 
+      if="$(eval arg('test_type') == 'cut')" output="screen"/>
+
+    <node pkg="rustle-ros" type="cut_manager.py" name="cut_manager" 
+          if="$(eval arg('test_type') == 'cut')" output="screen">
+    </node>
+
 </launch>

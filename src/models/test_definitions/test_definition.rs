@@ -5,7 +5,7 @@ use chrono::Utc;
 use serde::{Serialize, Deserialize};
 use surrealdb::sql::Thing;
 
-use super::{speed::SpeedTestParams, DropParams};
+use super::{speed::SpeedTestParams, CutParams, DropParams};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -13,7 +13,9 @@ pub enum TestType {
     Simple,
     Speed(SpeedTestParams),
     #[serde(rename = "drop")]
-    Drop(DropParams)
+    Drop(DropParams),
+    #[serde(rename = "cut")]
+    Cut(CutParams)
 }
 
 #[derive(Debug, Deserialize)]
@@ -38,12 +40,6 @@ pub struct TestDefinition {
 }
 
 
-
-//
-
-
-
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Sensor {
@@ -66,19 +62,3 @@ impl fmt::Display for Sensor {
         }
     }
 }
-
-
-
-
-
-//#[derive(Debug, Clone, Serialize, Deserialize)]
-//pub struct DropTestParams {
-//    pub topics: Vec<String>,
-//    pub drop_patterns: Vec<DropPattern>,
-//}
-//
-//#[derive(Debug, Clone, Serialize, Deserialize)]
-//pub struct DropPattern {
-//    pub percentage: f32,
-//    pub duration_ms: u64,
-//}

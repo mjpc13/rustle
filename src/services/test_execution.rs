@@ -6,7 +6,7 @@ use tokio::sync::Mutex;
 
 use crate::{
     db::{TestDefinitionRepo, TestExecutionRepo}, 
-    models::{test_definitions::{test_definition::{TestDefinition, TestType}, DropParams}, test_execution::{TestExecution, TestExecutionStatus}, Algorithm, AlgorithmRun, Iteration, SimpleTestParams, SpeedTestParams, TestResults}, services::error::ProcessingError
+    models::{test_definitions::{test_definition::{TestDefinition, TestType}, CutParams, DropParams}, test_execution::{TestExecution, TestExecutionStatus}, Algorithm, AlgorithmRun, Iteration, SimpleTestParams, SpeedTestParams, TestResults}, services::error::ProcessingError
 };
 
 use super::{AlgorithmRunService, DatasetService, IterationService};
@@ -42,7 +42,8 @@ impl TestExecutionService {
         match &def.test_type {
             TestType::Simple => self.create_simple_runs(&execution, &list_algos).await?,
             TestType::Speed(params) => self.create_speedbag_runs(&execution, &list_algos, params).await?,
-            TestType::Drop(params) => self.create_drop_runs(&execution, &list_algos, params).await?
+            TestType::Drop(params) => self.create_drop_runs(&execution, &list_algos, params).await?,
+            TestType::Cut(params) => self.create_cut_runs(&execution, &list_algos, params).await?
         }
 
         let mut list_iterations = self.execution_repo
@@ -151,6 +152,28 @@ impl TestExecutionService {
     }
 
 
+    async fn create_cut_runs(
+        &self,
+        execution: &TestExecution,
+        algo_list: &Vec<Algorithm>,
+        params: &CutParams,
+    ) -> Result<(), ProcessingError> {
+        
+        //Migh be better if I pass the Degradations params in here
+        for algorithm in algo_list {
+
+            self.algorithm_run_service.create_run(
+                1.0,
+                execution.num_iterations,
+                &execution.id.as_ref().unwrap(),
+                &algorithm.id.clone().unwrap(),
+                "cut"
+            ).await?;
+
+        }
+
+        Ok(())
+    }
 
 
 

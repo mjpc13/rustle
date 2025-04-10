@@ -2,6 +2,7 @@ pub mod test_definition;
 pub mod simple;
 pub mod speed;
 pub mod drop;
+pub mod cut;
 
 
 // Re-export repositories
@@ -10,4 +11,5 @@ pub use self::{
     simple::SimpleTestParams,
     speed::SpeedTestParams,
     drop::DropParams,
+    cut::{Cut, CutParams}
 };

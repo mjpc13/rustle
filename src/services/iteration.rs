@@ -411,7 +411,7 @@ impl IterationService {
         ]);
 
         let mut drop_file = String::new();
-
+        let mut cut_file = String::new();
 
         //Add an extra YAML file for the Drop configurations.
         match test_def.test_type{
@@ -422,7 +422,6 @@ impl IterationService {
                 hm.insert("/rustle/config/params.yaml", &algorithm.parameters);
             },
             crate::models::TestType::Drop(drop_params) => {
-
                 //Add to the cache!
                 if let Some(proj_dirs) = ProjectDirs::from("org", "FRUC",  "RUSTLE") {
                     let cache_dir = proj_dirs.cache_dir();
@@ -442,8 +441,28 @@ impl IterationService {
                     hm.insert("/rustle/config/params.yaml", &drop_file);
 
                 }
-        
             },
+            crate::models::TestType::Cut(cut_params) => {
+                //Add to the cache!
+                if let Some(proj_dirs) = ProjectDirs::from("org", "FRUC",  "RUSTLE") {
+                    let cache_dir = proj_dirs.cache_dir();
+                    let cache_dir_str = cache_dir.to_str().ok_or(RunError::Execution("Unable to find application path".to_owned())).unwrap();
+
+                    let mut params_string = fs::read_to_string(&algorithm.parameters).unwrap();
+
+                    let cut_yaml = cut_params.update_file(&params_string);
+
+                    let file_name = format!("{}_cut.yaml",&iteration.container.container_name);
+
+                    let full_path = format!("{}/{}", cache_dir_str, file_name);
+                    cut_file = full_path;
+
+                    let _ = fs::write(format!("{}/{}", cache_dir_str, file_name), cut_yaml);
+
+                    hm.insert("/rustle/config/params.yaml", &cut_file);
+
+                }
+            }
         };
 
         let mut path_mounts = vec![];
