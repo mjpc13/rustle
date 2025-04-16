@@ -6,6 +6,99 @@ use struct_iterable::Iterable;
 
 use crate::services::error::{EvoError, RosError};
 
+
+use pyo3::{prelude::*, types::PyDict};
+use pyo3::types::IntoPyDict;
+
+const PY_CODE: &str = r#"
+import os
+import numpy as np
+from evo.tools import file_interface
+from evo.core import sync, metrics
+import copy
+
+def compute_metrics(gt_path, data_path, max_diff, output_dir):
+    # Trajectory processing
+    traj_ref = file_interface.read_tum_trajectory_file(gt_path)
+    traj_est = file_interface.read_tum_trajectory_file(data_path)
+    traj_ref, traj_est = sync.associate_trajectories(traj_ref, traj_est, max_diff)
+
+    # Alignment
+    traj_est_aligned = copy.deepcopy(traj_est)
+    traj_est_aligned.align(traj_ref, correct_scale=True, correct_only_scale=False)
+
+    # Calculate time from start
+    timestamps = traj_est.timestamps
+    time_from_start = timestamps - timestamps[0]
+
+    # Metrics calculation
+    pose_relation = metrics.PoseRelation.translation_part
+    data = (traj_ref, traj_est_aligned)
+
+    ape_metric = metrics.APE(pose_relation)
+    ape_metric.process_data(data)
+    rpe_metric = metrics.RPE(pose_relation)
+    rpe_metric.process_data(data)
+
+    # Save data with time stamps
+    np.savetxt(os.path.join(output_dir, 'ape.txt'), 
+              np.column_stack((time_from_start, ape_metric.error)), 
+              delimiter=',')
+    
+    np.savetxt(os.path.join(output_dir, 'rpe.txt'), 
+              np.column_stack((time_from_start[1:], rpe_metric.error)), 
+              delimiter=',')
+    
+    np.savetxt(os.path.join(output_dir, 'aligned_poses.txt'), 
+              np.column_stack((time_from_start, traj_est_aligned._positions_xyz)),
+              delimiter=',')
+"#;
+
+
+
+pub fn run_metrics_py(
+    gt_path: &str,
+    data_path: &str,
+    max_diff: f64,
+    output_dir: &str
+){
+    Python::with_gil(|py| {
+        // Create a Python module from the embedded code
+        let embedded_module = PyModule::from_code(py, PY_CODE, "embedded_module", "embedded_module").unwrap();
+        
+        // Prepare arguments
+        let kwargs = [
+            ("gt_path", gt_path.to_object(py)),
+            ("data_path", data_path.to_object(py)),
+            ("max_diff", max_diff.to_object(py)),
+            ("output_dir", output_dir.to_object(py)),
+        ].into_py_dict(py);
+
+        // Call the Python function
+        embedded_module
+            .getattr("compute_metrics").unwrap()
+            .call((), Some(kwargs)).unwrap();
+
+    })
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 pub trait EvoArg {
     fn compute<'a>(&self, groundtruth: &str, data: &str) -> Result<String, EvoError>;
 }
@@ -38,9 +131,7 @@ pub struct EvoApeArg{
 
 impl EvoApeArg {
     fn get_commands(&self) -> Vec<String>{
-        
         let mut commands: Vec<String> = Vec::new();
-
         let test: Vec<_> = self
             .iter()
             .map( | (s, o) | {
@@ -232,8 +323,6 @@ impl Default for PlotArg {
 
 impl EvoArg for EvoApeArg{
     fn compute<'a>(&self, groundtruth: &str, data: &str) -> Result<String, EvoError>{
-
-        warn!("My gt: {groundtruth} and data: {data}");
 
         let output = Command::new("evo_ape")
             .arg("tum")

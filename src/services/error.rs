@@ -176,4 +176,19 @@ pub enum MetricError{
     #[error("Metric field is empty: {0}")]
     MissingError(String),
 
+    #[error("Unable to read metric file: {0}")]
+    IOError(String),
+
+    #[error("Failed to cast input as a float: {0}")]
+    ParseError(String)
+
+}
+
+#[derive(Debug,Error)]
+pub enum ExecutionError{
+
+    #[error("Unable to compute test execution: {0}")]
+    ComputeError(String),
+
+
 }

@@ -149,21 +149,18 @@ impl StatisticalMetrics{
         })
     }
 
-
-
-
-    pub fn from_values(values: &Vec<f64>) -> Option<Self> {
+    pub fn from_values(values: &Vec<f64>, compute_rmse: bool) -> Option<Self> {
         if values.is_empty() {
             return None;
         }
-
+    
         // Clone and sort for median/min/max calculations
         let mut values_sorted = values.to_vec();
         values_sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
-
+    
         // Calculate mean
         let mean = values_sorted.iter().sum::<f64>() / values_sorted.len() as f64;
-
+    
         // Calculate median
         let median = if values_sorted.len() % 2 == 0 {
             let mid = values_sorted.len() / 2;
@@ -171,21 +168,32 @@ impl StatisticalMetrics{
         } else {
             values_sorted[values_sorted.len() / 2]
         };
-
+    
         // Calculate standard deviation
         let variance = values_sorted.iter()
             .map(|x| (x - mean).powi(2))
             .sum::<f64>() / values_sorted.len() as f64;
         let std = variance.sqrt();
+    
+        // Calculate RMSE and SSE
 
+        let (sse, rmse) = match compute_rmse{
+            true => {
+                let s = values_sorted.iter().map(|x| x.powi(2)).sum::<f64>();
+                let r = (s / values_sorted.len() as f64).sqrt();
+                (Some(s), Some(r))
+            },
+            false => (None, None)
+        };
+            
         Some(Self {
             mean,
             median,
             min: values_sorted[0],
             max: *values_sorted.last().unwrap(),
             std,
-            rmse: None,
-            sse: None,
+            rmse: rmse,
+            sse: sse,
         })
     }
 

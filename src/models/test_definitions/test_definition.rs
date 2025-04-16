@@ -62,3 +62,15 @@ impl fmt::Display for Sensor {
         }
     }
 }
+
+impl Sensor {
+    pub fn get_color(&self) -> &str {
+        match self {
+            Sensor::Imu => "rgba(231, 76, 60, 0.15)",       // Soft red
+            Sensor::Lidar => "rgba(39, 174, 96, 0.15)",     // Green
+            Sensor::Camera => "rgba(41, 128, 185, 0.15)",   // Blue
+            Sensor::Radar => "rgba(155, 89, 182, 0.15)",    // Purple
+            Sensor::Gps => "rgba(241, 196, 15, 0.15)",      // Yellow
+        }
+    }
+}

@@ -20,9 +20,10 @@ use crate::models::metric::Metric;
 use crate::models::metrics::memory::MemoryMetrics;
 use crate::models::metrics::metric::StatisticalMetrics;
 
-use crate::models::metrics::pose_error::PoseErrorMetrics;
+use crate::models::metrics::pose_error::{PoseErrorMetrics, Position, APE, RPE};
 use crate::models::metrics::{ContainerStats, CpuMetrics};
-use crate::utils::evo_wrapper::{EvoApeArg, EvoRpeArg, PlotArg};
+use crate::utils::evo_wrapper::{self, run_metrics_py, EvoApeArg, EvoRpeArg, PlotArg};
+use crate::utils::plots::{ape_line_chart, cpu_load_line_chart, memory_usage_line_chart, rpe_line_chart};
 use crate::{
     db::{iteration::IterationRepo, OdometryRepo}, 
     models::{iteration::{DockerContainer, Iteration}, 
@@ -334,9 +335,6 @@ impl IterationService {
             fs::create_dir_all(&full_path).unwrap();
             fs::create_dir_all(&full_dataset_path).unwrap();
 
-
-            
-
             //Compute the APE and RPE metrics
             let ape_args = EvoApeArg{
                 //plot: Some(PlotArg::default()),
@@ -358,12 +356,56 @@ impl IterationService {
             let ape = self.compute_metrics(&iter, &ape_args, &full_path, &full_dataset_path).await.unwrap();
             let rpe = self.compute_metrics(&iter, &rpe_args, &full_path, &full_dataset_path).await.unwrap();
 
-            let metric = self.metric_service.create_pose_error_metric(iteration_id_clone, ape, rpe).await.unwrap();
+            let mut ape_list = APE::read_from_file(&format!("{full_path}/ape.txt")).unwrap();
+            let mut rpe_list = RPE::read_from_file(&format!("{full_path}/rpe.txt")).unwrap();
+            let mut position_list = Position::read_from_file(&format!("{full_path}/aligned_poses.txt")).unwrap();
 
+            let _ = self.metric_service.create_ape(iteration_id_clone.clone(), &mut ape_list).await;
+            let _ = self.metric_service.create_rpe(iteration_id_clone.clone(), &mut rpe_list).await;
+            let _ = self.metric_service.create_position(iteration_id_clone.clone(), &mut position_list).await;
+
+            let ape_values = ape_list.iter()
+                .map(|ape|{
+                    ape.value
+                }).collect();
+            let rpe_values = rpe_list.iter()
+                .map(|rpe|{
+                    rpe.value
+                }).collect();
+
+            let pose_error_metric = PoseErrorMetrics::from_values(&ape_values, &rpe_values).unwrap();
+            let metric = self.metric_service.create_pose_error_metric(iteration_id_clone.clone(), pose_error_metric).await.unwrap();
+
+
+            // ======= PLOTS ==========
+
+            cpu_load_line_chart(&stats, &full_path); //plot cpu
+            memory_usage_line_chart(&stats, &full_path); //plot memory
+
+            let test_def = self.repo.get_test_def(&iter).await.unwrap();
+
+            ape_line_chart(&ape_list, &test_def, &full_path);
+            rpe_line_chart(&rpe_list, &test_def, &full_path);
 
         };
 
         Ok(())
+    }
+
+
+    pub async fn get_stats(&self, iter: &Iteration) -> Result<Vec<ContainerStats>, DbError>{
+        let stats = self.stat_service.get_stats(iter).await?;
+        Ok(stats)
+    }
+
+    pub async fn get_ape(&self, iter: &Iteration) -> Result<Vec<APE>, DbError>{
+        let ape = self.repo.get_ape(iter).await?;
+        Ok(ape)
+    }
+
+    pub async fn get_rpe(&self, iter: &Iteration) -> Result<Vec<RPE>, DbError>{
+        let rpe = self.repo.get_rpe(iter).await?;
+        Ok(rpe)
     }
 
     async fn get_dataset_string(&self, iter: &Iteration) -> Result<String, RunError>{
@@ -561,7 +603,6 @@ impl IterationService {
 
     }
 
-
     async fn record_ground_truth(dataset_service: DatasetService, docker: Arc<Docker>, container_id: String, topic: &str, cancelation_token: Arc<CancellationToken>, dataset: &Dataset){
 
         let cmd = format!("rostopic echo {topic}");
@@ -692,6 +733,10 @@ impl IterationService {
 
         let evo_ape_str = args.compute(&format!("{dataset_path}/groundtruth"), &format!("{result_path}/{}",&iter.container.container_name))?;
         
+        run_metrics_py(&format!("{dataset_path}/groundtruth"), &format!("{result_path}/{}",&iter.container.container_name), 0.1, &result_path);
+
+
+
         let metric = StatisticalMetrics::from_str(&evo_ape_str); //TODO Dont unwrap() this
         metric
 
