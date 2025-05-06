@@ -6,7 +6,6 @@ use std::io::Write;
 
 use bollard::{container::{self, RemoveContainerOptions, StatsOptions}, exec::{CreateExecOptions, StartExecResults}, secret::{HostConfig, ResourcesUlimits}, Docker};
 use chrono::Utc;
-use clap::error;
 use futures_util::{future, StreamExt};
 use log::{debug, info, trace, warn};
 use rand::{distr::Alphanumeric, Rng};

@@ -1,0 +1,40 @@
+[package]
+name = "rustle-cli"
+version = "0.1.0"
+edition = "2021"
+authors = ["Mario Cristovao mario.cristovao@isr.uc.pt"]
+description = "CLI for RUSTLE app"
+license = "MIT"
+
+
+[[bin]]
+name = "rustle_bin"
+path = "src/main.rs"
+
+[dependencies]
+rustle-core = { path = "../core" }
+
+# Command-line interface
+clap = { version = "*", features = ["derive", "env", "help"] }
+
+
+
+
+
+
+# Output formatting
+#comfy-table = "7.1.0"
+#indicatif = "0.17.7"
+#console = "0.15.8"
+
+# Configuration
+#serde_yaml = "0.9.25"
+
+# Async runtime
+#tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+
+# Logging
+#env_logger = "0.11.3"
+
+# Error handling
+#anyhow = "1.0.81"
