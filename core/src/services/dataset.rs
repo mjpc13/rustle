@@ -40,19 +40,27 @@ impl DatasetService {
     }
 
 
-        pub async fn add_ground_truth(
-            &self,
-            dataset: &Dataset,
-            odom: Odometry,
-        ) -> Result<(), ProcessingError> {
-            let dataset_id = dataset.id.as_ref()
-                .ok_or(ProcessingError::MissingField("Dataset ID".to_owned()))?;
-        
-            self.repo.append_ground_truth(dataset_id, odom)
-                .await
-                .map_err(|e| ProcessingError::Database(e))
-        }
+    pub async fn add_ground_truth(
+        &self,
+        dataset: &Dataset,
+        odom: Odometry,
+    ) -> Result<(), ProcessingError> {
+        let dataset_id = dataset.id.as_ref()
+            .ok_or(ProcessingError::MissingField("Dataset ID".to_owned()))?;
+    
+        self.repo.append_ground_truth(dataset_id, odom)
+            .await
+            .map_err(|e| ProcessingError::Database(e))
+    }
 
+    pub async fn get_all(&self) -> Result<Vec<Dataset>, ProcessingError> {
+        let results = self.repo.list_all().await?;
+        Ok(results)
+    }
+
+    pub async fn delete_dataset_by_name(&self, name: &String){
+        self.repo.delete_by_name(name.to_string()).await;
+    }
 
 
 

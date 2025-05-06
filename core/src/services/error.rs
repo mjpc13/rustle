@@ -82,7 +82,7 @@ pub enum RosError {
 }
 
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Error)]
 pub enum DbError {
     #[error("Database operation failed: {0}")]
     Operation(#[from] surrealdb::Error),

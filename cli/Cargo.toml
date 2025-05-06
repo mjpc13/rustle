@@ -17,24 +17,22 @@ rustle-core = { path = "../core" }
 # Command-line interface
 clap = { version = "*", features = ["derive", "env", "help"] }
 
-
-
-
+chrono = "0.4.35"
+tokio = { version = "1.36", features = ["full"] }
+log = { version = "0.4.20", features = ["std"] }
+env_logger = { version = "0.11.2" }
+serde = "1.0.197"
+serde_yaml = "*"
+surrealdb = { version = "*", features = ["kv-mem", "kv-rocksdb"] }
+bollard = "0.16.0" # Manage Docker
+directories= "*"
+toml = "*"
 
 
 # Output formatting
-#comfy-table = "7.1.0"
+comfy-table = "*"
 #indicatif = "0.17.7"
 #console = "0.15.8"
-
-# Configuration
-#serde_yaml = "0.9.25"
-
-# Async runtime
-#tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
-
-# Logging
-#env_logger = "0.11.3"
 
 # Error handling
 #anyhow = "1.0.81"

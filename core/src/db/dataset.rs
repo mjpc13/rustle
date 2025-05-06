@@ -68,4 +68,15 @@ impl DatasetRepo {
     pub async fn list_all(&self) -> Result<Vec<Dataset>, surrealdb::Error> {
         self.conn.lock().await.query("SELECT * FROM dataset").await?.take(0)
     }
+
+
+    pub async fn delete_by_name(&self, name: String) -> Result<(), DbError> {
+        self.conn.lock().await
+            .query("DELETE FROM dataset WHERE name = $name")
+            .bind(("name", name))
+            .await
+            .map_err(DbError::Operation)?;
+    
+        Ok(())
+    }
 }

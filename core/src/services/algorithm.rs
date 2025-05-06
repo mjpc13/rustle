@@ -139,5 +139,15 @@ impl AlgorithmService {
         Ok(())
     }
 
+    pub async fn get_all(&self) -> Result<Vec<Algorithm>, ProcessingError> {
+        let results = self.repo.list_all().await?;
+        Ok(results)
+    }
+
+    pub async fn delete_algo_by_name(&self, name: &String){
+        self.repo.delete_by_name(name.to_string()).await;
+    }
+
+
 
 }
