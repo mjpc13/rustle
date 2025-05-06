@@ -91,8 +91,8 @@ impl IterationService {
         //get the corresponding algorithm run
         let algorithm_run = self.repo.get_algorithm_run(&iter).await.unwrap();
 
-        let cmd = format!("rosbag play -r {} --clock /rustle/dataset/*.bag", algorithm_run.bag_speed);
-        //let cmd = format!("rosbag play -d 9 -r {} --clock -u 50 /rustle/dataset/*.bag", algorithm_run.bag_speed);
+        //let cmd = format!("rosbag play -r {} --clock /rustle/dataset/*.bag", algorithm_run.bag_speed);
+        let cmd = format!("rosbag play -d 9 -r {} --clock -u 50 /rustle/dataset/*.bag", algorithm_run.bag_speed);
         let rustle_cmd = format!("roslaunch rustle-ros rustle.launch --wait test_type:={}", &iter.test_type);
 
         //Vector of commands to run inside the container

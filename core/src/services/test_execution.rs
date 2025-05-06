@@ -72,7 +72,34 @@ impl TestExecutionService {
 
 
         //get all algorithm runs
-        let algo_run_list = self.execution_repo.get_algorithm_runs(execution_id).await?;
+        //let algo_run_list = self.execution_repo.get_algorithm_runs(execution_id).await?;
+        //for algo_run in algo_run_list{
+        //    self.algorithm_run_service.set_aggregate_metrics(&algo_run).await;
+        //    // Plot things for the iterations!!!
+        //    self.algorithm_run_service.plot_cpu_load(&algo_run).await;
+        //    self.algorithm_run_service.plot_memory_usage(&algo_run).await;
+        //    self.algorithm_run_service.plot_ape(&algo_run).await;
+        //}
+        ////PLOT ALGORITHMS AGAINST EACH OTHER!!!
+        ////Need to get the algorithm and the algorithm run.
+        //let _ = self.plot_cpu_load(execution_id).await;
+
+
+        Ok(execution)
+    }
+
+
+    pub async fn plot_execution(
+        &self,
+        def: &TestDefinition
+    ) -> Result<(), ProcessingError> {
+
+        let execution: TestExecution = self.definition_repo.get_test_executions(def).await?;
+
+        let execution_id = execution.id.unwrap();
+        
+        //get all algorithm runs
+        let algo_run_list = self.execution_repo.get_algorithm_runs(&execution_id).await?;
         for algo_run in algo_run_list{
             self.algorithm_run_service.set_aggregate_metrics(&algo_run).await;
             // Plot things for the iterations!!!
@@ -84,11 +111,19 @@ impl TestExecutionService {
         //PLOT ALGORITHMS AGAINST EACH OTHER!!!
 
         //Need to get the algorithm and the algorithm run.
-        let _ = self.plot_cpu_load(execution_id).await;
+        let _ = self.plot_cpu_load(&execution_id).await;
 
 
-        Ok(execution)
+        Ok(())
     }
+
+
+
+
+
+
+
+
 
     async fn create_simple_runs(
         &self,
@@ -237,6 +272,17 @@ impl TestExecutionService {
         Ok(())
 
     }
+
+    pub async fn get_all(&self) -> Result<Vec<TestExecution>, ProcessingError> {
+        let results = self.execution_repo.list_all().await?;
+        Ok(results)
+    }
+
+    pub async fn delete_test_by_name(&self, name: &String){
+        self.execution_repo.delete_by_name(name.to_string()).await;
+    }
+
+
 
 
 }

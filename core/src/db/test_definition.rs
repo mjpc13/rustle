@@ -2,7 +2,7 @@ use std::sync::{Arc};
 
 use surrealdb::{engine::local::Db, Surreal};
 use tokio::sync::Mutex;
-use crate::models::TestDefinition;
+use crate::{models::{TestDefinition, TestExecution}, services::DbError};
 
 #[derive(Debug, Clone)]
 pub struct TestDefinitionRepo {
@@ -31,6 +31,33 @@ impl TestDefinitionRepo {
     pub async fn get(&self, id: &str) -> Result<Option<TestDefinition>, surrealdb::Error> {
         self.conn.lock().await.select(("test_definition", id)).await
     }
+
+    pub async fn get_by_name(&self, name: String) -> Result<Option<TestDefinition>, DbError> {
+        self.conn.lock().await
+            .query("SELECT * FROM test_definition WHERE name = $name")
+            .bind(("name", name))
+            .await?
+            .take(0)
+            .map_err(|e| DbError::Operation(e))
+    }
+
+    pub async fn get_test_executions(&self, def: &TestDefinition) -> Result<TestExecution, DbError> {
+        
+        let definition_id = def.id.clone()
+            .ok_or(DbError::MissingField("TestDefinition ID"))?;
+
+        let mut result = self.conn.lock().await
+            .query("SELECT ->defines->test_execution AS execution FROM $def_id")
+            .bind(("def_id", definition_id.clone()))
+            .await?;
+
+        let execution: Option<TestExecution> = result.take("execution")?;
+        execution.ok_or_else(|| DbError::NotFound(
+            format!("TestDefinition for execution {}", definition_id)
+        ))
+    }
+
+
     
     pub async fn list(
         &self
@@ -53,7 +80,20 @@ impl TestDefinitionRepo {
             .take(0)
     }
 
+    pub async fn list_all(&self) -> Result<Vec<TestDefinition>, surrealdb::Error> {
+        self.conn.lock().await.query("SELECT * FROM test_definition").await?.take(0)
+    }
 
+
+    pub async fn delete_by_name(&self, name: String) -> Result<(), DbError> {
+        self.conn.lock().await
+            .query("DELETE FROM test_definition WHERE name = $name")
+            .bind(("name", name))
+            .await
+            .map_err(DbError::Operation)?;
+    
+        Ok(())
+    }
 
 
 }

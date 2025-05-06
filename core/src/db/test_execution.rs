@@ -235,5 +235,19 @@ impl TestExecutionRepo {
     }
 
 
+    pub async fn list_all(&self) -> Result<Vec<TestExecution>, surrealdb::Error> {
+        self.conn.lock().await.query("SELECT * FROM test_execution").await?.take(0)
+    }
+
+
+    pub async fn delete_by_name(&self, name: String) -> Result<(), DbError> {
+        self.conn.lock().await
+            .query("DELETE FROM test_execution WHERE name = $name")
+            .bind(("name", name))
+            .await
+            .map_err(DbError::Operation)?;
+    
+        Ok(())
+    }
 
 }

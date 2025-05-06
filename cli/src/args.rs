@@ -145,6 +145,9 @@ pub enum TestSubCommand {
 
     /// Run a test
     Run(RunTest),
+
+    /// Plots the result for a given Test
+    Plot(PlotTest)
 }
 
 #[derive(Debug, Args)]
@@ -175,7 +178,18 @@ pub struct DeleteTest {
 
 #[derive(Debug, Args)]
 pub struct RunTest {
-    pub name: String,
+
+    #[clap(short, long)]
+    pub all: bool,
+    pub name: Option<String>,
+}
+
+#[derive(Debug, Args)]
+pub struct PlotTest {
+
+    #[clap(short, long)]
+    pub all: bool,
+    pub name: Option<String>,
 }
 
 // ==== CONFIG COMMANDS ====

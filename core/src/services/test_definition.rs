@@ -4,7 +4,7 @@ use chrono::Utc;
 use log::warn;
 
 use crate::{db::TestDefinitionRepo, models::{test_definitions::{test_definition::TestDefinitionsConfig, CutParams, DropParams}, SpeedTestParams, TestDefinition, TestType}};
-use super::{error::ValidationError, TestDefinitionError};
+use super::{error::ValidationError, DbError, TestDefinitionError};
 
 pub struct TestDefinitionService {
     repo: TestDefinitionRepo,
@@ -91,6 +91,14 @@ impl TestDefinitionService {
 
     pub async fn get_all(&self) -> Vec<TestDefinition>{
         self.repo.list().await.unwrap()
+    }
+
+    pub async fn get_by_name(&self, name: &String) -> Result<Option<TestDefinition>, DbError>{
+        self.repo.get_by_name(name.to_string()).await
+    }
+
+    pub async fn delete_test_by_name(&self, name: &String){
+        self.repo.delete_by_name(name.to_string()).await;
     }
 
     //fn validate_drop(&self, params: &DropTestParams) -> Result<(), ValidationError> {
