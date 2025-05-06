@@ -43,6 +43,6 @@ itertools = "*"
 nalgebra = { version = "0.32.4", features = ["serde-serialize"] }
 clap = { version = "*", features = ["derive"] } # Tool to pass arguments and build CLI programs
 
-
-plotters = "0.3.4"
+charming = {version = "*", features = ["ssr"]}
 rand = "*"
+pyo3 = { version = "0.20.0", features = ["auto-initialize"] }

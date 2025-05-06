@@ -1,15 +1,17 @@
-use std::sync::Arc;
+use std::{collections::HashMap, fs, sync::Arc};
 
 use chrono::Utc;
+use directories::ProjectDirs;
 use log::{debug, info, warn};
 use tokio::sync::Mutex;
 
 use crate::{
-    db::{TestDefinitionRepo, TestExecutionRepo}, 
-    models::{test_definitions::{test_definition::{TestDefinition, TestType}, CutParams, DropParams}, test_execution::{TestExecution, TestExecutionStatus}, Algorithm, AlgorithmRun, Iteration, SimpleTestParams, SpeedTestParams, TestResults}, services::error::ProcessingError
+    db::{test_execution, TestDefinitionRepo, TestExecutionRepo}, 
+    models::{metrics::ContainerStats, test_definitions::{test_definition::{TestDefinition, TestType}, CutParams, DropParams}, test_execution::{TestExecution, TestExecutionStatus}, Algorithm, AlgorithmRun, Iteration, SimpleTestParams, SpeedTestParams, TestResults}, services::error::ProcessingError, utils::plots::test_cpu_load_line_chart
 };
 
-use super::{AlgorithmRunService, DatasetService, IterationService};
+use super::{error::{ExecutionError, RunError}, AlgorithmRunService, DatasetService, IterationService};
+use surrealdb::sql::Thing;
 
 pub struct TestExecutionService {
     execution_repo: TestExecutionRepo,
@@ -54,12 +56,10 @@ impl TestExecutionService {
         //Logic To run multiple iterations concurrently.
         let jobs: Arc<Mutex<Vec<Iteration>>> = Arc::new(Mutex::new(list_iterations)); //List of jobs that need to run
 
-
         while jobs.lock().await.len() != 0 {
             let results = (0..def.workers).map(|_| async {
 
                 let mut iteration: Option<Iteration> = jobs.lock().await.pop();
-
                 if let Some(iter) = iteration{
 
                     //RUN ITERATION JOB
@@ -73,10 +73,18 @@ impl TestExecutionService {
 
         //get all algorithm runs
         let algo_run_list = self.execution_repo.get_algorithm_runs(execution_id).await?;
-        
         for algo_run in algo_run_list{
             self.algorithm_run_service.set_aggregate_metrics(&algo_run).await;
+            // Plot things for the iterations!!!
+            self.algorithm_run_service.plot_cpu_load(&algo_run).await;
+            self.algorithm_run_service.plot_memory_usage(&algo_run).await;
+            self.algorithm_run_service.plot_ape(&algo_run).await;
         }
+
+        //PLOT ALGORITHMS AGAINST EACH OTHER!!!
+
+        //Need to get the algorithm and the algorithm run.
+        let _ = self.plot_cpu_load(execution_id).await;
 
 
         Ok(execution)
@@ -176,13 +184,6 @@ impl TestExecutionService {
     }
 
 
-
-
-
-
-
-
-
     pub async fn complete_execution(
         &self,
         mut execution: TestExecution,
@@ -195,5 +196,47 @@ impl TestExecutionService {
         //self.execution_repo.save(&execution).await?;
         Ok(())
     }
+
+
+    pub async fn plot_cpu_load(&self, test_execution_id: &Thing) -> Result<(), ExecutionError>{
+
+        //get algorithms and algo runs and build a Hashmap<Algorithm, Vec<Vec<ContainerStats>>>
+
+        let mut algo_cs_hashmap: HashMap<Algorithm, Vec<Vec<ContainerStats>>> = HashMap::new();
+
+        //Get list of algorithm_run.
+        let algo_run_list = self.execution_repo.get_algorithm_runs(test_execution_id).await.unwrap();
+
+        for algo_run in algo_run_list{
+            let algo = self.algorithm_run_service.get_algorithm(&algo_run).await.unwrap();
+
+                    //For each AlgorithmRun I need the container stats
+            let container_stats = self.algorithm_run_service.get_all_container_stats(&algo_run).await;
+
+            algo_cs_hashmap.insert(algo, container_stats);
+
+        };
+
+        if let Some(proj_dirs) = ProjectDirs::from("org", "FRUC",  "RUSTLE") {
+            let data_dir = proj_dirs.data_dir();
+
+            let data_dir_str = data_dir.to_str().ok_or(RunError::Execution("Unable to fing application path".to_owned())).unwrap();
+
+            let te_str = test_execution_id.to_raw().replace(|c: char| !c.is_alphanumeric(), "_").to_lowercase();
+
+
+            let full_path = format!("{data_dir_str}/{te_str}");
+
+            //Create the directories if they dont exist
+            fs::create_dir_all(&full_path).unwrap();
+
+            test_cpu_load_line_chart(&algo_cs_hashmap, &full_path);
+
+        };
+
+        Ok(())
+
+    }
+
 
 }

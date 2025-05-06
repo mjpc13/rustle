@@ -5,7 +5,7 @@ use log::{info, warn};
 // db/iteration.rs
 use surrealdb::{Surreal, engine::local::Db, sql::Thing};
 use tokio::sync::Mutex;
-use crate::{models::{iteration::Iteration, Algorithm, AlgorithmRun, Dataset, Odometry, TestDefinition, TestExecution}, services::DbError};
+use crate::{models::{iteration::Iteration, metrics::pose_error::{APE, RPE}, Algorithm, AlgorithmRun, Dataset, Odometry, TestDefinition, TestExecution}, services::DbError};
 
 #[derive(Clone)]
 pub struct IterationRepo {
@@ -216,7 +216,39 @@ impl IterationRepo {
 
     }
 
+    pub async fn get_ape(&self, iter: &Iteration) -> Result<Vec<APE>, DbError> {
+        let iteration_id = iter.id.clone()
+            .ok_or(DbError::MissingField("AlgorithmRun ID"))?;
+    
+        let mut result = self.conn.lock().await
+            .query("
+                SELECT *
+                FROM $iteration_id->has_ape->ape
+            ")
+            .bind(("iteration_id", iteration_id.clone()))
+            .await?;
+    
+        let ape: Vec<APE> = result.take(0)?;
+    
+        Ok(ape)
+    }
 
+    pub async fn get_rpe(&self, iter: &Iteration) -> Result<Vec<RPE>, DbError> {
+        let iteration_id = iter.id.clone()
+            .ok_or(DbError::MissingField("AlgorithmRun ID"))?;
+    
+        let mut result = self.conn.lock().await
+            .query("
+                SELECT *
+                FROM $iteration_id->has_rpe->rpe
+            ")
+            .bind(("iteration_id", iteration_id.clone()))
+            .await?;
+    
+        let rpe: Vec<RPE> = result.take(0)?;
+    
+        Ok(rpe)
+    }
 
     pub async fn get_test_execution_thing(
         &self,

@@ -1,6 +1,6 @@
 use crate::{
     db::metric::MetricRepo,
-    models::{metric::{Metric, MetricType, StatisticalMetrics}, metrics::{memory::MemoryMetrics, CpuMetrics, PoseErrorMetrics}, Iteration},
+    models::{metric::{Metric, MetricType, StatisticalMetrics}, metrics::{memory::MemoryMetrics, pose_error::{Position, APE, RPE}, CpuMetrics, PoseErrorMetrics}, Iteration, Pose},
     services::error::ProcessingError
 };
 
@@ -30,17 +30,12 @@ impl MetricService {
     pub async fn create_pose_error_metric(
         &self,
         iteration_id: Thing,
-        ape_stats: StatisticalMetrics,
-        rpe_stats: StatisticalMetrics
+        pose_error: PoseErrorMetrics,
     ) -> Result<Metric, ProcessingError> {
         
         let mut metric = Metric{
             id: None,
-            metric_type: MetricType::PoseError(PoseErrorMetrics {
-                ape: ape_stats,
-                rpe: rpe_stats,
-                created_at: Utc::now(),
-            })
+            metric_type: MetricType::PoseError(pose_error)
         };
         
         self.repo.save(&mut metric, &iteration_id).await?;
@@ -92,6 +87,46 @@ impl MetricService {
         self.repo.save(&mut metric, &iteration_id).await?;
         Ok(metric)
     }
+
+    pub async fn create_ape(
+        &self,
+        iteration_id: Thing,
+        ape_list: &mut Vec<APE>,
+    ) -> Result<(), ProcessingError> {
+
+        for ape in ape_list{
+            self.repo.save_ape(ape, &iteration_id).await?;
+
+        }
+        Ok(())
+    }
+
+    pub async fn create_position(
+        &self,
+        iteration_id: Thing,
+        position_list: &mut Vec<Position>,
+    ) -> Result<(), ProcessingError> {
+
+        for position in position_list{
+            self.repo.save_position(position, &iteration_id).await?;
+
+        }
+        Ok(())
+    }
+
+    pub async fn create_rpe(
+        &self,
+        iteration_id: Thing,
+        rpe_list: &mut Vec<RPE>,
+    ) -> Result<(), ProcessingError> {
+
+        for rpe in rpe_list{
+            self.repo.save_rpe(rpe, &iteration_id).await?;
+
+        }
+        Ok(())
+    }
+    
 
 
 

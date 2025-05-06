@@ -6,7 +6,7 @@ use serde_json::Value;
 use surrealdb::{engine::local::Db, sql::Thing, Response, Surreal};
 use tokio::sync::Mutex;
 
-use crate::{models::{metric::Metric, Algorithm, AlgorithmRun}, services::DbError};
+use crate::{models::{metric::Metric, metrics::pose_error::APE, Algorithm, AlgorithmRun, Iteration, TestDefinition, TestExecution}, services::DbError};
 
 pub struct AlgorithmRunRepo {
     conn: Arc<Mutex<Surreal<Db>>>,
@@ -85,45 +85,72 @@ impl AlgorithmRunRepo {
 
     }
 
-//    pub async fn get_metrics(
-//        &self,
-//        run: &AlgorithmRun
-//    ) -> Result<Vec<Metric>, DbError> {
-//        let run_id = run.id.clone()
-//            .ok_or(DbError::MissingField("AlgorithmRun ID"))?;
-//
-//            //let mut result = self.conn.lock().await
-//            //.query("
-//            //    SELECT 
-//            //        id,
-//            //        metric_type.* 
-//            //    FROM $run_id->has_iteration->iteration->has_metric->metric
-//            //")
-//            //.bind(("run_id", run_id.clone()))
-//            //.await?;
-//
-//        //let metric: Option<Vec<Thing>> = result.take(0)?;
-//
-//        let mut result = self.conn.lock().await
-//        .query("
-//            SELECT 
-//                id,
-//                metric_type.* 
-//            FROM $run_id->has_iteration->iteration->has_metric->metric
-//        ")
-//        .bind(("run_id", run_id.clone()))
-//        .await?;
-//
-//        //warn!("My vec metrics: {:?}", result);
-//        let metrics: Vec<Metric> = result.take(0).unwrap();
-//
-//        if metrics.is_empty() {
-//            Err(DbError::NotFound(format!("No metrics found for run {}", run_id)))
-//        } else {
-//            Ok(metrics)
-//        }
-//
-//    }
+
+    pub async fn get_test_definition(
+        &self,
+        algo_run: &AlgorithmRun
+    ) -> Result<TestDefinition, DbError>{
+
+            let algo_run_id = algo_run.id.clone()
+            .ok_or(DbError::MissingField("Algorithm Run ID"))?;
+
+        let mut result = self.conn.lock().await
+            .query("
+                SELECT <-has_run<-test_execution<-defines<-test_definition.* AS test_definition
+                FROM $algo_run_id
+            ")
+            .bind(("algo_run_id", algo_run_id.clone()))
+            .await?;
+
+
+        let algorithm_run: Option<Vec<TestDefinition>> = result.take("test_definition")?;
+
+        match algorithm_run{
+            Some(a) => {
+                a.into_iter().next()
+                .ok_or_else(|| DbError::NotFound(
+                    format!("Test Definition for algo_run {} not found", algo_run_id)
+                ))
+            },
+            None => Err(DbError::NotFound(
+                format!("Test Definition for algo_run {} not found", algo_run_id)
+            ))
+        }
+    }
+
+
+    pub async fn get_test_execution_thing(
+        &self,
+        algo_run: &AlgorithmRun
+    ) -> Result<Thing, DbError> {
+        
+        let algo_run_id = algo_run.id.clone()
+            .ok_or(DbError::MissingField("Iteration ID"))?;
+
+        let mut result = self.conn.lock().await
+            .query("
+                SELECT <-has_run<-test_execution.* AS test_execution
+                FROM $algo_run_id
+            ")
+            .bind(("algo_run_id", algo_run_id.clone()))
+            .await?;
+
+        let algorithm_run: Option<Vec<TestExecution>> = result.take("test_execution")?;
+
+        match algorithm_run{
+            Some(a) => {
+                a.into_iter().next()
+                .ok_or_else(|| DbError::NotFound(
+                    format!("Test Execution for iteration {} not found", algo_run_id)
+                ))?.id.ok_or_else(|| DbError::MissingField(
+                    "Missing ID for test execution"))
+            },
+            None => Err(DbError::NotFound(
+                format!("Dataset for iteration {} not found", algo_run_id)
+            ))
+        }
+
+    }
 
     pub async fn get_metrics(&self, run: &AlgorithmRun) -> Result<Vec<Metric>, DbError> {
         let run_id = run.id.clone()
@@ -141,6 +168,24 @@ impl AlgorithmRunRepo {
     
         Ok(metrics)
     }
+
+    pub async fn get_iterations(&self, run: &AlgorithmRun) -> Result<Vec<Iteration>, DbError> {
+        let run_id = run.id.clone()
+            .ok_or(DbError::MissingField("AlgorithmRun ID"))?;
+    
+        let mut result = self.conn.lock().await
+            .query("
+                SELECT *
+                FROM $run_id->has_iteration->iteration
+            ")
+            .bind(("run_id", run_id.clone()))
+            .await?;
+    
+        let metrics: Vec<Iteration> = result.take(0)?;
+    
+        Ok(metrics)
+    }
+
 
     pub async fn update_aggregate_metric(&self, run: &AlgorithmRun, metric: Metric) -> Result<(), DbError> {
 
