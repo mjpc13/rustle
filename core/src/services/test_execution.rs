@@ -1,16 +1,15 @@
 use std::{collections::HashMap, fs, sync::Arc};
 
+use charming::{theme::Theme, ImageRenderer};
 use chrono::Utc;
 use directories::ProjectDirs;
 use log::{debug, info, warn};
 use tokio::sync::Mutex;
 
-use crate::{
-    db::{test_execution, TestDefinitionRepo, TestExecutionRepo}, 
-    models::{metrics::ContainerStats, test_definitions::{test_definition::{TestDefinition, TestType}, CutParams, DropParams}, test_execution::{TestExecution, TestExecutionStatus}, Algorithm, AlgorithmRun, Iteration, SimpleTestParams, SpeedTestParams, TestResults}, services::error::ProcessingError, utils::plots::test_cpu_load_line_chart
+use crate::{db::{TestDefinitionRepo, TestExecutionRepo}, models::{metrics::ContainerStats, test_definitions::{test_definition::{TestDefinition, TestType}, CutParams, DropParams}, test_execution::{TestExecution, TestExecutionStatus}, Algorithm, Iteration, SpeedTestParams, TestResults}, services::error::ProcessingError, utils::plots::test_cpu_load_line_chart
 };
 
-use super::{error::{ExecutionError, RunError}, AlgorithmRunService, DatasetService, IterationService};
+use super::{error::{ExecutionError, PlotError, RunError}, AlgorithmRunService, IterationService};
 use surrealdb::sql::Thing;
 
 pub struct TestExecutionService {
@@ -91,27 +90,44 @@ impl TestExecutionService {
 
     pub async fn plot_execution(
         &self,
-        def: &TestDefinition
-    ) -> Result<(), ProcessingError> {
+        def: &TestDefinition,
+        path: &str,
+        overwrite: bool,
+        format:  &str
+    ) -> Result<(), PlotError> {
 
-        let execution: TestExecution = self.definition_repo.get_test_executions(def).await?;
+        let execution: TestExecution = self.definition_repo.get_test_executions(def).await.map_err(|_err| PlotError::MissingData("Test run was not found".to_owned()))?;
+        let execution_id = execution.id.ok_or(PlotError::MissingData("Test run ID is missing, probably was never run".to_owned()))?;
 
-        let execution_id = execution.id.unwrap();
+        //let config = Config::load().expect("Unable to load configuration.");
+
+        //LOGIC TO PLOT THE ITERATIONS THINGS!
+
+        // 1 - get all iterations
+
+        // 
+
         
         //get all algorithm runs
-        let algo_run_list = self.execution_repo.get_algorithm_runs(&execution_id).await?;
+        let algo_run_list = self.execution_repo.get_algorithm_runs(&execution_id).await.map_err(|_err| PlotError::MissingData("Test run was not found".to_owned()))?;
         for algo_run in algo_run_list{
             self.algorithm_run_service.set_aggregate_metrics(&algo_run).await;
-            // Plot things for the iterations!!!
-            self.algorithm_run_service.plot_cpu_load(&algo_run).await;
-            self.algorithm_run_service.plot_memory_usage(&algo_run).await;
-            self.algorithm_run_service.plot_ape(&algo_run).await;
+
+            let hash_plots = self.algorithm_run_service.plot(&algo_run, path, overwrite, format).await?;
+
+            for (p, ch) in hash_plots{
+
+                // The Theme and shape can be in the Config file!
+                let mut renderer = ImageRenderer::new(1000, 1000).theme(Theme::Infographic);
+                let _ = renderer.save(&ch, p);
+            }
         }
+
 
         //PLOT ALGORITHMS AGAINST EACH OTHER!!!
 
         //Need to get the algorithm and the algorithm run.
-        let _ = self.plot_cpu_load(&execution_id).await;
+        //let _ = self.plot_cpu_load(&execution_id).await;
 
 
         Ok(())

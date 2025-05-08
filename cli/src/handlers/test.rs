@@ -1,6 +1,8 @@
 use comfy_table::{presets::UTF8_FULL, ContentArrangement, Table};
-use log::info;
+use directories::ProjectDirs;
+use log::{error, info, warn};
 use rustle_core::{
+    config::Config,
     models::{
         test_definitions::TestDefinitionsConfig,
         TestExecution, TestExecutionStatus,
@@ -8,7 +10,7 @@ use rustle_core::{
     services::{TestDefinitionService, TestExecutionService},
 };
 use crate::args::{TestCommand, TestSubCommand};
-use std::{error::Error, fs::File};
+use std::{error::Error, fs::{create_dir_all, File}, path::Path};
 use serde_yaml::from_reader;
 
 pub async fn handle_test(
@@ -98,27 +100,70 @@ pub async fn handle_test(
                         };
 
                         let _ = test_exec_service.start_execution(execution, &test).await;
-                        println!("Started execution for test: {}", test.name);
+                        //println!("Started execution for test: {}", test.name);
                     }
                 }
             }
         TestSubCommand::Plot(plot_test) => {
+            
+            //Ensures the output path exists
+            let output_path = match plot_test.output_dir {
+                Some(p) => p,
+                None => {
+                    let config = Config::load()?; // Load from config file
+                    config.data.path.clone()
+                }
+            };
+
+            if !Path::new(&output_path).exists() {
+                create_dir_all(&output_path)?; // Ensure output directory exists
+            }
+        
+            let allowed_formats = ["png", "svg", "pdf"];
+            if !allowed_formats.contains(&plot_test.format.as_str()) {
+                error!("Invalid format '{}'. Allowed formats: png, svg, pdf", plot_test.format);
+                return Ok(());
+            }
 
             if plot_test.all {
                 let tests = service.get_all().await;
                 if tests.is_empty() {
-                    println!("No test definitions available to plot.");
+                    warn!("No test definitions available to plot.");
                     return Ok(());
                 }
 
                 // Loop through all tests and start execution
                 for test in tests { 
                     // CALL THE PLOT THING FOR EACH TEST DEF. BE CAREFULL THEY MIGHT NOT HAVE DATA YET!
+                                        
+                    //Get the test executions derived from test definition
+                    //let exec = service.get_executions(test).await;
+
+                    //plot for every tests, but some tests may not have the necessary data, 
+                    // this will throw an error for sure. DEAL WITH IT
+
+                    if let Err(e) = test_exec_service
+                        .plot_execution(&test, &output_path, plot_test.overwrite, &plot_test.format)
+                        .await {
+                            warn!("Failed to plot test '{}': {}", test.name, e);
+                    }
+
                 }
 
             } else {
                 // If --all isn't present, execute a specific test (by name)
                 if let Some(name) = plot_test.name {
+                    todo!("Not implemented yet. Should be the same logic as to compute for all.")
+
+    //            let test = match service.get_by_name(&name).await {
+    //                Some(t) => t,
+    //                None => {
+    //                    error!("Test definition '{}' not found", name);
+    //                    return Ok(());
+    //                }
+    //            };
+
+
                     // CALL THE PLOT THING FOR A SINGLE TEST DEF. BE CAREFULL THEY MIGHT NOT HAVE DATA YET!
                 }
             }
@@ -134,3 +179,56 @@ fn load_yaml_config<T: serde::de::DeserializeOwned>(path: &str) -> Result<T, Box
     Ok(from_reader(file)?)
 }
 
+//    if plot_test.all {
+//        let tests = service.get_all().await;
+//        if tests.is_empty() {
+//            println!("No test definitions available to plot.");
+//            return Ok(());
+//        }
+//
+//        for test in tests {
+//            let plot_file = output_path.join(format!("{}_plot.{}", test.name, plot_test.format));
+//
+//            if plot_file.exists() && !plot_test.overwrite {
+//                error!(
+//                    "File '{}' already exists. Use --overwrite to replace it.",
+//                    plot_file.display()
+//                );
+//                continue;
+//            }
+//
+//            if let Err(e) = generate_plot_for_test(&test, &plot_file, &plot_test.format).await {
+//                error!("Failed to generate plot for '{}': {}", test.name, e);
+//            } else {
+//                info!("Saved plot for '{}' at '{}'", test.name, plot_file.display());
+//            }
+//        }
+//    } else {
+//        if let Some(name) = plot_test.name {
+//            let test = match service.get_by_name(&name).await {
+//                Some(t) => t,
+//                None => {
+//                    error!("Test definition '{}' not found", name);
+//                    return Ok(());
+//                }
+//            };
+//
+//            let plot_file = output_path.join(format!("{}_plot.{}", test.name, plot_test.format));
+//
+//            if plot_file.exists() && !plot_test.overwrite {
+//                error!(
+//                    "File '{}' already exists. Use --overwrite to replace it.",
+//                    plot_file.display()
+//                );
+//                return Ok(());
+//            }
+//
+//            if let Err(e) = generate_plot_for_test(&test, &plot_file, &plot_test.format).await {
+//                error!("Failed to generate plot for '{}': {}", test.name, e);
+//            } else {
+//                info!("Saved plot for '{}' at '{}'", test.name, plot_file.display());
+//            }
+//        } else {
+//            error!("You must provide a test name or use --all");
+//        }
+//    }

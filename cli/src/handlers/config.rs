@@ -1,5 +1,5 @@
 use crate::args::{ConfigCommand, ConfigSubCommand, SetConfig};
-use rustle_core::config::{Config, DatabaseConfig, DockerConfig, LoggingConfig, ResultsConfig};
+use rustle_core::config::{Config, DatabaseConfig, DockerConfig, LoggingConfig, DataConfig};
 use comfy_table::{Table, Cell, presets::UTF8_FULL};
 use std::{error::Error, fs};
 use toml;
@@ -33,7 +33,7 @@ async fn handle_config_show() -> Result<(), Box<dyn Error>> {
     table.add_row(vec!["logging", "level", &config.logging.level]);
 
     // Results section
-    table.add_row(vec!["results", "path", &config.results.path]);
+    table.add_row(vec!["results", "path", &config.data.path]);
 
     println!("{table}");
 
@@ -51,7 +51,7 @@ async fn handle_config_set(set_config: SetConfig) -> Result<(), Box<dyn Error>> 
         "database" => update_database_config(&mut config.database, &set_config),
         "docker" => update_docker_config(&mut config.docker, &set_config),
         "logging" => update_logging_config(&mut config.logging, &set_config),
-        "results" => update_results_config(&mut config.results, &set_config),
+        "results" => update_results_config(&mut config.data, &set_config),
         _ => return Err("Unknown section".into()),
     }
 
@@ -88,9 +88,9 @@ fn update_logging_config(logging: &mut LoggingConfig, set_config: &SetConfig) {
     }
 }
 
-fn update_results_config(results: &mut ResultsConfig, set_config: &SetConfig) {
+fn update_results_config(data: &mut DataConfig, set_config: &SetConfig) {
     if set_config.key == "path" {
-        results.path = set_config.value.clone();
+        data.path = set_config.value.clone();
     } else {
         println!("Invalid key for results configuration");
     }

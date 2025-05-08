@@ -6,11 +6,19 @@ use args::*;
 use bootstrap::*;
 use handlers::{handle_algo, handle_config, handle_dataset, handle_test};
 use clap::Parser;
-use env_logger;
+use env_logger::{self, Builder};
+use log::LevelFilter;
+
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    env_logger::init();
+    //env_logger::init();
+
+    Builder::new()
+        .filter_level(LevelFilter::Info) // Set global log level
+        .init();
+
+
 
     let args = RustleArgs::parse();
     let app = build_app().await?;

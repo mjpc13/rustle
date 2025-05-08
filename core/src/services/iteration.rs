@@ -5,6 +5,7 @@ use std::{collections::HashMap, env, fs::OpenOptions, path::PathBuf, sync::Arc, 
 use std::io::Write;
 
 use bollard::{container::{self, RemoveContainerOptions, StatsOptions}, exec::{CreateExecOptions, StartExecResults}, secret::{HostConfig, ResourcesUlimits}, Docker};
+use charming::Chart;
 use chrono::Utc;
 use futures_util::{future, StreamExt};
 use log::{debug, info, trace, warn};
@@ -21,6 +22,7 @@ use crate::models::metrics::metric::StatisticalMetrics;
 
 use crate::models::metrics::pose_error::{PoseErrorMetrics, Position, APE, RPE};
 use crate::models::metrics::{ContainerStats, CpuMetrics};
+use crate::models::TestDefinition;
 use crate::utils::evo_wrapper::{self, run_metrics_py, EvoApeArg, EvoRpeArg, PlotArg};
 use crate::utils::plots::{ape_line_chart, cpu_load_line_chart, memory_usage_line_chart, rpe_line_chart};
 use crate::{
@@ -33,7 +35,7 @@ use crate::{
 
 use directories::{BaseDirs, UserDirs, ProjectDirs};
 
-use super::error::EvoError;
+use super::error::{EvoError, PlotError};
 use super::{MetricService};
 use super::{dataset, error::RunError, DatasetService, RosService, StatService};
 #[derive(Clone)]
@@ -315,6 +317,7 @@ impl IterationService {
             let _ = self.metric_service.create_memory_metric(iteration_id_clone.clone(), memory_metric).await.unwrap();  
         }
 
+        //This needs to be reviewed
         if let Some(proj_dirs) = ProjectDirs::from("org", "FRUC",  "RUSTLE") {
             let data_dir = proj_dirs.data_dir();
 
@@ -327,8 +330,8 @@ impl IterationService {
             let iter_path = self.get_parents_string(&iter).await?;
             let dataset_path = self.get_dataset_string(&iter).await?;
 
-            let full_path = format!("{data_dir_str}/{iter_path}");
-            let full_dataset_path = format!("{data_dir_str}/{dataset_path}");
+            let full_path = format!("{data_dir_str}/data/{iter_path}");
+            let full_dataset_path = format!("{data_dir_str}/data/{dataset_path}");
 
             //Create the directories if they dont exist
             fs::create_dir_all(&full_path).unwrap();
@@ -378,18 +381,24 @@ impl IterationService {
 
             // ======= PLOTS ==========
 
-            cpu_load_line_chart(&stats, &full_path); //plot cpu
+            cpu_load_line_chart(&stats); //plot cpu
             memory_usage_line_chart(&stats, &full_path); //plot memory
 
             let test_def = self.repo.get_test_def(&iter).await.unwrap();
 
-            ape_line_chart(&ape_list, &test_def, &full_path);
+            ape_line_chart(&ape_list, &test_def);
             rpe_line_chart(&rpe_list, &test_def, &full_path);
 
         };
 
         Ok(())
     }
+
+    //Probably create a plot that receives a iteration ID? then gets whatever it needs...
+    pub async fn plot(&self, iter: Iteration) -> Result<HashMap<String, Chart>, PlotError>{
+        todo!()
+    }
+
 
 
     pub async fn get_stats(&self, iter: &Iteration) -> Result<Vec<ContainerStats>, DbError>{

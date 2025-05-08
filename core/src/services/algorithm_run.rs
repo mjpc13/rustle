@@ -1,16 +1,17 @@
-use std::{collections::HashMap, fs};
+use std::{collections::HashMap, fs, path::Path};
 
 use crate::{
-    db::AlgorithmRunRepo, models::{algorithm_run::AlgorithmRun, metric::{Metric, MetricType}, metrics::{pose_error::{APE, RPE}, ContainerStats, CpuMetrics, PoseErrorMetrics}, Algorithm, TestDefinition}, services::error::ProcessingError, utils::plots::{algorithm_ape_line_chart, algorithm_cpu_load_chart, algorithm_memory_usage_chart, algorithm_rpe_line_chart, memory_usage_line_chart}
+    db::AlgorithmRunRepo, models::{algorithm_run::AlgorithmRun, metric::{Metric, MetricType}, metrics::{pose_error::{APE, RPE}, ContainerStats, CpuMetrics, PoseErrorMetrics}, Algorithm, Iteration, TestDefinition}, services::error::ProcessingError, utils::plots::{algorithm_ape_line_chart, algorithm_cpu_load_chart, algorithm_memory_usage_chart, algorithm_rpe_line_chart, memory_usage_line_chart}
 };
 
 use bollard::secret::ContainerState;
+use charming::Chart;
 use directories::ProjectDirs;
 use futures_util::future::join_all;
 use log::warn;
 use surrealdb::sql::Thing;
 
-use super::{error::RunError, DbError, IterationService};
+use super::{error::{PlotError, RunError}, DbError, IterationService};
 
 pub struct AlgorithmRunService {
     repo: AlgorithmRunRepo,
@@ -61,13 +62,53 @@ impl AlgorithmRunService {
             let _ = self.repo.update_aggregate_metric(run, metric).await;
         }
 
-
     }
 
-    pub async fn plot_ape(&self, run: &AlgorithmRun){
-        //For each AlgorithmRun I need the container stats
-        let iterations = self.repo.get_iterations(run).await.unwrap();
 
+
+    pub async fn plot(&self, run: &AlgorithmRun, path: &str, overwrite: bool, format:  &str) -> Result<HashMap<String, Chart>, PlotError>{
+
+        let mut hash: HashMap<String, Chart> = HashMap::new();
+        let iterations = self.repo.get_iterations(run).await.unwrap();
+        let test_def: TestDefinition = self.repo.get_test_definition(&run).await.unwrap();
+
+        let iter_path = self.get_parents_string(run).await.unwrap();
+        let full_path = format!("{path}/{iter_path}");
+
+        //Create the directories if they dont exist
+        fs::create_dir_all(&full_path).unwrap();
+
+
+        // Call the other plots
+        let files = ["aggregated_cpu_load", "aggregated_memory_usage", "aggregated_ape", "aggregated_rpe"];
+
+        for f in files{
+
+            let filepath = format!("{}/{}.{}", full_path, f, format);
+
+            if Path::new(&filepath).exists() && !overwrite {
+                //Not sure if I should return here, or just emit a warning
+                return Err(PlotError::FileExists(filepath));
+            } else {
+                let chart = match f {
+                    "aggregated_cpu_load" => self.plot_cpu_load(&iterations).await,
+                    "aggregated_memory_usage" => self.plot_memory_usage(&iterations).await,
+                    "aggregated_ape" => self.plot_ape(&iterations, &test_def).await,
+                    "aggregated_rpe" => self.plot_rpe(&iterations, &test_def).await,
+                    &_ => todo!("This should be fine")
+                };
+                hash.insert(filepath, chart?);
+            }
+
+        }
+        
+        Ok(hash)
+    }
+
+
+
+
+    async fn plot_ape(&self, iterations: &Vec<Iteration>, test_def: &TestDefinition) -> Result<Chart, PlotError>{
 
         let algo_ape: Vec<Vec<APE>> = join_all(
             iterations.iter().map(|iter| async {
@@ -75,36 +116,24 @@ impl AlgorithmRunService {
             })
         ).await;
 
+            //PLOTS
+
+            algorithm_ape_line_chart(algo_ape, test_def)
+            //algorithm_rpe_line_chart(algo_rpe, test_def);
+    }
+
+    async fn plot_rpe(&self, iterations: &Vec<Iteration>, test_def: &TestDefinition) -> Result<Chart, PlotError>{
+
         let algo_rpe: Vec<Vec<RPE>> = join_all(
             iterations.iter().map(|iter| async {
                 self.iter_service.get_rpe(iter).await.unwrap()
             })
         ).await;
 
-        if let Some(proj_dirs) = ProjectDirs::from("org", "FRUC",  "RUSTLE") {
-            let data_dir = proj_dirs.data_dir();
-
-            let data_dir_str = data_dir.to_str().ok_or(RunError::Execution("Unable to fing application path".to_owned())).unwrap();
-
-            let iter_path = self.get_parents_string(run).await.unwrap();
-            let full_path = format!("{data_dir_str}/{iter_path}");
-
-            //Create the directories if they dont exist
-            fs::create_dir_all(&full_path).unwrap();
-
-            //PLOTS
-            let test_def: TestDefinition = self.repo.get_test_definition(&run).await.unwrap();
-            algorithm_ape_line_chart(algo_ape, &test_def, &full_path);
-            algorithm_rpe_line_chart(algo_rpe, &test_def, &full_path);
-
-
-        };
+        algorithm_rpe_line_chart(algo_rpe, test_def)
     }
 
-    pub async fn plot_cpu_load(&self, run: &AlgorithmRun){
-
-        //For each AlgorithmRun I need the container stats
-        let iterations = self.repo.get_iterations(run).await.unwrap();
+    async fn plot_cpu_load(&self, iterations: &Vec<Iteration>) -> Result<Chart, PlotError>{
 
         let algo_stats: Vec<Vec<ContainerStats>> = join_all(
             iterations.iter().map(|iter| async {
@@ -112,28 +141,14 @@ impl AlgorithmRunService {
             })
         ).await;
 
-        if let Some(proj_dirs) = ProjectDirs::from("org", "FRUC",  "RUSTLE") {
-            let data_dir = proj_dirs.data_dir();
-
-            let data_dir_str = data_dir.to_str().ok_or(RunError::Execution("Unable to fing application path".to_owned())).unwrap();
-
-            let iter_path = self.get_parents_string(run).await.unwrap();
-            let full_path = format!("{data_dir_str}/{iter_path}");
-
-            //Create the directories if they dont exist
-            fs::create_dir_all(&full_path).unwrap();
-
-            //PLOTS
-            algorithm_cpu_load_chart(algo_stats, &full_path);
-
-        };
+        algorithm_cpu_load_chart(algo_stats)
 
     }
 
-    pub async fn plot_memory_usage(&self, run: &AlgorithmRun){
 
-        //For each AlgorithmRun I need the container stats
-        let iterations = self.repo.get_iterations(run).await.unwrap();
+
+
+    async fn plot_memory_usage(&self, iterations: &Vec<Iteration>) -> Result<Chart, PlotError>{
 
         let algo_stats: Vec<Vec<ContainerStats>> = join_all(
             iterations.iter().map(|iter| async {
@@ -141,24 +156,7 @@ impl AlgorithmRunService {
             })
         ).await;
 
-        if let Some(proj_dirs) = ProjectDirs::from("org", "FRUC",  "RUSTLE") {
-            let data_dir = proj_dirs.data_dir();
-
-            let data_dir_str = data_dir.to_str().ok_or(RunError::Execution("Unable to fing application path".to_owned())).unwrap();
-
-
-            //Create the folder for this iteration:
-            // test_execution_id/algo_run_id/iteration_id/
-            //something like self.repo.get_parents_id()
-            let iter_path = self.get_parents_string(run).await.unwrap();
-            let full_path = format!("{data_dir_str}/{iter_path}");
-
-            //Create the directories if they dont exist
-            fs::create_dir_all(&full_path).unwrap();
-            algorithm_memory_usage_chart(algo_stats, &full_path);
-
-        };
-
+        algorithm_memory_usage_chart(algo_stats)
     }
 
 

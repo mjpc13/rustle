@@ -3,7 +3,7 @@ use std::fs::File;
 use chrono::Utc;
 use log::warn;
 
-use crate::{db::TestDefinitionRepo, models::{test_definitions::{test_definition::TestDefinitionsConfig, CutParams, DropParams}, SpeedTestParams, TestDefinition, TestType}};
+use crate::{db::TestDefinitionRepo, models::{test_definitions::{test_definition::TestDefinitionsConfig, CutParams, DropParams}, SpeedTestParams, TestDefinition, TestExecution, TestType}};
 use super::{error::ValidationError, DbError, TestDefinitionError};
 
 pub struct TestDefinitionService {
@@ -101,10 +101,9 @@ impl TestDefinitionService {
         self.repo.delete_by_name(name.to_string()).await;
     }
 
-    //fn validate_drop(&self, params: &DropTestParams) -> Result<(), ValidationError> {
-    //    if params.topics.is_empty() {
-    //        return Err(ValidationError("Drop test requires at least one topic".into()));
-    //    }
-    //    Ok(())
-    //}
+    pub async fn get_executions(&self, def: TestDefinition) -> Result<TestExecution, DbError>{
+        self.repo.get_test_executions(&def).await
+    }
+
+    
 }

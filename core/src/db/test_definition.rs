@@ -1,5 +1,6 @@
 use std::sync::{Arc};
 
+use log::info;
 use surrealdb::{engine::local::Db, Surreal};
 use tokio::sync::Mutex;
 use crate::{models::{TestDefinition, TestExecution}, services::DbError};
@@ -47,14 +48,19 @@ impl TestDefinitionRepo {
             .ok_or(DbError::MissingField("TestDefinition ID"))?;
 
         let mut result = self.conn.lock().await
-            .query("SELECT ->defines->test_execution AS execution FROM $def_id")
+            .query("SELECT ->defines->test_execution.* AS execution FROM $def_id")
             .bind(("def_id", definition_id.clone()))
             .await?;
 
-        let execution: Option<TestExecution> = result.take("execution")?;
-        execution.ok_or_else(|| DbError::NotFound(
-            format!("TestDefinition for execution {}", definition_id)
-        ))
+        let executions: Option<Vec<TestExecution>> = result.take("execution").unwrap();
+        
+        let execution = executions
+            .and_then(|mut vec| vec.pop()) // get the first if it exists
+            .ok_or_else(|| DbError::NotFound(
+                format!("TestDefinition for execution {}", definition_id)
+            ))?;
+
+        Ok(execution)
     }
 
 

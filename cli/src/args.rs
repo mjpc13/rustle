@@ -184,13 +184,38 @@ pub struct RunTest {
     pub name: Option<String>,
 }
 
+//#[derive(Debug, Args)]
+//pub struct PlotTest {
+//
+//    #[clap(short, long)]
+//    pub all: bool,
+//    pub name: Option<String>,
+//}
+
+
 #[derive(Debug, Args)]
 pub struct PlotTest {
-
     #[clap(short, long)]
     pub all: bool,
+
     pub name: Option<String>,
+
+    #[clap(long)]
+    pub output_dir: Option<String>,
+
+    #[clap(long, default_value = "svg")]
+    pub format: String,
+
+    #[clap(long, default_value = "false")]
+    pub overwrite: bool,
 }
+
+
+
+
+
+
+
 
 // ==== CONFIG COMMANDS ====
 

@@ -9,7 +9,8 @@ pub struct Config {
     pub database: DatabaseConfig,
     pub docker: DockerConfig,
     pub logging: LoggingConfig,
-    pub results: ResultsConfig,
+    pub data: DataConfig,
+    pub plotting: PlottingConfig
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -31,8 +32,14 @@ pub struct LoggingConfig {
 
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
-pub struct ResultsConfig {
+pub struct DataConfig {
     pub path: String,  // Store the full path directly
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct PlottingConfig {
+    pub width: u32,  // Store the full path directly
+    pub height: u32,
 }
 
 
@@ -46,8 +53,8 @@ impl Default for Config {
         let database_path = proj_dirs.data_dir().join("db"); // platform-specific path
         let database_path_str = database_path.to_str().unwrap_or_default().to_string();
 
-        let result_path = proj_dirs.data_dir().join("results"); // platform-specific path
-        let result_path_str = database_path.to_str().unwrap_or_default().to_string();
+        let result_path = proj_dirs.data_dir().join("data"); // platform-specific path
+        let result_path_str = result_path.to_str().unwrap_or_default().to_string();
 
         // Default values; using platform-specific directory paths
         Config {
@@ -62,7 +69,8 @@ impl Default for Config {
             logging: LoggingConfig {
                 level: String::from("info"), // Default logging level
             },
-            results: ResultsConfig { path: result_path_str }
+            data: DataConfig { path: result_path_str },
+            plotting: PlottingConfig { width: 1000, height: 1000 },
         }
     }
 }

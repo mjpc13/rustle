@@ -1,5 +1,6 @@
 use thiserror::Error;
 
+
 #[derive(Debug, Error)]
 pub enum AlgorithmError {
     #[error("Validation error: {0}")]
@@ -190,5 +191,16 @@ pub enum ExecutionError{
     #[error("Unable to compute test execution: {0}")]
     ComputeError(String),
 
+
+}
+
+#[derive(Debug,Error)]
+pub enum PlotError{
+
+    #[error("Unable to plot due to missing data: {0}")]
+    MissingData(String),
+
+    #[error("A file named '{0}' already exists at the destination. Use the '--overwrite' flag to replace it.")]
+    FileExists(String),
 
 }

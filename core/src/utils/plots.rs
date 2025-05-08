@@ -5,7 +5,7 @@ use std::collections::{BTreeMap, HashMap};
 
 use chrono::{format::Item, DateTime, Utc};
 use log::warn;
-use crate::models::{metrics::{pose_error::{APE, RPE}, ContainerStats, PoseErrorMetrics}, Algorithm, TestDefinition, TestType};
+use crate::{models::{metrics::{pose_error::{APE, RPE}, ContainerStats, PoseErrorMetrics}, Algorithm, TestDefinition, TestType}, services::error::PlotError};
 
 use rand::Rng;
 
@@ -24,7 +24,7 @@ struct DataItem{
 
 //PLOTS FOR A SINGLE ITERATION!!!
 
-pub fn cpu_load_line_chart(data: &Vec<ContainerStats>, file_path: &String) {
+pub fn cpu_load_line_chart(data: &Vec<ContainerStats>) -> Result<Chart, PlotError> {
     let data_ts: Vec<DateTime<Utc>> = data.iter().map(|cs| cs.created_at).collect();
     let start_ts = data_ts[0];
 
@@ -33,14 +33,24 @@ pub fn cpu_load_line_chart(data: &Vec<ContainerStats>, file_path: &String) {
         .map(|ts| (*ts - start_ts).num_seconds() as f64)
         .collect();
 
-    let cpu_load: Vec<f64> = data.iter()
+    let cpu_load: Result<Vec<f64>, PlotError> = data.iter()
         .skip(2)
         .map(|cs| {
-            let load_used = (cs.cpu_stats.cpu_usage.total_usage - cs.precpu_stats.cpu_usage.total_usage) as f64;
-            let available = (cs.cpu_stats.system_cpu_usage.unwrap() - cs.precpu_stats.system_cpu_usage.unwrap()) as f64;
-            load_used / available * 100.0 * cs.cpu_stats.online_cpus.unwrap() as f64
+
+            let total_usage = cs.cpu_stats.cpu_usage.total_usage;
+            let prev_usage = cs.precpu_stats.cpu_usage.total_usage;
+            let system_cpu = cs.cpu_stats.system_cpu_usage.ok_or(PlotError::MissingData("CPU usage".to_owned()))?;
+            let prev_system_cpu = cs.precpu_stats.system_cpu_usage.ok_or(PlotError::MissingData("Pre CPU usage".to_owned()))?;
+            let online_cpus = cs.cpu_stats.online_cpus.ok_or(PlotError::MissingData("Online CPUs".to_owned()))? as f64;
+
+            let used = (total_usage - prev_usage) as f64;
+            let available = (system_cpu - prev_system_cpu) as f64;
+            Ok(used / available * 100.0 * online_cpus)
+
         })
         .collect();
+
+    let cpu_load = cpu_load?;
 
     let mean = if !cpu_load.is_empty() {
         cpu_load.iter().sum::<f64>() / cpu_load.len() as f64
@@ -115,12 +125,14 @@ pub fn cpu_load_line_chart(data: &Vec<ContainerStats>, file_path: &String) {
                 )
         );
 
-    let filename = "cpu_load.svg";
-    let full_path = format!("{file_path}/{filename}");
+    //let filename = "cpu_load.svg";
+    //let full_path = format!("{file_path}/{filename}");
+    //let mut renderer = ImageRenderer::new(1000, 800)
+    //    .theme(Theme::Infographic);
+    //renderer.save(&chart, full_path);
 
-    let mut renderer = ImageRenderer::new(1000, 800)
-        .theme(Theme::Infographic);
-    renderer.save(&chart, full_path);
+    Ok(chart)
+
 }
 
 pub fn memory_usage_line_chart(data: &Vec<ContainerStats>, file_path: &str) {
@@ -196,7 +208,7 @@ pub fn memory_usage_line_chart(data: &Vec<ContainerStats>, file_path: &str) {
     renderer.save(&chart, full_path);
 }
 
-pub fn ape_line_chart(data: &Vec<APE>, test_definition: &TestDefinition, file_path: &String) {
+pub fn ape_line_chart(data: &Vec<APE>, test_definition: &TestDefinition) -> Result<Chart, PlotError> {
     let time: Vec<f64> = data.iter().map(|ape| ape.time_from_start).collect();
     let ape_values: Vec<f64> = data.iter().map(|ape| ape.value).collect();
 
@@ -270,11 +282,13 @@ pub fn ape_line_chart(data: &Vec<APE>, test_definition: &TestDefinition, file_pa
 
     chart = add_areas_markers(chart, area_data);
 
-    let filename = "ape.svg";
-    let full_path = format!("{file_path}/{filename}");
+    //let filename = "ape.svg";
+    //let full_path = format!("{file_path}/{filename}");
+    //let mut renderer = ImageRenderer::new(1000, 800).theme(Theme::Infographic);
+    //renderer.save(&chart, full_path);
 
-    let mut renderer = ImageRenderer::new(1000, 800).theme(Theme::Infographic);
-    renderer.save(&chart, full_path);
+    Ok(chart)
+
 }
 
 pub fn rpe_line_chart(data: &Vec<RPE>, test_definition: &TestDefinition, file_path: &String) {
@@ -362,8 +376,8 @@ pub fn rpe_line_chart(data: &Vec<RPE>, test_definition: &TestDefinition, file_pa
 
 /// PLOTS FOR THE MULTIPLE ITERATIONS
 
-pub fn algorithm_memory_usage_chart(iterations: Vec<Vec<ContainerStats>>, file_path: &str) {
-
+pub fn algorithm_memory_usage_chart(iterations: Vec<Vec<ContainerStats>>) -> Result<Chart, PlotError> {
+            
     // Process each iteration to get Memory load percentages
     let mut time_buckets: BTreeMap<i64, Vec<f64>> = BTreeMap::new(); // To put multiple memory usages in the approx the same time;
 
@@ -481,14 +495,17 @@ pub fn algorithm_memory_usage_chart(iterations: Vec<Vec<ContainerStats>>, file_p
                 )
         );
 
-    let filename = "aggregated_memory_usage.svg";
-    let full_path = format!("{}/{}", file_path, filename);
+    //let filename = "aggregated_memory_usage.svg";
+    //let full_path = format!("{}/{}", file_path, filename);
+    //let mut renderer = ImageRenderer::new(1200, 800).theme(Theme::Infographic);
+    //renderer.save(&chart, full_path);
 
-    let mut renderer = ImageRenderer::new(1200, 800).theme(Theme::Infographic);
-    renderer.save(&chart, full_path);
+    Ok(chart)
+
 }
 
-pub fn algorithm_cpu_load_chart(iterations: Vec<Vec<ContainerStats>>, file_path: &str) {
+
+pub fn algorithm_cpu_load_chart(iterations: Vec<Vec<ContainerStats>>) -> Result<Chart, PlotError> {
     let mut time_buckets: BTreeMap<i64, Vec<f64>> = BTreeMap::new();
 
     for iteration in &iterations {
@@ -499,14 +516,24 @@ pub fn algorithm_cpu_load_chart(iterations: Vec<Vec<ContainerStats>>, file_path:
             .map(|ts| (*ts - start_ts).num_seconds() as f64)
             .collect();
 
-        let cpu_load: Vec<f64> = iteration.iter()
+        let cpu_load: Result<Vec<f64>, PlotError> = iteration.iter()
             .skip(2)
             .map(|cs| {
-                let load_used = (cs.cpu_stats.cpu_usage.total_usage - cs.precpu_stats.cpu_usage.total_usage) as f64;
-                let available = (cs.cpu_stats.system_cpu_usage.unwrap() - cs.precpu_stats.system_cpu_usage.unwrap()) as f64;
-                (load_used / available * 100.0 * cs.cpu_stats.online_cpus.unwrap() as f64).clamp(0.0, 100.0)
+    
+                let total_usage = cs.cpu_stats.cpu_usage.total_usage;
+                let prev_usage = cs.precpu_stats.cpu_usage.total_usage;
+                let system_cpu = cs.cpu_stats.system_cpu_usage.ok_or(PlotError::MissingData("CPU usage".to_owned()))?;
+                let prev_system_cpu = cs.precpu_stats.system_cpu_usage.ok_or(PlotError::MissingData("Pre CPU usage".to_owned()))?;
+                let online_cpus = cs.cpu_stats.online_cpus.ok_or(PlotError::MissingData("Online CPUs".to_owned()))? as f64;
+    
+                let used = (total_usage - prev_usage) as f64;
+                let available = (system_cpu - prev_system_cpu) as f64;
+                Ok(used / available * 100.0 * online_cpus)
+    
             })
             .collect();
+
+        let cpu_load = cpu_load?;
 
         for (t, load) in time_sec.into_iter().zip(cpu_load) {
             let bucket_key = (t * 1000.0) as i64;
@@ -590,15 +617,17 @@ pub fn algorithm_cpu_load_chart(iterations: Vec<Vec<ContainerStats>>, file_path:
                 )
         );
 
-    let filename = "aggregated_cpu_load.svg";
-    let full_path = format!("{}/{}", file_path, filename);
+    //let filename = "aggregated_cpu_load.svg";
+    //let full_path = format!("{}/{}", file_path, filename);
+    //let mut renderer = ImageRenderer::new(1200, 800)
+    //    .theme(Theme::Infographic);
+    //renderer.save(&chart, full_path);
 
-    let mut renderer = ImageRenderer::new(1200, 800)
-        .theme(Theme::Infographic);
-    renderer.save(&chart, full_path);
+    Ok(chart)
+
 }
 
-pub fn algorithm_ape_line_chart(iterations: Vec<Vec<APE>>, test_definition: &TestDefinition, file_path: &String){
+pub fn algorithm_ape_line_chart(iterations: Vec<Vec<APE>>, test_definition: &TestDefinition) -> Result<Chart, PlotError> {
 
     // Process each iteration to get Memory load percentages
     let mut time_buckets: BTreeMap<i64, Vec<f64>> = BTreeMap::new(); // To put multiple memory usages in the approx the same time;
@@ -711,16 +740,17 @@ pub fn algorithm_ape_line_chart(iterations: Vec<Vec<APE>>, test_definition: &Tes
     chart = add_areas_markers(chart, area_data);
 
 
-    let filename = "aggregated_ape.svg";
-    let full_path = format!("{}/{}", file_path, filename);
+    //let filename = "aggregated_ape.svg";
+    //let full_path = format!("{}/{}", file_path, filename);
+    //let mut renderer = ImageRenderer::new(1200, 800).theme(Theme::Infographic);
+    //renderer.save(&chart, full_path);
 
-    let mut renderer = ImageRenderer::new(1200, 800).theme(Theme::Infographic);
-    renderer.save(&chart, full_path);
+    Ok(chart)
 
 
 }
 
-pub fn algorithm_rpe_line_chart(iterations: Vec<Vec<RPE>>, test_definition: &TestDefinition, file_path: &String){
+pub fn algorithm_rpe_line_chart(iterations: Vec<Vec<RPE>>, test_definition: &TestDefinition) -> Result<Chart, PlotError> {
 
     // Process each iteration to get Memory load percentages
     let mut time_buckets: BTreeMap<i64, Vec<f64>> = BTreeMap::new(); // To put multiple memory usages in the approx the same time;
@@ -832,15 +862,16 @@ pub fn algorithm_rpe_line_chart(iterations: Vec<Vec<RPE>>, test_definition: &Tes
 
     chart = add_areas_markers(chart, area_data);
 
-
-    let filename = "aggregated_rpe.svg";
-    let full_path = format!("{}/{}", file_path, filename);
-
-    let mut renderer = ImageRenderer::new(1200, 800).theme(Theme::Infographic);
-    renderer.save(&chart, full_path);
-
+    Ok(chart)
 
 }
+
+
+
+
+
+
+
 
 
 ///PLOTS COMPARING THE DIFFERENT METHODS
