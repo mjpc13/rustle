@@ -2,7 +2,7 @@ use comfy_table::{presets::UTF8_FULL, ContentArrangement, Table};
 use directories::ProjectDirs;
 use log::{error, info, warn};
 use rustle_core::{
-    config::Config,
+    utils::config::Config,
     models::{
         test_definitions::TestDefinitionsConfig,
         TestExecution, TestExecutionStatus,
@@ -161,6 +161,12 @@ pub async fn handle_test(
                             return Ok(());
                         }
                     };
+
+                    if let Err(e) = test_exec_service
+                        .plot_execution(&test, &output_path, plot_test.overwrite, &plot_test.format)
+                        .await {
+                            warn!("Failed to plot test '{}': {}", test.name, e);
+                    }
 
                     // CALL THE PLOT THING FOR A SINGLE TEST DEF. BE CAREFULL THEY MIGHT NOT HAVE DATA YET!
                 }

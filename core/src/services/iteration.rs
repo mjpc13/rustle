@@ -376,16 +376,7 @@ impl IterationService {
                 }).collect();
 
             let pose_error_metric = PoseErrorMetrics::from_values(&ape_values, &rpe_values).unwrap();
-            let metric = self.metric_service.create_pose_error_metric(iteration_id_clone.clone(), pose_error_metric).await.unwrap();
-
-
-            // ======= PLOTS ==========
-
-            cpu_load_line_chart(&stats); //plot cpu
-            memory_usage_line_chart(&stats); //plot memory
-
-            let test_def = self.repo.get_test_def(&iter).await.unwrap();
-
+            let _metric = self.metric_service.create_pose_error_metric(iteration_id_clone.clone(), pose_error_metric).await.unwrap();
 
         };
 

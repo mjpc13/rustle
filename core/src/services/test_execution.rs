@@ -7,6 +7,8 @@ use directories::ProjectDirs;
 use log::{debug, info, warn};
 use tokio::sync::Mutex;
 
+use crate::utils::config::Config;
+
 use crate::{db::{TestDefinitionRepo, TestExecutionRepo}, models::{metrics::ContainerStats, test_definitions::{test_definition::{TestDefinition, TestType}, CutParams, DropParams}, test_execution::{TestExecution, TestExecutionStatus}, Algorithm, Iteration, SpeedTestParams, TestResults}, services::error::ProcessingError, utils::plots::test_cpu_load_line_chart
 };
 
@@ -100,7 +102,7 @@ impl TestExecutionService {
         let execution: TestExecution = self.definition_repo.get_test_executions(def).await.map_err(|_err| PlotError::MissingData("Test run was not found".to_owned()))?;
         let execution_id = execution.id.ok_or(PlotError::MissingData("Test run ID is missing, probably was never run".to_owned()))?;
 
-        //let config = Config::load().expect("Unable to load configuration.");
+        let config = Config::load().expect("Unable to load configuration.");
 
         let iterations = self.execution_repo.get_iterations(&execution_id).await.map_err(|_e| PlotError::MissingData(format!("No iterations found for test {}. Did you run the test?", def.name)))?;
         // Plot for each iteration!
@@ -125,7 +127,7 @@ impl TestExecutionService {
             for (p, ch) in hash_plots{
 
                 // The Theme and shape can be in the Config file!
-                let mut renderer = ImageRenderer::new(1000, 1000).theme(Theme::Infographic);
+                let mut renderer = ImageRenderer::new(config.plotting.width, config.plotting.height).theme(Theme::Infographic);
                 let _ = renderer.save(&ch, p);
             }
         }

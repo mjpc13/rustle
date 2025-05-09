@@ -6,7 +6,7 @@ use tokio::sync::Mutex;
 use rustle_core::{
     db::*,
     services::*,
-    config::Config,
+    utils::config::Config,
 };
 
 pub struct AppContext {

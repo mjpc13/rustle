@@ -10,7 +10,8 @@ pub struct Config {
     pub docker: DockerConfig,
     pub logging: LoggingConfig,
     pub data: DataConfig,
-    pub plotting: PlottingConfig
+    pub plotting: PlottingConfig,
+    pub evo: EvoConfig,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -42,6 +43,17 @@ pub struct PlottingConfig {
     pub height: u32,
 }
 
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct EvoConfig {
+    pub align: bool,  // Store the full path directly
+    pub align_origin: bool,
+    pub t_max_diff: f64,
+    pub t_offset: f64,
+    pub scale: bool,
+    pub n_to_align: u32
+}
+
+
 
 impl Default for Config {
     fn default() -> Self {
@@ -71,6 +83,14 @@ impl Default for Config {
             },
             data: DataConfig { path: result_path_str },
             plotting: PlottingConfig { width: 1000, height: 1000 },
+            evo: EvoConfig { 
+                align: true, 
+                align_origin: true, 
+                t_max_diff: 0.01, 
+                t_offset: 0.0, 
+                scale: true,
+                n_to_align: 100, 
+            },
         }
     }
 }

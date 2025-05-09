@@ -1,5 +1,5 @@
 use crate::args::{ConfigCommand, ConfigSubCommand, SetConfig};
-use rustle_core::config::{Config, DatabaseConfig, DockerConfig, LoggingConfig, DataConfig};
+use rustle_core::utils::config::{Config, DatabaseConfig, DockerConfig, LoggingConfig, DataConfig};
 use comfy_table::{Table, Cell, presets::UTF8_FULL};
 use std::{error::Error, fs};
 use toml;
