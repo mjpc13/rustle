@@ -53,6 +53,10 @@ impl MetricRepo {
             ape.id = created.id;
         }
 
+        self.conn.lock().await
+            .query("DEFINE INDEX ape_time_from_start ON ape FIELDS time_from_start")
+            .await?;
+
         if let Some(ape_id) = &ape.id {
             self.conn.lock().await
                 .query("RELATE $iteration->has_ape->$ape")
@@ -76,6 +80,9 @@ impl MetricRepo {
         if let Some(created) = created {
             rpe.id = created.id;
         }
+        self.conn.lock().await
+            .query("DEFINE INDEX rpe_time_from_start ON rpe FIELDS time_from_start")
+            .await?;
 
         if let Some(rpe_id) = &rpe.id {
             self.conn.lock().await

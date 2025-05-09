@@ -1,5 +1,6 @@
 use std::{collections::HashMap, fs, sync::Arc};
 
+use bollard::exec;
 use charming::{theme::Theme, ImageRenderer};
 use chrono::Utc;
 use directories::ProjectDirs;
@@ -101,11 +102,17 @@ impl TestExecutionService {
 
         //let config = Config::load().expect("Unable to load configuration.");
 
-        //LOGIC TO PLOT THE ITERATIONS THINGS!
+        let iterations = self.execution_repo.get_iterations(&execution_id).await.map_err(|_e| PlotError::MissingData(format!("No iterations found for test {}. Did you run the test?", def.name)))?;
+        // Plot for each iteration!
+        for iter in iterations{
+            let hash_plots = self.iteration_service.plot(iter, def, path, overwrite, format).await?;
 
-        // 1 - get all iterations
-
-        // 
+            for (p, ch) in hash_plots{
+                // The Theme and shape can be in the Config file!
+                let mut renderer = ImageRenderer::new(1000, 1000).theme(Theme::Infographic);
+                let _ = renderer.save(&ch, p);
+            }
+        }
 
         
         //get all algorithm runs
@@ -123,12 +130,7 @@ impl TestExecutionService {
             }
         }
 
-
         //PLOT ALGORITHMS AGAINST EACH OTHER!!!
-
-        //Need to get the algorithm and the algorithm run.
-        //let _ = self.plot_cpu_load(&execution_id).await;
-
 
         Ok(())
     }

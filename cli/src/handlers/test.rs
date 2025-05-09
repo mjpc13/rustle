@@ -141,7 +141,6 @@ pub async fn handle_test(
 
                     //plot for every tests, but some tests may not have the necessary data, 
                     // this will throw an error for sure. DEAL WITH IT
-
                     if let Err(e) = test_exec_service
                         .plot_execution(&test, &output_path, plot_test.overwrite, &plot_test.format)
                         .await {
@@ -153,16 +152,15 @@ pub async fn handle_test(
             } else {
                 // If --all isn't present, execute a specific test (by name)
                 if let Some(name) = plot_test.name {
-                    todo!("Not implemented yet. Should be the same logic as to compute for all.")
+                    //todo!("Not implemented yet. Should be the same logic as to compute for all.");
 
-    //            let test = match service.get_by_name(&name).await {
-    //                Some(t) => t,
-    //                None => {
-    //                    error!("Test definition '{}' not found", name);
-    //                    return Ok(());
-    //                }
-    //            };
-
+                    let test = match service.get_by_name(&name).await? {
+                        Some(t) => t,
+                        None => {
+                            error!("Test definition '{}' not found", name);
+                            return Ok(());
+                        }
+                    };
 
                     // CALL THE PLOT THING FOR A SINGLE TEST DEF. BE CAREFULL THEY MIGHT NOT HAVE DATA YET!
                 }

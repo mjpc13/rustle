@@ -223,7 +223,7 @@ impl IterationRepo {
         let mut result = self.conn.lock().await
             .query("
                 SELECT *
-                FROM $iteration_id->has_ape->ape
+                FROM $iteration_id->has_ape->ape ORDER BY time_from_start ASC
             ")
             .bind(("iteration_id", iteration_id.clone()))
             .await?;
@@ -240,7 +240,7 @@ impl IterationRepo {
         let mut result = self.conn.lock().await
             .query("
                 SELECT *
-                FROM $iteration_id->has_rpe->rpe
+                FROM $iteration_id->has_rpe->rpe ORDER BY time_from_start ASC
             ")
             .bind(("iteration_id", iteration_id.clone()))
             .await?;

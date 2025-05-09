@@ -135,7 +135,7 @@ pub fn cpu_load_line_chart(data: &Vec<ContainerStats>) -> Result<Chart, PlotErro
 
 }
 
-pub fn memory_usage_line_chart(data: &Vec<ContainerStats>, file_path: &str) {
+pub fn memory_usage_line_chart(data: &Vec<ContainerStats>) -> Result<Chart, PlotError> {
     let data_ts: Vec<DateTime<Utc>> = data.iter().map(|cs| cs.created_at).collect();
     let start_ts = data_ts[0];
 
@@ -200,12 +200,13 @@ pub fn memory_usage_line_chart(data: &Vec<ContainerStats>, file_path: &str) {
                 )
         );
 
-    let filename = "memory_usage.svg";
-    let full_path = format!("{}/{}", file_path, filename);
+    //let filename = "memory_usage.svg";
+    //let full_path = format!("{}/{}", file_path, filename);
+    //let mut renderer = ImageRenderer::new(1000, 800)
+    //    .theme(Theme::Infographic);
+    //renderer.save(&chart, full_path);
 
-    let mut renderer = ImageRenderer::new(1000, 800)
-        .theme(Theme::Infographic);
-    renderer.save(&chart, full_path);
+    Ok(chart)
 }
 
 pub fn ape_line_chart(data: &Vec<APE>, test_definition: &TestDefinition) -> Result<Chart, PlotError> {
@@ -291,7 +292,7 @@ pub fn ape_line_chart(data: &Vec<APE>, test_definition: &TestDefinition) -> Resu
 
 }
 
-pub fn rpe_line_chart(data: &Vec<RPE>, test_definition: &TestDefinition, file_path: &String) {
+pub fn rpe_line_chart(data: &Vec<RPE>, test_definition: &TestDefinition) -> Result<Chart, PlotError> {
     let time: Vec<f64> = data.iter().map(|rpe| rpe.time_from_start).collect();
     let rpe_values: Vec<f64> = data.iter().map(|rpe| rpe.value).collect();
 
@@ -365,11 +366,12 @@ pub fn rpe_line_chart(data: &Vec<RPE>, test_definition: &TestDefinition, file_pa
 
     chart = add_areas_markers(chart, area_data);
 
-    let filename = "rpe.svg";
-    let full_path = format!("{file_path}/{filename}");
+    //let filename = "rpe.svg";
+    //let full_path = format!("{file_path}/{filename}");
+    //let mut renderer = ImageRenderer::new(1000, 800).theme(Theme::Infographic);
+    //renderer.save(&chart, full_path);
 
-    let mut renderer = ImageRenderer::new(1000, 800).theme(Theme::Infographic);
-    renderer.save(&chart, full_path);
+    Ok(chart)
 }
 
 

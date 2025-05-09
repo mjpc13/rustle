@@ -382,12 +382,10 @@ impl IterationService {
             // ======= PLOTS ==========
 
             cpu_load_line_chart(&stats); //plot cpu
-            memory_usage_line_chart(&stats, &full_path); //plot memory
+            memory_usage_line_chart(&stats); //plot memory
 
             let test_def = self.repo.get_test_def(&iter).await.unwrap();
 
-            ape_line_chart(&ape_list, &test_def);
-            rpe_line_chart(&rpe_list, &test_def, &full_path);
 
         };
 
@@ -395,8 +393,45 @@ impl IterationService {
     }
 
     //Probably create a plot that receives a iteration ID? then gets whatever it needs...
-    pub async fn plot(&self, iter: Iteration) -> Result<HashMap<String, Chart>, PlotError>{
-        todo!()
+    pub async fn plot(&self, iter: Iteration, def: &TestDefinition, path: &str, overwrite: bool, format:  &str) -> Result<HashMap<String, Chart>, PlotError>{
+
+        let mut hash_chart: HashMap<String, Chart> = HashMap::new();
+
+        let iter_path = self.get_parents_string(&iter).await.unwrap();
+        let full_path = format!("{path}/{iter_path}");
+
+        //Create the directories if they dont exist
+        fs::create_dir_all(&full_path).unwrap();
+
+        // Call the other plots
+        let files = ["cpu_load", "memory_usage", "ape", "rpe"];
+
+        // Get stats data:
+        let stats = self.get_stats(&iter).await.map_err(|_e| PlotError::MissingData(format!("Missing stats for iteration {:?}", iter.id)))?;
+        let ape_data = self.get_ape(&iter).await.map_err(|_e| PlotError::MissingData(format!("Missing APE values for iteration {:?}", iter.id)))?;
+        let rpe_data = self.get_rpe(&iter).await.map_err(|_e| PlotError::MissingData(format!("Missing RPE values for iteration {:?}", iter.id)))?;
+
+        for f in files{
+
+            let filepath = format!("{}/{}.{}", full_path, f, format);
+
+            if Path::new(&filepath).exists() && !overwrite {
+                //Not sure if I should return here, or just emit a warning
+                return Err(PlotError::FileExists(filepath));
+            } else {
+                let chart = match f {
+                    "cpu_load" => cpu_load_line_chart(&stats),
+                    "memory_usage" => memory_usage_line_chart(&stats),
+                    "ape" => ape_line_chart(&ape_data, def),
+                    "rpe" => rpe_line_chart(&rpe_data, def),
+                    &_ => todo!("This should be fine")
+                };
+                hash_chart.insert(filepath, chart?);
+            }
+
+        }
+
+        Ok(hash_chart)
     }
 
 
