@@ -35,6 +35,7 @@
           gcc
           docker
           surrealist
+          zlib
 
           python311Full
 
@@ -83,7 +84,7 @@
           export RUSTLE_ROOT="$(pwd)"
 
           export LIBCLANG_PATH="${pkgs.libclang.lib}/lib"
-          export LD_LIBRARY_PATH="${pkgs.gcc.cc.lib}/lib:${pkgs.stdenv.cc.cc.lib}/lib:$LD_LIBRARY_PATH"
+          export LD_LIBRARY_PATH="${pkgs.zlib}/lib:${pkgs.gcc.cc.lib}/lib:${pkgs.stdenv.cc.cc.lib}/lib:$LD_LIBRARY_PATH"
           python -m venv .venv
           source .venv/bin/activate
           pip install evo
