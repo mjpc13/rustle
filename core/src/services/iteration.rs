@@ -425,7 +425,13 @@ impl IterationService {
         Ok(hash_chart)
     }
 
+    
+    pub async fn get_metrics(&self, iter: &Iteration) -> Result<Vec<Metric>, DbError>{
 
+        let metrics = self.repo.get_metrics(iter).await?;
+        Ok(metrics)
+    }
+    
 
     pub async fn get_stats(&self, iter: &Iteration) -> Result<Vec<ContainerStats>, DbError>{
         let stats = self.stat_service.get_stats(iter).await?;

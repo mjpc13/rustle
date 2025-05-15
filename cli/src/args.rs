@@ -147,7 +147,10 @@ pub enum TestSubCommand {
     Run(RunTest),
 
     /// Plots the result for a given Test
-    Plot(PlotTest)
+    Plot(PlotTest),
+
+    /// Show the results for a given Test
+    Show(ShowTest),
 }
 
 #[derive(Debug, Args)]
@@ -211,7 +214,29 @@ pub struct PlotTest {
 }
 
 
+#[derive(Debug, Args)]
+pub struct ShowTest {
 
+    /// Name of the test
+    pub name: String,
+
+    /// Print detailed metrics
+    #[clap(long, default_value = "false")]
+    pub detailed: bool,
+
+    /// Sort the metrics by
+    #[clap(long, default_value = "random")]
+    pub sort_by: Option<String>,
+
+    #[clap(long, default_value = "csv")] //csv, json, etc...
+    pub format: String,
+
+    #[clap(long, default_value = "false")]
+    pub overwrite: bool,
+
+    #[clap(long)]
+    pub output_dir: Option<String>,
+}
 
 
 

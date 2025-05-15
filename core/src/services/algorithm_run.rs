@@ -32,7 +32,9 @@ impl AlgorithmRunService {
         test_type: &str
     ) -> Result<AlgorithmRun, ProcessingError> {
 
-        let mut run = AlgorithmRun::new(bag_speed, num_iterations);
+        let algo = self.repo.get_algorithm(algorithm_id).await?;
+
+        let mut run = AlgorithmRun::new(bag_speed, num_iterations, algo);
         self.repo.save(&mut run, test_execution_id, algorithm_id).await?;
 
         
@@ -40,7 +42,7 @@ impl AlgorithmRunService {
         for i in 0..num_iterations {
 
             // Save each iteration
-            let algo = self.repo.get_algorithm(&run).await?;
+            let algo = self.repo.get_algorithm_by_run(&run).await?;
 
             match run.id.clone(){
                 Some(thing) => self.iter_service.create(i, algo, &thing, test_type.to_string()).await?,
@@ -64,6 +66,10 @@ impl AlgorithmRunService {
 
     }
 
+    pub async fn get_iterations(&self, run: &AlgorithmRun) -> Result<Vec<Iteration>, DbError> {
+        let iteration_list = self.repo.get_iterations(run).await;
+        iteration_list
+    }
 
 
     pub async fn plot(&self, run: &AlgorithmRun, path: &str, overwrite: bool, format:  &str) -> Result<HashMap<String, Chart>, PlotError>{
@@ -105,9 +111,6 @@ impl AlgorithmRunService {
         Ok(hash)
     }
 
-
-
-
     async fn plot_ape(&self, iterations: &Vec<Iteration>, test_def: &TestDefinition) -> Result<Chart, PlotError>{
 
         let algo_ape: Vec<Vec<APE>> = join_all(
@@ -145,9 +148,6 @@ impl AlgorithmRunService {
 
     }
 
-
-
-
     async fn plot_memory_usage(&self, iterations: &Vec<Iteration>) -> Result<Chart, PlotError>{
 
         let algo_stats: Vec<Vec<ContainerStats>> = join_all(
@@ -158,9 +158,6 @@ impl AlgorithmRunService {
 
         algorithm_memory_usage_chart(algo_stats)
     }
-
-
-
 
     async fn get_parents_string(&self, algo_run: &AlgorithmRun) -> Result<String, RunError>{
 
@@ -176,10 +173,8 @@ impl AlgorithmRunService {
             Ok(format!("{te_str}/{ar_str}"))
     }
     
-
-
     pub async fn get_algorithm(&self, algo_run: &AlgorithmRun) -> Result<Algorithm, DbError>{
-        self.repo.get_algorithm(algo_run).await
+        self.repo.get_algorithm_by_run(algo_run).await
     }
 
     pub async fn get_all_container_stats(&self, run: &AlgorithmRun) -> Vec<Vec<ContainerStats>>{

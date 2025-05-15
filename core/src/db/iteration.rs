@@ -5,7 +5,7 @@ use log::{info, warn};
 // db/iteration.rs
 use surrealdb::{Surreal, engine::local::Db, sql::Thing};
 use tokio::sync::Mutex;
-use crate::{models::{iteration::Iteration, metrics::pose_error::{APE, RPE}, Algorithm, AlgorithmRun, Dataset, Odometry, TestDefinition, TestExecution}, services::DbError};
+use crate::{models::{iteration::Iteration, metric::Metric, metrics::pose_error::{APE, RPE}, Algorithm, AlgorithmRun, Dataset, Odometry, TestDefinition, TestExecution}, services::DbError};
 
 #[derive(Clone)]
 pub struct IterationRepo {
@@ -429,6 +429,23 @@ impl IterationRepo {
     }
 
 
+    pub async fn get_metrics(&self, iter: &Iteration) -> Result<Vec<Metric>, DbError>{
+
+        let iteration_id = iter.id.clone()
+        .ok_or(DbError::MissingField("AlgorithmRun ID"))?;
+
+        let mut result = self.conn.lock().await
+            .query("
+                SELECT *
+                FROM $iteration_id->has_metric->metric
+            ")
+            .bind(("iteration_id", iteration_id.clone()))
+            .await?;
+
+        let metrics: Vec<Metric> = result.take(0)?;
+
+        Ok(metrics)
+    }
 
     //pub async fn get_by_run(&self, run_id: &str) -> Result<Vec<Iteration>, DbError> {
     //    let mut result = self.conn

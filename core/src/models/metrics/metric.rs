@@ -10,6 +10,21 @@ use surrealdb::sql::Thing;
 use super::{cpu::CpuMetrics, memory::MemoryMetrics, pose_error::PoseErrorMetrics};
 
 
+
+pub struct AggregatedMetric{
+    //
+}
+
+
+
+
+
+
+
+
+
+
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Metric {
     pub id: Option<Thing>,
@@ -84,7 +99,6 @@ impl Metric {
         result
     }
 }
-
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "PascalCase")]

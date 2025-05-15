@@ -54,7 +54,7 @@ impl AlgorithmRunRepo {
         Ok(())
     }
 
-    pub async fn get_algorithm(
+    pub async fn get_algorithm_by_run(
         &self,
         run: &AlgorithmRun
     ) -> Result<Algorithm, DbError> {
@@ -84,6 +84,26 @@ impl AlgorithmRunRepo {
         }
 
     }
+
+    pub async fn get_algorithm(
+        &self,
+        algo_id: &Thing
+    ) -> Result<Algorithm, DbError> {
+
+        let mut result = self.conn.lock().await
+            .query("
+                SELECT * FROM $algo_id
+            ")
+            .bind(("algo_id", algo_id.clone()))
+            .await?;
+
+        let algorithms: Vec<Algorithm> = result.take(0)?;
+
+        let algorithm = algorithms.into_iter().next().ok_or(DbError::NotFound(format!("Algorithm {} not found", algo_id)))?;
+        Ok(algorithm)
+
+    }
+
 
 
     pub async fn get_test_definition(

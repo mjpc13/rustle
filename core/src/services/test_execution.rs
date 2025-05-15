@@ -7,6 +7,8 @@ use directories::ProjectDirs;
 use log::{debug, info, warn};
 use tokio::sync::Mutex;
 
+use crate::models::metric::Metric;
+use crate::models::AlgorithmRun;
 use crate::utils::config::Config;
 
 use crate::{db::{TestDefinitionRepo, TestExecutionRepo}, models::{metrics::ContainerStats, test_definitions::{test_definition::{TestDefinition, TestType}, CutParams, DropParams}, test_execution::{TestExecution, TestExecutionStatus}, Algorithm, Iteration, SpeedTestParams, TestResults}, services::error::ProcessingError, utils::plots::test_cpu_load_line_chart
@@ -74,18 +76,10 @@ impl TestExecutionService {
 
 
         //get all algorithm runs
-        //let algo_run_list = self.execution_repo.get_algorithm_runs(execution_id).await?;
-        //for algo_run in algo_run_list{
-        //    self.algorithm_run_service.set_aggregate_metrics(&algo_run).await;
-        //    // Plot things for the iterations!!!
-        //    self.algorithm_run_service.plot_cpu_load(&algo_run).await;
-        //    self.algorithm_run_service.plot_memory_usage(&algo_run).await;
-        //    self.algorithm_run_service.plot_ape(&algo_run).await;
-        //}
-        ////PLOT ALGORITHMS AGAINST EACH OTHER!!!
-        ////Need to get the algorithm and the algorithm run.
-        //let _ = self.plot_cpu_load(execution_id).await;
-
+        let algo_run_list = self.execution_repo.get_algorithm_runs(&execution_id).await?;
+        for algo_run in algo_run_list{
+            self.algorithm_run_service.set_aggregate_metrics(&algo_run).await;
+        }
 
         Ok(execution)
     }
@@ -140,10 +134,28 @@ impl TestExecutionService {
 
 
 
+    pub async fn get_execution_results(
+        &self,
+        def: &TestDefinition,
+    ) -> Result<(), PlotError>{
 
+        todo!("Get executions results for a test definition is not implemented yet!");
 
+        return Ok(())
+    }
 
+    pub async fn get_iterations_by_algo_run(&self, run: AlgorithmRun) -> Result<Vec<Iteration>, ProcessingError>{
+        let iterations = self.algorithm_run_service.get_iterations(&run).await;
+        iterations.map_err(|_e| ProcessingError::InvalidIteration("iterations were not found".to_owned()))
+    }
 
+    pub async fn get_metrics_by_iteration(&self, iter: Iteration) -> Result<Vec<Metric>, ProcessingError>{
+
+        let metrics = self.iteration_service.get_metrics(&iter).await;
+        let m = metrics.map_err(|_e| ProcessingError::General(format!("Metric for iteration {:?} is missing", iter)));
+
+        m
+    }
 
     async fn create_simple_runs(
         &self,
@@ -302,7 +314,10 @@ impl TestExecutionService {
         self.execution_repo.delete_by_name(name.to_string()).await;
     }
 
-
+    pub async fn get_algo_runs(&self, test_execution_id: &Thing) -> Result<Vec<AlgorithmRun>, ProcessingError>{
+        let results = self.execution_repo.get_algorithm_runs(test_execution_id).await?;
+        Ok(results)
+    }
 
 
 }

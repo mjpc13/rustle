@@ -1,16 +1,25 @@
 test_definitions:
+
   - name: "simple"
-    workers: 1
-    iterations: 1
-    algo_list: ["ig-LIO"]
+    workers: 3
+    iterations: 3
+    algo_list: ["ig-LIO", "test"]
     dataset_name: "botanic_garden"
     test_type:
-      type: simple 
+      type: simple
 
+#  - name: "simple_test"
+#    workers: 2
+#    iterations: 1
+#    algo_list: ["ig-LIO", "test"]
+#    dataset_name: "botanic_garden"
+#    test_type:
+#      type: simple 
+#
 #  - name: "performance"
 #    workers: 1
 #    iterations: 1
-#    algo_list: ["ig-LIO", "LIO-SAM"]
+#    algo_list: ["ig-LIO"]
 #    dataset_name: "botanic_garden"
 #    test_type: 
 #      type: speed
