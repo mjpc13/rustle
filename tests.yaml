@@ -1,22 +1,31 @@
 test_definitions:
-#  - name: "Simple Test"
-#    workers: 1
-#    iterations: 5
-#    algo_list: ["ig-LIO", "another-ig-lio"]
+
+  - name: "simple"
+    workers: 3
+    iterations: 3
+    algo_list: ["ig-LIO", "test"]
+    dataset_name: "botanic_garden"
+    test_type:
+      type: simple
+
+#  - name: "simple_test"
+#    workers: 2
+#    iterations: 1
+#    algo_list: ["ig-LIO", "test"]
 #    dataset_name: "botanic_garden"
 #    test_type:
 #      type: simple 
-
-#  - name: "Performance Stress Test"
+#
+#  - name: "performance"
 #    workers: 1
-#    iterations: 4
-#    algo_list: ["ig-LIO", "LIO-SAM"]
+#    iterations: 1
+#    algo_list: ["ig-LIO"]
 #    dataset_name: "botanic_garden"
 #    test_type: 
 #      type: speed
 #      speed_factors: [1.0, 4.0, 10, 100]
 
-#  - name: "Cut-Off"
+#  - name: "cut-off"
 #    workers: 1
 #    iterations: 1
 #    algo_list: ["ig-LIO"]
@@ -37,27 +46,27 @@ test_definitions:
 #              - start_time: 40
 #                duration: 10
 
-  - name: "Drop-Off"
-    workers: 1
-    iterations: 1
-    algo_list: ["ig-LIO"]
-    dataset_name: "botanic_garden"
-    test_type:
-      type: drop
-      drop_list:  # Can add N sensors. Types of sensors are: imu, lidar, radar, camera, gps
-          - sensor: radar
-            drop_rate: [1,100] #Drop 1 message every 10 messages
-            topic: "/livox/imu"
-            active_periods:
-              - start_time: 10
-                duration: 3
-              - start_time: 50
-                duration: 20
-          - sensor: camera
-            drop_rate: [1,100] #Drop 2 message every 10 messages
-            topic: "/livox/lidar"
-            active_periods:
-              - start_time: 15
-                duration: 3
-              - start_time: 65
-                duration: 10
+#  - name: "drop-off"
+#    workers: 1
+#    iterations: 1
+#    algo_list: ["ig-LIO"]
+#    dataset_name: "botanic_garden"
+#    test_type:
+#      type: drop
+#      drop_list:  # Can add N sensors. Types of sensors are: imu, lidar, radar, camera, gps
+#          - sensor: radar
+#            drop_rate: [1,100] #Drop 1 message every 10 messages
+#            topic: "/livox/imu"
+#            active_periods:
+#              - start_time: 10
+#                duration: 3
+#              - start_time: 50
+#                duration: 20
+#          - sensor: camera
+#            drop_rate: [1,100] #Drop 2 message every 10 messages
+#            topic: "/livox/lidar"
+#            active_periods:
+#              - start_time: 15
+#                duration: 3
+#              - start_time: 65
+#                duration: 10

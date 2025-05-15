@@ -1,0 +1,38 @@
+[package]
+name = "rustle-cli"
+version = "0.1.0"
+edition = "2021"
+authors = ["Mario Cristovao mario.cristovao@isr.uc.pt"]
+description = "CLI for RUSTLE app"
+license = "MIT"
+
+
+[[bin]]
+name = "rustle_bin"
+path = "src/main.rs"
+
+[dependencies]
+rustle-core = { path = "../core" }
+
+# Command-line interface
+clap = { version = "*", features = ["derive", "env", "help"] }
+
+chrono = "0.4.35"
+tokio = { version = "1.36", features = ["full"] }
+log = { version = "0.4.20", features = ["std"] }
+env_logger = { version = "0.11.2" }
+serde = "1.0.197"
+serde_yaml = "*"
+surrealdb = { version = "*", features = ["kv-mem", "kv-rocksdb"] }
+bollard = "0.16.0" # Manage Docker
+directories= "*"
+toml = "*"
+
+
+# Output formatting
+comfy-table = "*"
+#indicatif = "0.17.7"
+#console = "0.15.8"
+
+# Error handling
+#anyhow = "1.0.81"
