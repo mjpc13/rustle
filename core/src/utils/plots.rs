@@ -4,7 +4,7 @@ use core::f64;
 use std::collections::{BTreeMap, HashMap};
 
 use chrono::{format::Item, DateTime, Utc};
-use log::warn;
+use log::{info, warn};
 use crate::{models::{metrics::{pose_error::{APE, RPE}, ContainerStats, PoseErrorMetrics}, Algorithm, TestDefinition, TestType}, services::error::PlotError};
 
 use rand::Rng;
@@ -16,7 +16,7 @@ use charming::{
 
 #[derive(Debug)]
 struct DataItem{
-    time: i32,
+    time: f32,
     value: f64,
     l: f64,
     u: f64
@@ -78,8 +78,8 @@ pub fn cpu_load_line_chart(data: &Vec<ContainerStats>) -> Result<Chart, PlotErro
     let chart = Chart::new()
         .x_axis(
             Axis::new()
-                .type_(AxisType::Value)
-                .name("Time (s)")
+                .type_(AxisType::Time)
+                .name("Time")
                 .name_text_style(TextStyle::new().font_size(16).font_weight("bold"))
                 .axis_label(AxisLabel::new().font_size(14)),
         )
@@ -95,7 +95,7 @@ pub fn cpu_load_line_chart(data: &Vec<ContainerStats>) -> Result<Chart, PlotErro
             Line::new()
                 .name("CPU Load Over Time")
                 .data(xy_data)
-                .smooth(true)
+                .smooth(false)
                 .line_style(LineStyle::new().width(3).color("rgba(52, 152, 219, 0.9)")) // a soft blue
                 .item_style(ItemStyle::new().color("rgba(41, 128, 185, 0.6)")) // point color
                 .mark_area(
@@ -125,12 +125,6 @@ pub fn cpu_load_line_chart(data: &Vec<ContainerStats>) -> Result<Chart, PlotErro
                 )
         );
 
-    //let filename = "cpu_load.svg";
-    //let full_path = format!("{file_path}/{filename}");
-    //let mut renderer = ImageRenderer::new(1000, 800)
-    //    .theme(Theme::Infographic);
-    //renderer.save(&chart, full_path);
-
     Ok(chart)
 
 }
@@ -145,7 +139,7 @@ pub fn memory_usage_line_chart(data: &Vec<ContainerStats>) -> Result<Chart, Plot
         .collect();
 
     let memory_usage: Vec<f64> = data.iter()
-        .map(|cs| cs.memory_stats.usage.unwrap_or(0) as f64 / 1_000_000_000.0)
+        .map(|cs| cs.memory_stats.usage.unwrap_or(0) as f64 / 1_000_000.0)
         .collect();
 
     let mean = if !memory_usage.is_empty() {
@@ -163,15 +157,15 @@ pub fn memory_usage_line_chart(data: &Vec<ContainerStats>) -> Result<Chart, Plot
     let chart = Chart::new()
         .x_axis(
             Axis::new()
-                .type_(AxisType::Value)
-                .name("Time (s)")
+                .type_(AxisType::Time)
+                .name("Time")
                 .name_text_style(TextStyle::new().font_size(16).font_weight("bold"))
                 .axis_label(AxisLabel::new().font_size(14)),
         )
         .y_axis(
             Axis::new()
                 .type_(AxisType::Value)
-                .name("Memory Usage (GB)")
+                .name("Memory Usage (MB)")
                 .name_text_style(TextStyle::new().font_size(16).font_weight("bold"))
                 .axis_label(AxisLabel::new().font_size(14)),
         )
@@ -179,7 +173,7 @@ pub fn memory_usage_line_chart(data: &Vec<ContainerStats>) -> Result<Chart, Plot
             Line::new()
                 .name("Memory Usage Over Time")
                 .data(xy_data)
-                .smooth(true)
+                .smooth(false)
                 .line_style(LineStyle::new().width(3).color("rgba(46, 204, 113, 0.85)"))
                 .item_style(ItemStyle::new().color("rgba(39, 174, 96, 0.5)"))
                 .mark_line(
@@ -199,12 +193,6 @@ pub fn memory_usage_line_chart(data: &Vec<ContainerStats>) -> Result<Chart, Plot
                         ]),
                 )
         );
-
-    //let filename = "memory_usage.svg";
-    //let full_path = format!("{}/{}", file_path, filename);
-    //let mut renderer = ImageRenderer::new(1000, 800)
-    //    .theme(Theme::Infographic);
-    //renderer.save(&chart, full_path);
 
     Ok(chart)
 }
@@ -230,8 +218,8 @@ pub fn ape_line_chart(data: &Vec<APE>, test_definition: &TestDefinition) -> Resu
     let mut chart = Chart::new()
         .x_axis(
             Axis::new()
-                .type_(AxisType::Value)
-                .name("Time (s)")
+                .type_(AxisType::Time)
+                .name("Time")
                 .name_gap(25)
                 .name_text_style(TextStyle::new().font_size(14))
                 .axis_label(AxisLabel::new().font_size(12))
@@ -247,7 +235,7 @@ pub fn ape_line_chart(data: &Vec<APE>, test_definition: &TestDefinition) -> Resu
         .series(
             Line::new()
                 .name("APE Over Time")
-                .smooth(true)
+                .smooth(false)
                 .line_style(LineStyle::new()
                     .color("rgba(52, 152, 219, 0.85)")
                     .width(3)
@@ -283,11 +271,6 @@ pub fn ape_line_chart(data: &Vec<APE>, test_definition: &TestDefinition) -> Resu
 
     chart = add_areas_markers(chart, area_data);
 
-    //let filename = "ape.svg";
-    //let full_path = format!("{file_path}/{filename}");
-    //let mut renderer = ImageRenderer::new(1000, 800).theme(Theme::Infographic);
-    //renderer.save(&chart, full_path);
-
     Ok(chart)
 
 }
@@ -313,8 +296,8 @@ pub fn rpe_line_chart(data: &Vec<RPE>, test_definition: &TestDefinition) -> Resu
     let mut chart = Chart::new()
         .x_axis(
             Axis::new()
-                .type_(AxisType::Value)
-                .name("Time (s)")
+                .type_(AxisType::Time)
+                .name("Time")
                 .name_gap(25)
                 .name_text_style(TextStyle::new().font_size(14))
                 .axis_label(AxisLabel::new().font_size(12))
@@ -330,7 +313,7 @@ pub fn rpe_line_chart(data: &Vec<RPE>, test_definition: &TestDefinition) -> Resu
         .series(
             Line::new()
                 .name("RPE Over Time")
-                .smooth(true)
+                .smooth(false)
                 .line_style(LineStyle::new()
                     .color("rgba(155, 89, 182, 0.85)")
                     .width(3)
@@ -366,20 +349,13 @@ pub fn rpe_line_chart(data: &Vec<RPE>, test_definition: &TestDefinition) -> Resu
 
     chart = add_areas_markers(chart, area_data);
 
-    //let filename = "rpe.svg";
-    //let full_path = format!("{file_path}/{filename}");
-    //let mut renderer = ImageRenderer::new(1000, 800).theme(Theme::Infographic);
-    //renderer.save(&chart, full_path);
-
     Ok(chart)
 }
 
 
-
 /// PLOTS FOR THE MULTIPLE ITERATIONS
-
 pub fn algorithm_memory_usage_chart(iterations: Vec<Vec<ContainerStats>>) -> Result<Chart, PlotError> {
-            
+
     // Process each iteration to get Memory load percentages
     let mut time_buckets: BTreeMap<i64, Vec<f64>> = BTreeMap::new(); // To put multiple memory usages in the approx the same time;
 
@@ -421,8 +397,9 @@ pub fn algorithm_memory_usage_chart(iterations: Vec<Vec<ContainerStats>>) -> Res
     let data_items: Vec<DataItem> = time_buckets
         .into_iter()
         .map(|(key, loads)| {
-            let time = ((key as f64) / 1000.0) as i32; // Convert back to seconds
+            let time = ((key as f32) / 1000.0); // Convert back to seconds
             let mean = loads.iter().sum::<f64>() / loads.len() as f64;
+
             let variance = loads.iter()
                 .map(|&x| (x - mean).powi(2))
                 .sum::<f64>() / loads.len() as f64;
@@ -436,23 +413,28 @@ pub fn algorithm_memory_usage_chart(iterations: Vec<Vec<ContainerStats>>) -> Res
             }
         })
         .collect();
-
-    let base = -data_items
-        .iter()
-        .fold(f64::INFINITY, |min, val| f64::floor(f64::min(min, val.l)));
     
     let max_y = data_items
         .iter()
         .fold(-f64::INFINITY, |max, val| f64::floor(f64::max(max, val.u)));
+
+  
+    let time_labels: Vec<f64> = data_items.iter().map(|d| d.time as f64).collect();
+    let lower_band: Vec<f64> = data_items.iter().map(|d| d.l).collect();
+    let std_band: Vec<f64> = data_items.iter().map(|d| (d.u - d.l)).collect();
+    let mean_line: Vec<f64> = data_items.iter().map(|d| d.value).collect();
+
+    let xy_mean: Vec<Vec<f64>> = time_labels.iter().zip(&mean_line).map(|(x, y)| vec![*x, *y]).collect();
+    let xy_up: Vec<Vec<f64>> = time_labels.iter().zip(&std_band).map(|(x, y)| vec![*x, *y]).collect();
+    let xy_lower: Vec<Vec<f64>> = time_labels.iter().zip(&lower_band).map(|(x, y)| vec![*x, *y]).collect();
 
 
     // Create chart
     let chart = Chart::new()
         .x_axis(
             Axis::new()
-                .type_(AxisType::Category)
-                .name("Time (s)")
-                .data(data_items.iter().map(|d| d.time.to_string()).collect())
+                .type_(AxisType::Time)
+                .name("Time")
                 .name_text_style(TextStyle::new().font_size(16).font_weight("bold"))
                 .axis_label(AxisLabel::new().font_size(13)),
         )
@@ -460,14 +442,14 @@ pub fn algorithm_memory_usage_chart(iterations: Vec<Vec<ContainerStats>>) -> Res
             Axis::new()
                 .type_(AxisType::Value)
                 .name("Memory Usage (MB)")
-                .max(max_y)
+                .max(max_y+0.05*max_y)
                 .name_text_style(TextStyle::new().font_size(16).font_weight("bold"))
                 .axis_label(AxisLabel::new().font_size(13)),
         )
         .series(
             Line::new()
                 .name("L")
-                .data(data_items.iter().map(|x| x.l + base).collect())
+                .data(xy_lower)
                 .line_style(LineStyle::new().opacity(0))
                 .stack("confidence-band")
                 .symbol(Symbol::None)
@@ -475,11 +457,11 @@ pub fn algorithm_memory_usage_chart(iterations: Vec<Vec<ContainerStats>>) -> Res
         .series(
             Line::new()
                 .name("U")
-                .data(data_items.iter().map(|x| x.u - x.l).collect())
+                .data(xy_up)
                 .line_style(LineStyle::new().opacity(0))
                 .area_style(
                     AreaStyle::new()
-                        .color("rgba(102, 187, 106, 0.2)") // Soft green area fill
+                        .color("rgba(56, 142, 60, 0.2)") // Soft green area fill
                 )
                 .stack("confidence-band")
                 .symbol(Symbol::None)
@@ -487,9 +469,9 @@ pub fn algorithm_memory_usage_chart(iterations: Vec<Vec<ContainerStats>>) -> Res
         .series(
             Line::new()
                 .name("Mean Memory Usage")
-                .data(data_items.iter().map(|d| d.value + base).collect())
-                .symbol(Symbol::None)
-                .smooth(true)
+                .data(xy_mean)
+                .show_symbol(false)
+                .smooth(false)
                 .line_style(
                     LineStyle::new()
                         .color("rgba(56, 142, 60, 0.9)")  // Vivid deep green
@@ -497,15 +479,8 @@ pub fn algorithm_memory_usage_chart(iterations: Vec<Vec<ContainerStats>>) -> Res
                 )
         );
 
-    //let filename = "aggregated_memory_usage.svg";
-    //let full_path = format!("{}/{}", file_path, filename);
-    //let mut renderer = ImageRenderer::new(1200, 800).theme(Theme::Infographic);
-    //renderer.save(&chart, full_path);
-
     Ok(chart)
-
 }
-
 
 pub fn algorithm_cpu_load_chart(iterations: Vec<Vec<ContainerStats>>) -> Result<Chart, PlotError> {
     let mut time_buckets: BTreeMap<i64, Vec<f64>> = BTreeMap::new();
@@ -546,7 +521,7 @@ pub fn algorithm_cpu_load_chart(iterations: Vec<Vec<ContainerStats>>) -> Result<
     let data_items: Vec<DataItem> = time_buckets
         .into_iter()
         .map(|(key, loads)| {
-            let time = ((key as f64) / 1000.0) as i32;
+            let time = ((key as f32) / 1000.0);
             let mean = loads.iter().sum::<f64>() / loads.len() as f64;
             let variance = loads.iter().map(|&x| (x - mean).powi(2)).sum::<f64>() / loads.len() as f64;
             let std_dev = variance.sqrt();
@@ -559,20 +534,22 @@ pub fn algorithm_cpu_load_chart(iterations: Vec<Vec<ContainerStats>>) -> Result<
         })
         .collect();
 
-    let base = -data_items.iter().map(|d| d.l).fold(f64::INFINITY, f64::min).floor();
-    let max_y = data_items.iter().map(|d| d.u).fold(100.0, f64::max).ceil();
-
-    let time_labels: Vec<String> = data_items.iter().map(|d| d.time.to_string()).collect();
-    let lower_band: Vec<f64> = data_items.iter().map(|d| d.l + base).collect();
+    let max_y = data_items.iter().map(|d| d.u + 0.1 * d.u).fold(100.0, f64::max).ceil();
+    
+    let time_labels: Vec<f64> = data_items.iter().map(|d| d.time as f64).collect();
+    let lower_band: Vec<f64> = data_items.iter().map(|d| d.l).collect();
     let std_band: Vec<f64> = data_items.iter().map(|d| (d.u - d.l)).collect();
-    let mean_line: Vec<f64> = data_items.iter().map(|d| d.value + base).collect();
+    let mean_line: Vec<f64> = data_items.iter().map(|d| d.value).collect();
+
+    let xy_mean: Vec<Vec<f64>> = time_labels.iter().zip(&mean_line).map(|(x, y)| vec![*x, *y]).collect();
+    let xy_up: Vec<Vec<f64>> = time_labels.iter().zip(&std_band).map(|(x, y)| vec![*x, *y]).collect();
+    let xy_lower: Vec<Vec<f64>> = time_labels.iter().zip(&lower_band).map(|(x, y)| vec![*x, *y]).collect();
 
     let chart = Chart::new()
         .x_axis(
             Axis::new()
-                .type_(AxisType::Category)
-                .name("Time (s)")
-                .data(time_labels)
+                .type_(AxisType::Time)
+                .name("Time")
                 .name_text_style(TextStyle::new().font_size(16).font_weight("bold"))
                 .axis_label(AxisLabel::new().font_size(13)),
         )
@@ -584,11 +561,23 @@ pub fn algorithm_cpu_load_chart(iterations: Vec<Vec<ContainerStats>>) -> Result<
                 .name_text_style(TextStyle::new().font_size(16).font_weight("bold"))
                 .axis_label(AxisLabel::new().font_size(13)),
         )
+        // Mean line
+        .series(
+            Line::new()
+                .name("Mean CPU Load")
+                .data(xy_mean)
+                .show_symbol(false)
+                .smooth(false)
+                .line_style(LineStyle::new()
+                    .width(3)
+                    .color("rgba(33, 150, 243, 0.9)") // blue
+                )
+        )
         // Lower bound (invisible, used for stack base)
         .series(
             Line::new()
                 .name("Lower Bound")
-                .data(lower_band)
+                .data(xy_lower)
                 .line_style(LineStyle::new().opacity(0.0))
                 .symbol(Symbol::None)
                 .stack("std-band")
@@ -597,7 +586,7 @@ pub fn algorithm_cpu_load_chart(iterations: Vec<Vec<ContainerStats>>) -> Result<
         .series(
             Line::new()
                 .name("Deviation")
-                .data(std_band)
+                .data(xy_up)
                 .line_style(LineStyle::new().opacity(0.0))
                 .area_style(
                     AreaStyle::new()
@@ -605,25 +594,7 @@ pub fn algorithm_cpu_load_chart(iterations: Vec<Vec<ContainerStats>>) -> Result<
                 )
                 .symbol(Symbol::None)
                 .stack("std-band")
-        )
-        // Mean line
-        .series(
-            Line::new()
-                .name("Mean CPU Load")
-                .data(mean_line)
-                .smooth(true)
-                .symbol(Symbol::None) 
-                .line_style(LineStyle::new()
-                    .width(3)
-                    .color("rgba(33, 150, 243, 0.9)") // blue
-                )
         );
-
-    //let filename = "aggregated_cpu_load.svg";
-    //let full_path = format!("{}/{}", file_path, filename);
-    //let mut renderer = ImageRenderer::new(1200, 800)
-    //    .theme(Theme::Infographic);
-    //renderer.save(&chart, full_path);
 
     Ok(chart)
 
@@ -664,7 +635,8 @@ pub fn algorithm_ape_line_chart(iterations: Vec<Vec<APE>>, test_definition: &Tes
     let data_items: Vec<DataItem> = time_buckets
         .into_iter()
         .map(|(key, loads)| {
-            let time = ((key as f64) / 1000.0) as i32; // Convert back to seconds
+            
+            let time = ((key as f32) / 1000.0); // Convert back to seconds
             let mean = loads.iter().sum::<f64>() / loads.len() as f64;
             let variance = loads.iter()
                 .map(|&x| (x - mean).powi(2))
@@ -674,28 +646,32 @@ pub fn algorithm_ape_line_chart(iterations: Vec<Vec<APE>>, test_definition: &Tes
             DataItem {
                 time,
                 value: mean,
-                l: (mean - std_dev).max(0.0), // Don't go below 0%
+                l: (mean - std_dev).max(0.0), // Don't go below 0
                 u: (mean + std_dev), // Don't exceed 100%
             }
         })
         .collect();
-
-    let base = -data_items
-        .iter()
-        .fold(f64::INFINITY, |min, val| f64::floor(f64::min(min, val.l)));
     
     let max_y = data_items
         .iter()
         .fold(-f64::INFINITY, |max, val| f64::floor(f64::max(max, val.u)));
+    
+    let time_labels: Vec<f64> = data_items.iter().map(|d| d.time as f64).collect();
+    let lower_band: Vec<f64> = data_items.iter().map(|d| d.l).collect();
+    let std_band: Vec<f64> = data_items.iter().map(|d| (d.u - d.l)).collect();
+    let mean_line: Vec<f64> = data_items.iter().map(|d| d.value).collect();
+
+    let xy_mean: Vec<Vec<f64>> = time_labels.iter().zip(&mean_line).map(|(x, y)| vec![*x, *y]).collect();
+    let xy_up: Vec<Vec<f64>> = time_labels.iter().zip(&std_band).map(|(x, y)| vec![*x, *y]).collect();
+    let xy_lower: Vec<Vec<f64>> = time_labels.iter().zip(&lower_band).map(|(x, y)| vec![*x, *y]).collect();
 
 
     // Create chart
     let mut chart = Chart::new()
         .x_axis(
             Axis::new()
-                .type_(AxisType::Category)
-                .name("Time (s)")
-                .data(data_items.iter().map(|d| d.time.to_string()).collect())
+                .type_(AxisType::Time)
+                .name("Time")
                 .name_gap(25)
                 .name_text_style(TextStyle::new().font_size(14))
                 .axis_label(AxisLabel::new().font_size(12))
@@ -710,25 +686,8 @@ pub fn algorithm_ape_line_chart(iterations: Vec<Vec<APE>>, test_definition: &Tes
         )
         .series(
             Line::new()
-                .name("L")
-                .data(data_items.iter().map(|x| x.l + base).collect())
-                .line_style(LineStyle::new().opacity(0))
-                .stack("confidence-band")
-                .symbol(Symbol::None)
-        )
-        .series(
-            Line::new()
-                .name("U")
-                .data(data_items.iter().map(|x| x.u - x.l).collect())
-                .line_style(LineStyle::new().opacity(0))
-                .area_style(AreaStyle::new().color("rgba(100, 149, 237, 0.3)"))
-                .stack("confidence-band")
-                .symbol(Symbol::None)
-        )
-        .series(
-            Line::new()
                 .name("APE")
-                .data(data_items.iter().map(|d| d.value + base).collect())
+                .data(xy_mean)
                 .line_style(LineStyle::new()
                     .color("rgba(52, 152, 219, 0.85)")
                     .width(3)
@@ -737,15 +696,27 @@ pub fn algorithm_ape_line_chart(iterations: Vec<Vec<APE>>, test_definition: &Tes
                     .color("rgba(41, 128, 185, 1.0)")
                     .border_color("rgba(41, 128, 185, 1.0)")
                     .border_width(1))        
+        )
+        .series(
+            Line::new()
+                .name("L")
+                .data(xy_lower)
+                .line_style(LineStyle::new().opacity(0))
+                .stack("confidence-band")
+                .symbol(Symbol::None)
+        )
+        .series(
+            Line::new()
+                .name("U")
+                .data(xy_up)
+                .line_style(LineStyle::new().opacity(0))
+                .area_style(AreaStyle::new().color("rgba(100, 149, 237, 0.3)"))
+                .stack("confidence-band")
+                .symbol(Symbol::None)
         );
 
     chart = add_areas_markers(chart, area_data);
 
-
-    //let filename = "aggregated_ape.svg";
-    //let full_path = format!("{}/{}", file_path, filename);
-    //let mut renderer = ImageRenderer::new(1200, 800).theme(Theme::Infographic);
-    //renderer.save(&chart, full_path);
 
     Ok(chart)
 
@@ -787,7 +758,7 @@ pub fn algorithm_rpe_line_chart(iterations: Vec<Vec<RPE>>, test_definition: &Tes
     let data_items: Vec<DataItem> = time_buckets
         .into_iter()
         .map(|(key, loads)| {
-            let time = ((key as f64) / 1000.0) as i32; // Convert back to seconds
+            let time = ((key as f32) / 1000.0); // Convert back to seconds
             let mean = loads.iter().sum::<f64>() / loads.len() as f64;
             let variance = loads.iter()
                 .map(|&x| (x - mean).powi(2))
@@ -802,23 +773,27 @@ pub fn algorithm_rpe_line_chart(iterations: Vec<Vec<RPE>>, test_definition: &Tes
             }
         })
         .collect();
-
-    let base = -data_items
-        .iter()
-        .fold(f64::INFINITY, |min, val| f64::floor(f64::min(min, val.l)));
     
     let max_y = data_items
         .iter()
         .fold(-f64::INFINITY, |max, val| f64::floor(f64::max(max, val.u)));
+    
+    let time_labels: Vec<f64> = data_items.iter().map(|d| d.time as f64).collect();
+    let lower_band: Vec<f64> = data_items.iter().map(|d| d.l).collect();
+    let std_band: Vec<f64> = data_items.iter().map(|d| (d.u - d.l)).collect();
+    let mean_line: Vec<f64> = data_items.iter().map(|d| d.value).collect();
+    
+    let xy_mean: Vec<Vec<f64>> = time_labels.iter().zip(&mean_line).map(|(x, y)| vec![*x, *y]).collect();
+    let xy_up: Vec<Vec<f64>> = time_labels.iter().zip(&std_band).map(|(x, y)| vec![*x, *y]).collect();
+    let xy_lower: Vec<Vec<f64>> = time_labels.iter().zip(&lower_band).map(|(x, y)| vec![*x, *y]).collect();
 
 
     // Create chart
     let mut chart = Chart::new()
         .x_axis(
             Axis::new()
-                .type_(AxisType::Category)
-                .name("Time (s)")
-                .data(data_items.iter().map(|d| d.time.to_string()).collect())
+                .type_(AxisType::Time)
+                .name("Time")
                 .name_gap(25)
                 .name_text_style(TextStyle::new().font_size(14))
                 .axis_label(AxisLabel::new().font_size(12))
@@ -834,7 +809,7 @@ pub fn algorithm_rpe_line_chart(iterations: Vec<Vec<RPE>>, test_definition: &Tes
         .series(
             Line::new()
                 .name("L")
-                .data(data_items.iter().map(|x| x.l + base).collect())
+                .data(xy_lower)
                 .line_style(LineStyle::new().opacity(0))
                 .stack("confidence-band")
                 .symbol(Symbol::None)
@@ -842,7 +817,7 @@ pub fn algorithm_rpe_line_chart(iterations: Vec<Vec<RPE>>, test_definition: &Tes
         .series(
             Line::new()
                 .name("U")
-                .data(data_items.iter().map(|x| x.u - x.l).collect())
+                .data(xy_up)
                 .line_style(LineStyle::new().opacity(0))
                 .area_style(AreaStyle::new().color("rgba(203, 116, 237, 0.35)"))
                 .stack("confidence-band")
@@ -851,7 +826,7 @@ pub fn algorithm_rpe_line_chart(iterations: Vec<Vec<RPE>>, test_definition: &Tes
         .series(
             Line::new()
                 .name("APE")
-                .data(data_items.iter().map(|d| d.value + base).collect())
+                .data(xy_mean)
                 .line_style(LineStyle::new()
                     .color("rgba(155, 89, 182, 0.85)")
                     .width(3)
@@ -871,14 +846,8 @@ pub fn algorithm_rpe_line_chart(iterations: Vec<Vec<RPE>>, test_definition: &Tes
 
 
 
-
-
-
-
-
-///PLOTS COMPARING THE DIFFERENT METHODS
-pub fn test_cpu_load_line_chart(data: &HashMap<Algorithm, Vec<Vec<ContainerStats>>>, file_path: &String) {
-
+//PLOTS COMPARING THE DIFFERENT METHODS
+pub fn test_cpu_load_line_chart(data: &HashMap<Algorithm, Vec<Vec<ContainerStats>>>)  -> Result<Chart, PlotError> {
 
     //For each algorithm//Stats in data I need to get a series!!!
     let mut lines_vec: Vec<[Line;3]> = Vec::new();
@@ -913,7 +882,7 @@ pub fn test_cpu_load_line_chart(data: &HashMap<Algorithm, Vec<Vec<ContainerStats
         let data_items: Vec<DataItem> = time_buckets
             .into_iter()
             .map(|(key, loads)| {
-                let time = ((key as f64) / 1000.0) as i32;
+                let time = ((key as f32) / 1000.0);
                 let mean = loads.iter().sum::<f64>() / loads.len() as f64;
                 let variance = loads.iter().map(|&x| (x - mean).powi(2)).sum::<f64>() / loads.len() as f64;
                 let std_dev = variance.sqrt();
@@ -926,13 +895,12 @@ pub fn test_cpu_load_line_chart(data: &HashMap<Algorithm, Vec<Vec<ContainerStats
             })
             .collect();
     
-        let base = -data_items.iter().map(|d| d.l).fold(f64::INFINITY, f64::min).floor();
         let max_y = data_items.iter().map(|d| d.u).fold(100.0, f64::max).ceil();
     
         let time_labels: Vec<f64> = data_items.iter().map(|d| d.time as f64).collect();
-        let lower_band: Vec<f64> = data_items.iter().map(|d| d.l + base).collect();
+        let lower_band: Vec<f64> = data_items.iter().map(|d| d.l).collect();
         let std_band: Vec<f64> = data_items.iter().map(|d| (d.u - d.l)).collect();
-        let mean_line: Vec<f64> = data_items.iter().map(|d| d.value + base).collect();
+        let mean_line: Vec<f64> = data_items.iter().map(|d| d.value).collect();
 
         let xy_mean: Vec<Vec<f64>> = time_labels.iter().zip(&mean_line).map(|(x, y)| vec![*x, *y]).collect();
         let xy_up: Vec<Vec<f64>> = time_labels.iter().zip(&std_band).map(|(x, y)| vec![*x, *y]).collect();
@@ -941,9 +909,9 @@ pub fn test_cpu_load_line_chart(data: &HashMap<Algorithm, Vec<Vec<ContainerStats
         let main_line = Line::new()
             .name(&algo.name)
             .data(xy_mean)
-            .smooth(true)
+            .smooth(false)
             .show_symbol(false)
-            //.symbol(Symbol::None) 
+            .symbol(Symbol::None) 
             .line_style(LineStyle::new()
                 .width(3)
                 .color(algo.get_rgba(0.9)) // blue
@@ -972,8 +940,8 @@ pub fn test_cpu_load_line_chart(data: &HashMap<Algorithm, Vec<Vec<ContainerStats
     let mut chart = Chart::new()
         .x_axis(
             Axis::new()
-                .type_(AxisType::Category)
-                .name("Time (s)")
+                .type_(AxisType::Time)
+                .name("Time")
                 .name_text_style(TextStyle::new().font_size(16).font_weight("bold"))
                 .axis_label(AxisLabel::new().font_size(13)),
         )
@@ -995,13 +963,364 @@ pub fn test_cpu_load_line_chart(data: &HashMap<Algorithm, Vec<Vec<ContainerStats
     chart = add_lines(chart, lines_vec);
 
 
-    let filename = "test_cpu_load.svg";
-    let full_path = format!("{file_path}/{filename}");
+    Ok(chart)
 
-    let mut renderer = ImageRenderer::new(1000, 800)
-        .theme(Theme::Infographic);
-    renderer.save(&chart, full_path);
 }
+
+pub fn test_memory_usage_line_chart(data: &HashMap<Algorithm, Vec<Vec<ContainerStats>>>)  -> Result<Chart, PlotError> {
+
+
+    //For each algorithm//Stats in data I need to get a series!!!
+    let mut lines_vec: Vec<[Line;3]> = Vec::new();
+
+    for (algo, stats_vec) in data{
+
+        let mut time_buckets: BTreeMap<i64, Vec<f64>> = BTreeMap::new();
+
+        for iteration in stats_vec {
+            let data_ts: Vec<DateTime<Utc>> = iteration.iter().map(|cs| cs.created_at).collect();
+            let start_ts = data_ts[0];
+    
+            let time_sec: Vec<f64> = data_ts.iter()
+                .map(|ts| (*ts - start_ts).num_seconds() as f64)
+                .collect();
+    
+            let memory: Vec<f64> = iteration.iter()
+                .skip(2)
+                .map(|cs| {
+                    let mem = match cs.memory_stats.usage{
+                        Some(p) => p  as f64 / 1_000_000.0,
+                        None => -1.0
+                    };
+                    mem
+                })
+                .collect();
+    
+            for (t, mem) in time_sec.into_iter().zip(memory) {
+                let bucket_key = (t * 1000.0) as i64;
+                time_buckets.entry(bucket_key).or_default().push(mem);
+            }
+        }
+    
+        let data_items: Vec<DataItem> = time_buckets
+            .into_iter()
+            .map(|(key, mem)| {
+                let time = ((key as f32) / 1000.0);
+                let mean = mem.iter().sum::<f64>() / mem.len() as f64;
+                let variance = mem.iter().map(|&x| (x - mean).powi(2)).sum::<f64>() / mem.len() as f64;
+                let std_dev = variance.sqrt();
+                DataItem {
+                    time,
+                    value: mean,
+                    l: (mean - std_dev).max(0.0),
+                    u: (mean + std_dev),
+                }
+            })
+            .collect();
+        
+        let time_labels: Vec<f64> = data_items.iter().map(|d| d.time as f64).collect();
+        let lower_band: Vec<f64> = data_items.iter().map(|d| d.l).collect();
+        let std_band: Vec<f64> = data_items.iter().map(|d| (d.u - d.l)).collect();
+        let mean_line: Vec<f64> = data_items.iter().map(|d| d.value).collect();
+
+        let xy_mean: Vec<Vec<f64>> = time_labels.iter().zip(&mean_line).map(|(x, y)| vec![*x, *y]).collect();
+        let xy_up: Vec<Vec<f64>> = time_labels.iter().zip(&std_band).map(|(x, y)| vec![*x, *y]).collect();
+        let xy_lower: Vec<Vec<f64>> = time_labels.iter().zip(&lower_band).map(|(x, y)| vec![*x, *y]).collect();
+
+        let main_line = Line::new()
+            .name(&algo.name)
+            .data(xy_mean)
+            .smooth(false)
+            .show_symbol(false)
+            //.symbol(Symbol::None) 
+            .line_style(LineStyle::new()
+                .width(3)
+                .color(algo.get_rgba(0.9))
+        );
+
+        let lower_band = Line::new()
+            .data(xy_lower)
+            .line_style(LineStyle::new().opacity(0.0))
+            .symbol(Symbol::None)
+            .stack(format!("std-band-{}", algo.name));
+
+        let upper_band = Line::new()
+            .data(xy_up)
+            .line_style(LineStyle::new().opacity(0.0))
+            .area_style(
+                AreaStyle::new()
+                    .color(algo.get_rgba(0.2))
+            )
+            .symbol(Symbol::None)
+            .stack(format!("std-band-{}", algo.name));
+        
+        lines_vec.push([main_line, lower_band, upper_band]);
+
+    }
+
+    let mut chart = Chart::new()
+        .x_axis(
+            Axis::new()
+                .type_(AxisType::Time)
+                .name("Time")
+                .name_text_style(TextStyle::new().font_size(16).font_weight("bold"))
+                .axis_label(AxisLabel::new().font_size(13)),
+        )
+        .y_axis(
+            Axis::new()
+                .type_(AxisType::Value)
+                .name("Memory Usage (Mb)")
+                .name_text_style(TextStyle::new().font_size(16).font_weight("bold"))
+                .axis_label(AxisLabel::new().font_size(13)),
+        ).legend(
+            Legend::new()
+                .show(true)
+                .top("top")
+                .left("left")
+                .orient(Orient::Horizontal)
+                .text_style(TextStyle::new().font_size(14))
+        );
+
+    chart = add_lines(chart, lines_vec);
+
+
+    Ok(chart)
+
+}
+
+
+pub fn test_ape_line_chart(data: &HashMap<Algorithm, Vec<Vec<APE>>>)  -> Result<Chart, PlotError> {
+
+    //For each algorithm//Stats in data I need to get a series!!!
+    let mut lines_vec: Vec<[Line;3]> = Vec::new();
+
+    for (algo, iterations) in data{
+
+        let mut time_buckets: BTreeMap<i64, Vec<f64>> = BTreeMap::new();
+
+        for iteration in iterations {
+            let time_sec: Vec<f64> = iteration.iter().map(|ape| ape.time_from_start).collect();
+    
+            let ape_values: Vec<f64> = iteration.iter()
+                .skip(1)
+                .map(|a| {
+                    a.value
+                })
+                .collect();
+    
+            for (t, ape) in time_sec.into_iter().zip(ape_values) {
+                let bucket_key = (t * 1000.0) as i64;
+                time_buckets.entry(bucket_key).or_default().push(ape);
+            }
+        }
+    
+        let data_items: Vec<DataItem> = time_buckets
+            .into_iter()
+            .map(|(key, ape)| {
+                let time = ((key as f32) / 1000.0);
+                let mean = ape.iter().sum::<f64>() / ape.len() as f64;
+                let variance = ape.iter().map(|&x| (x - mean).powi(2)).sum::<f64>() / ape.len() as f64;
+                let std_dev = variance.sqrt();
+                DataItem {
+                    time,
+                    value: mean,
+                    l: (mean - std_dev).max(0.0),
+                    u: (mean + std_dev),
+                }
+            })
+            .collect();
+    
+   
+        let time_labels: Vec<f64> = data_items.iter().map(|d| d.time as f64).collect();
+
+        let lower_band: Vec<f64> = data_items.iter().map(|d| d.l).collect();
+        let std_band: Vec<f64> = data_items.iter().map(|d| (d.u - d.l)).collect();
+        let mean_line: Vec<f64> = data_items.iter().map(|d| d.value).collect();
+
+        let xy_mean: Vec<Vec<f64>> = time_labels.iter().zip(&mean_line).map(|(x, y)| vec![*x, *y]).collect();
+        let xy_up: Vec<Vec<f64>> = time_labels.iter().zip(&std_band).map(|(x, y)| vec![*x, *y]).collect();
+        let xy_lower: Vec<Vec<f64>> = time_labels.iter().zip(&lower_band).map(|(x, y)| vec![*x, *y]).collect();
+
+        let main_line = Line::new()
+            .name(&algo.name)
+            .data(xy_mean)
+            .smooth(false)
+            .show_symbol(false)
+            .symbol(Symbol::None)
+            .line_style(LineStyle::new()
+                .width(3)
+                .color(algo.get_rgba(0.9))
+        );
+
+        let lower_band = Line::new()
+            .data(xy_lower)
+            .line_style(LineStyle::new().opacity(0.0))
+            .symbol(Symbol::None)
+            .stack(format!("std-band-{}", algo.name));
+
+        let upper_band = Line::new()
+            .data(xy_up)
+            .line_style(LineStyle::new().opacity(0.0))
+            .area_style(
+                AreaStyle::new()
+                    .color(algo.get_rgba(0.2))
+            )
+            .symbol(Symbol::None)
+            .stack(format!("std-band-{}", algo.name));
+        
+        lines_vec.push([main_line, lower_band, upper_band]);
+
+    }
+
+    let mut chart = Chart::new()
+        .x_axis(
+            Axis::new()
+                .type_(AxisType::Time)
+                .name("Time")
+                .name_text_style(TextStyle::new().font_size(16).font_weight("bold"))
+                .axis_label(AxisLabel::new().font_size(13)),
+        )
+        .y_axis(
+            Axis::new()
+                .type_(AxisType::Value)
+                .name("APE (m)")
+                .name_text_style(TextStyle::new().font_size(16).font_weight("bold"))
+                .axis_label(AxisLabel::new().font_size(13)),
+        ).legend(
+            Legend::new()
+                .show(true)
+                .top("top")
+                .left("left")
+                .orient(Orient::Horizontal)
+                .text_style(TextStyle::new().font_size(14))
+        );
+
+    chart = add_lines(chart, lines_vec);
+
+
+    Ok(chart)
+
+}
+
+
+pub fn test_rpe_line_chart(data: &HashMap<Algorithm, Vec<Vec<RPE>>>)  -> Result<Chart, PlotError> {
+
+    //For each algorithm//Stats in data I need to get a series!!!
+    let mut lines_vec: Vec<[Line;3]> = Vec::new();
+
+    for (algo, iterations) in data{
+
+        let mut time_buckets: BTreeMap<i64, Vec<f64>> = BTreeMap::new();
+
+        for iteration in iterations {
+            let time_sec: Vec<f64> = iteration.iter().map(|rpe| rpe.time_from_start).collect();
+    
+            let rpe_values: Vec<f64> = iteration.iter()
+                .skip(1)
+                .map(|a| {
+                    a.value
+                })
+                .collect();
+    
+            for (t, rpe) in time_sec.into_iter().zip(rpe_values) {
+                let bucket_key = (t * 1000.0) as i64;
+                time_buckets.entry(bucket_key).or_default().push(rpe);
+            }
+        }
+    
+        let data_items: Vec<DataItem> = time_buckets
+            .into_iter()
+            .map(|(key, rpe)| {
+                let time = ((key as f32) / 1000.0);
+                let mean = rpe.iter().sum::<f64>() / rpe.len() as f64;
+                let variance = rpe.iter().map(|&x| (x - mean).powi(2)).sum::<f64>() / rpe.len() as f64;
+                let std_dev = variance.sqrt();
+
+                DataItem {
+                    time,
+                    value: mean,
+                    l: (mean - std_dev).max(0.0),
+                    u: (mean + std_dev),
+                }
+            })
+            .collect();
+    
+   
+        let time_labels: Vec<f64> = data_items.iter().map(|d| d.time as f64).collect();
+
+        let lower_band: Vec<f64> = data_items.iter().map(|d| d.l).collect();
+        let std_band: Vec<f64> = data_items.iter().map(|d| (d.u - d.l)).collect();
+        let mean_line: Vec<f64> = data_items.iter().map(|d| d.value).collect();
+
+        let xy_mean: Vec<Vec<f64>> = time_labels.iter().zip(&mean_line).map(|(x, y)| vec![*x, *y]).collect();
+        let xy_up: Vec<Vec<f64>> = time_labels.iter().zip(&std_band).map(|(x, y)| vec![*x, *y]).collect();
+        let xy_lower: Vec<Vec<f64>> = time_labels.iter().zip(&lower_band).map(|(x, y)| vec![*x, *y]).collect();
+
+        let main_line = Line::new()
+            .name(&algo.name)
+            .data(xy_mean)
+            .smooth(false)
+            .show_symbol(true)
+            .line_style(LineStyle::new()
+                .width(3)
+                .color(algo.get_rgba(0.9))
+        );
+
+        let lower_band = Line::new()
+            .data(xy_lower)
+            .line_style(LineStyle::new().opacity(0.0))
+            .symbol(Symbol::None)
+            .stack(format!("std-band-{}", algo.name));
+
+        let upper_band = Line::new()
+            .data(xy_up)
+            .line_style(LineStyle::new().opacity(0.0))
+            .area_style(
+                AreaStyle::new()
+                    .color(algo.get_rgba(0.2))
+            )
+            .symbol(Symbol::None)
+            .stack(format!("std-band-{}", algo.name));
+        
+        lines_vec.push([main_line, lower_band, upper_band]);
+
+    }
+
+    let mut chart = Chart::new()
+        .x_axis(
+            Axis::new()
+                .type_(AxisType::Time)
+                .name("Time")
+                .name_text_style(TextStyle::new().font_size(16).font_weight("bold"))
+                .axis_label(AxisLabel::new().font_size(13)),
+        )
+        .y_axis(
+            Axis::new()
+                .type_(AxisType::Value)
+                .name("RPE (m)")
+                .name_text_style(TextStyle::new().font_size(16).font_weight("bold"))
+                .axis_label(AxisLabel::new().font_size(13)),
+        ).legend(
+            Legend::new()
+                .show(true)
+                .top("top")
+                .left("left")
+                .orient(Orient::Horizontal)
+                .text_style(TextStyle::new().font_size(14))
+        );
+
+    chart = add_lines(chart, lines_vec);
+
+
+    Ok(chart)
+
+}
+
+
+
+
+
+
 
 
 

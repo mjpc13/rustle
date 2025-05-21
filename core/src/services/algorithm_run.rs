@@ -188,6 +188,30 @@ impl AlgorithmRunService {
         algo_stats
     }
 
+    pub async fn get_all_ape(&self, run: &AlgorithmRun) -> Vec<Vec<APE>>{
+
+        //For each AlgorithmRun I need the container stats
+        let iterations = self.repo.get_iterations(run).await.unwrap();
+        let algo_ape: Vec<Vec<APE>> = join_all(
+            iterations.iter().map(|iter| async {
+                self.iter_service.get_ape(iter).await.unwrap()
+            })
+        ).await;
+        algo_ape
+    }
+
+    pub async fn get_all_rpe(&self, run: &AlgorithmRun) -> Vec<Vec<RPE>>{
+
+        //For each AlgorithmRun I need the container stats
+        let iterations = self.repo.get_iterations(run).await.unwrap();
+        let algo_rpe: Vec<Vec<RPE>> = join_all(
+            iterations.iter().map(|iter| async {
+                self.iter_service.get_rpe(iter).await.unwrap()
+            })
+        ).await;
+        algo_rpe
+    }
+
 }
 
 

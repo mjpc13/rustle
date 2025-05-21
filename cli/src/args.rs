@@ -203,7 +203,7 @@ pub struct PlotTest {
 
     pub name: Option<String>,
 
-    #[clap(long)]
+    #[clap(short, long)]
     pub output_dir: Option<String>,
 
     #[clap(long, default_value = "svg")]
