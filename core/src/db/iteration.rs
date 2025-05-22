@@ -382,10 +382,7 @@ impl IterationRepo {
         let nested_odoms_min: Vec<Vec<Odometry>> = result_min.take("odometry").unwrap();
         let nested_odoms_max: Vec<Vec<Odometry>> = result_max.take("odometry").unwrap();
 
-        let count = self.get_count_odoms(iter).await.unwrap();
-
-        //warn!("My min odometry: {:?} \n My max odometry: {:?} \n My count: {count}", odoms_min, odoms_max);
-
+        let count = self.get_count_odoms(iter).await?;
     
         // Flatten the results
         let odom_min = nested_odoms_min
@@ -401,8 +398,6 @@ impl IterationRepo {
         let duration = odom_max.header.time - odom_min.header.time;
 
         let frequency = count as f64 / duration.num_seconds() as f64;
-
-        warn!("My frequency of messages is: {frequency}");
 
         Ok(frequency)
 

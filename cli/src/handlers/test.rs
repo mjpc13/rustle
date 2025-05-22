@@ -206,7 +206,7 @@ async fn handle_show_cmd(show_test: ShowTest, service: &TestDefinitionService, t
         }
     };
 
-    // Get the corresponding test execution; 
+    // Get the corresponding test execution;
     let exec: TestExecution = service.get_executions(test).await?;
 
     let exec_id = match exec.id{
@@ -217,19 +217,18 @@ async fn handle_show_cmd(show_test: ShowTest, service: &TestDefinitionService, t
     let algo_runs = test_exec_service.get_algo_runs(&exec_id).await?;
 
     if show_test.detailed{
-        show_detail(&algo_runs, &test_exec_service).await;
+        show_detail(&algo_runs, &test_exec_service, &show_test.name).await;
     } else {
         show_simple(&algo_runs);
     }
 
     //Logic to write in a file! Depends on the output location and on the format!
-
-    todo!("Still not finished");
+    Ok(())
 }
 
-async fn show_detail(algo_runs: &Vec<AlgorithmRun>, test_exec_service: &TestExecutionService){
+async fn show_detail(algo_runs: &Vec<AlgorithmRun>, test_exec_service: &TestExecutionService, test_name: &String){
 
-    println!("Test: my_slam_test\n==================\n");
+    println!("Test: {test_name}\n==================\n");
     
     for ar in algo_runs{
 
@@ -242,14 +241,14 @@ async fn show_detail(algo_runs: &Vec<AlgorithmRun>, test_exec_service: &TestExec
 
         //Print the first part!
 
-        let mut ape: String = String::from("NaN");
-        let mut rpe = String::from("NaN");
-        let mut cpu = String::from("NaN");
-        let mut mem = String::from("NaN");
-        let mut freq = String::from("NaN");
+        let mut ape: String = String::from("- APE: RMSE= NaN, Mean= NaN, Max= NaN, Std= NaN\n");
+        let mut rpe = String::from("- RPE: RMSE= NaN, Mean= NaN, Max= NaN, Std= NaN\n");
+        let mut cpu = String::from("- CPU Load: Mean= NaN, Max= NaN, Std= NaN\n");
+        let mut mem = String::from("- Memory Usage: Max=NaN, Trend=NaN\n");
+        let mut freq = String::from("- Frequency (Hz): Mean: NaN, Min: NaN, Max: NaN, Std: NaN\n");
 
         let mut algo_string = String::new();
-        algo_string = format!("Algorithm: {}\n--------------------\nSummary (Combined):", ar.algo.name);
+        algo_string = format!("Algorithm: {}\n--------------------\nSummary (Combined):\n- Bag Speed: {}", ar.algo.name, ar.bag_speed);
 
         println!("{algo_string}");
 
@@ -257,14 +256,14 @@ async fn show_detail(algo_runs: &Vec<AlgorithmRun>, test_exec_service: &TestExec
 
             match metric.metric_type {
                 Cpu(cpu_metrics) => {
-                    cpu = format!("- CPU Load: Mean={:.3}%, Max={:.3}%, Std={:.3}\n", cpu_metrics.load.mean, cpu_metrics.load.max, cpu_metrics.load.std);
+                    cpu = format!("- CPU Load: Mean= {:.3}%, Max= {:.3}%, Std= {:.3}\n", cpu_metrics.load.mean, cpu_metrics.load.max, cpu_metrics.load.std);
                 },
                 Memory(memory_metrics) => {
-                    mem = format!("- Memory Usage: Max={:.3}Mb, Trend={:.3}Mb/s\n", memory_metrics.usage.max, memory_metrics.usage_trend_mb_sec);
+                    mem = format!("- Memory Usage: Max= {:.3}Mb, Trend= {:.3}Mb/s\n", memory_metrics.usage.max, memory_metrics.usage_trend_mb_sec);
                 },
                 PoseError(pose_error_metrics) => {
-                    ape = format!("- APE: RMSE={:.3}, Mean={:.3}, Max={:.3}, Std={:.3}\n", pose_error_metrics.ape.rmse.ok_or(0.0).unwrap(), pose_error_metrics.ape.mean, pose_error_metrics.ape.max, pose_error_metrics.ape.std);
-                    rpe = format!("- RPE: RMSE={:.3}, Mean={:.3}, Max={:.3}, Std={:.3}\n", pose_error_metrics.rpe.rmse.ok_or(0.0).unwrap(), pose_error_metrics.rpe.mean, pose_error_metrics.rpe.max, pose_error_metrics.rpe.std);
+                    ape = format!("- APE: RMSE= {:.3}, Mean= {:.3}, Max= {:.3}, Std= {:.3}\n", pose_error_metrics.ape.rmse.ok_or(0.0).unwrap(), pose_error_metrics.ape.mean, pose_error_metrics.ape.max, pose_error_metrics.ape.std);
+                    rpe = format!("- RPE: RMSE= {:.3}, Mean= {:.3}, Max= {:.3}, Std= {:.3}\n", pose_error_metrics.rpe.rmse.ok_or(0.0).unwrap(), pose_error_metrics.rpe.mean, pose_error_metrics.rpe.max, pose_error_metrics.rpe.std);
                 },
                 Frequency(statistical_metrics) => {
                     freq =  format!("- Frequency (Hz): Mean: {:.3}, Min: {:.3}, Max: {:.3}, Std: {:.3}\n", statistical_metrics.mean, statistical_metrics.min, statistical_metrics.max, statistical_metrics.std);
@@ -323,7 +322,7 @@ fn show_simple(algo_runs: &Vec<AlgorithmRun>){
     let mut table = Table::new();
     table.load_preset(ASCII_MARKDOWN);
     table.set_content_arrangement(ContentArrangement::Dynamic);
-    table.set_header(vec!["Name", "APE" , "RPE" , "CPU (%)" , "Mem (MB)" , "Freq  (Hz)"]);
+    table.set_header(vec!["Name", "Bag Speed", "APE" , "RPE" , "CPU (%)" , "Mem (MB)" , "Freq  (Hz)"]);
     
 
     for ar in algo_runs{
@@ -331,11 +330,11 @@ fn show_simple(algo_runs: &Vec<AlgorithmRun>){
         //Get list of iterations and metrics!!!!
 
         let mut ape: String = String::from("NaN");
+        let mut bag_speed = ar.bag_speed;
         let mut rpe = String::from("NaN");
         let mut cpu = String::from("NaN");
         let mut mem = String::from("NaN");
         let mut freq = String::from("NaN");
-
 
         for metric in ar.metrics.clone(){
 
@@ -359,6 +358,7 @@ fn show_simple(algo_runs: &Vec<AlgorithmRun>){
 
         table.add_row(vec![
             ar.algo.name.clone(),
+            bag_speed.to_string(),
             ape,
             rpe,
             cpu,

@@ -8,7 +8,7 @@ use bollard::secret::ContainerState;
 use charming::Chart;
 use directories::ProjectDirs;
 use futures_util::future::join_all;
-use log::warn;
+use log::{info, warn};
 use surrealdb::sql::Thing;
 
 use super::{error::{PlotError, RunError}, DbError, IterationService};
@@ -59,6 +59,8 @@ impl AlgorithmRunService {
         let metric_list = self.repo.get_metrics(run).await.unwrap(); //get metrics associated with the algo run (metrics of the iterations)
 
         let aggregate_metrics = Metric::mean(metric_list);
+
+        info!("My aggregate_metrics: {:?}", aggregate_metrics);
 
         for metric in aggregate_metrics{
             let _ = self.repo.update_aggregate_metric(run, metric).await;

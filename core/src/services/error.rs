@@ -152,6 +152,9 @@ pub enum RunError {
     
     #[error("Execution error: {0}")]
     Execution(String),
+
+    #[error("Error when extracting metrics: {0}")]
+    Evo(String),
     
     #[error("Task failed to complete: {0}")]
     Join(#[from] tokio::task::JoinError),

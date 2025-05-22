@@ -93,8 +93,8 @@ impl IterationService {
         //get the corresponding algorithm run
         let algorithm_run = self.repo.get_algorithm_run(&iter).await.unwrap();
 
-        //let cmd = format!("rosbag play -r {} --clock /rustle/dataset/*.bag", algorithm_run.bag_speed);
-        let cmd = format!("rosbag play -d 9 -r {} --clock -u 50 /rustle/dataset/*.bag", algorithm_run.bag_speed);
+        let cmd = format!("rosbag play -r {} --clock /rustle/dataset/*.bag", algorithm_run.bag_speed);
+        //let cmd = format!("rosbag play -d 9 -r {} --clock -u 50 /rustle/dataset/*.bag", algorithm_run.bag_speed);
         let rustle_cmd = format!("roslaunch rustle-ros rustle.launch --wait test_type:={}", &iter.test_type);
 
         //Vector of commands to run inside the container
@@ -121,7 +121,7 @@ impl IterationService {
         let token = Arc::new(CancellationToken::new());
 
         //Wait 1s for roscore to start
-        let ten_sec = time::Duration::from_secs(10);
+        let ten_sec = time::Duration::from_secs(1);
         thread::sleep(ten_sec);
 
         //let config_clone = self.config.clone();
@@ -297,7 +297,7 @@ impl IterationService {
 
 
         //Compute the frequency
-        let freq = self.repo.get_odom_frequency(&iter).await.unwrap();
+        let freq = self.repo.get_odom_frequency(&iter).await.map_err(|_e| RunError::Evo("Unable to extract find odometries".to_owned()))?;
         let freq_metric = StatisticalMetrics::from_single_value(freq);
 
         let _ = self.metric_service.create_freq_metric(iteration_id_clone.clone(), freq_metric).await; // add to DB
@@ -355,8 +355,8 @@ impl IterationService {
                 ..Default::default()
             };
 
-            let ape = self.compute_metrics(&iter, &ape_args, &full_path, &full_dataset_path).await.unwrap();
-            let rpe = self.compute_metrics(&iter, &rpe_args, &full_path, &full_dataset_path).await.unwrap();
+            let ape = self.compute_metrics(&iter, &ape_args, &full_path, &full_dataset_path).await.map_err(|_e| RunError::Evo("Failed to compute APE".to_owned()))?;
+            let rpe = self.compute_metrics(&iter, &rpe_args, &full_path, &full_dataset_path).await.map_err(|_e| RunError::Evo("Failed to compute RPE".to_owned()))?;
 
             let mut ape_list = APE::read_from_file(&format!("{full_path}/ape.txt")).unwrap();
             let mut rpe_list = RPE::read_from_file(&format!("{full_path}/rpe.txt")).unwrap();

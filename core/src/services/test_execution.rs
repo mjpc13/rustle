@@ -71,7 +71,14 @@ impl TestExecutionService {
                 if let Some(iter) = iteration{
 
                     //RUN ITERATION JOB
-                    let _ = self.iteration_service.run(iter).await;
+                    let iter_job = self.iteration_service.run(iter.clone()).await;
+
+                    match iter_job {
+                        Ok(_) => (),
+                        Err(e) => {
+                            warn!("Iteration number {} from algorithm has produced an error: {}", iter.iteration_num, e); 
+                        },
+                    };
 
                }
             });
