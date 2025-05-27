@@ -78,8 +78,8 @@ pub fn cpu_load_line_chart(data: &Vec<ContainerStats>) -> Result<Chart, PlotErro
     let chart = Chart::new()
         .x_axis(
             Axis::new()
-                .type_(AxisType::Time)
-                .name("Time")
+                .type_(AxisType::Value)
+                .name("Time (s)")
                 .name_text_style(TextStyle::new().font_size(16).font_weight("bold"))
                 .axis_label(AxisLabel::new().font_size(14)),
         )
@@ -157,8 +157,8 @@ pub fn memory_usage_line_chart(data: &Vec<ContainerStats>) -> Result<Chart, Plot
     let chart = Chart::new()
         .x_axis(
             Axis::new()
-                .type_(AxisType::Time)
-                .name("Time")
+                .type_(AxisType::Value)
+                .name("Time (s)")
                 .name_text_style(TextStyle::new().font_size(16).font_weight("bold"))
                 .axis_label(AxisLabel::new().font_size(14)),
         )
@@ -218,8 +218,8 @@ pub fn ape_line_chart(data: &Vec<APE>, test_definition: &TestDefinition) -> Resu
     let mut chart = Chart::new()
         .x_axis(
             Axis::new()
-                .type_(AxisType::Time)
-                .name("Time")
+                .type_(AxisType::Value)
+                .name("Time (s)")
                 .name_gap(25)
                 .name_text_style(TextStyle::new().font_size(14))
                 .axis_label(AxisLabel::new().font_size(12))
@@ -296,8 +296,8 @@ pub fn rpe_line_chart(data: &Vec<RPE>, test_definition: &TestDefinition) -> Resu
     let mut chart = Chart::new()
         .x_axis(
             Axis::new()
-                .type_(AxisType::Time)
-                .name("Time")
+                .type_(AxisType::Value)
+                .name("Time (s)")
                 .name_gap(25)
                 .name_text_style(TextStyle::new().font_size(14))
                 .axis_label(AxisLabel::new().font_size(12))
@@ -433,8 +433,8 @@ pub fn algorithm_memory_usage_chart(iterations: Vec<Vec<ContainerStats>>) -> Res
     let chart = Chart::new()
         .x_axis(
             Axis::new()
-                .type_(AxisType::Time)
-                .name("Time")
+                .type_(AxisType::Value)
+                .name("Time (s)")
                 .name_text_style(TextStyle::new().font_size(16).font_weight("bold"))
                 .axis_label(AxisLabel::new().font_size(13)),
         )
@@ -451,7 +451,7 @@ pub fn algorithm_memory_usage_chart(iterations: Vec<Vec<ContainerStats>>) -> Res
                 .name("L")
                 .data(xy_lower)
                 .line_style(LineStyle::new().opacity(0))
-                .stack("confidence-band")
+                .stack("low-band")
                 .symbol(Symbol::None)
         )
         .series(
@@ -463,7 +463,7 @@ pub fn algorithm_memory_usage_chart(iterations: Vec<Vec<ContainerStats>>) -> Res
                     AreaStyle::new()
                         .color("rgba(56, 142, 60, 0.2)") // Soft green area fill
                 )
-                .stack("confidence-band")
+                .stack("high-band")
                 .symbol(Symbol::None)
         )
         .series(
@@ -548,8 +548,8 @@ pub fn algorithm_cpu_load_chart(iterations: Vec<Vec<ContainerStats>>) -> Result<
     let chart = Chart::new()
         .x_axis(
             Axis::new()
-                .type_(AxisType::Time)
-                .name("Time")
+                .type_(AxisType::Value)
+                .name("Time (s)")
                 .name_text_style(TextStyle::new().font_size(16).font_weight("bold"))
                 .axis_label(AxisLabel::new().font_size(13)),
         )
@@ -580,7 +580,7 @@ pub fn algorithm_cpu_load_chart(iterations: Vec<Vec<ContainerStats>>) -> Result<
                 .data(xy_lower)
                 .line_style(LineStyle::new().opacity(0.0))
                 .symbol(Symbol::None)
-                .stack("std-band")
+                .stack("low-band")
         )
         // Upper band (deviation area)
         .series(
@@ -593,7 +593,7 @@ pub fn algorithm_cpu_load_chart(iterations: Vec<Vec<ContainerStats>>) -> Result<
                         .color("rgba(100, 181, 246, 0.3)") // light blue
                 )
                 .symbol(Symbol::None)
-                .stack("std-band")
+                .stack("upper-band")
         );
 
     Ok(chart)
@@ -669,8 +669,8 @@ pub fn algorithm_ape_line_chart(iterations: Vec<Vec<APE>>, test_definition: &Tes
     let mut chart = Chart::new()
         .x_axis(
             Axis::new()
-                .type_(AxisType::Time)
-                .name("Time")
+                .type_(AxisType::Value)
+                .name("Time (s)")
                 .name_gap(25)
                 .name_text_style(TextStyle::new().font_size(14))
                 .axis_label(AxisLabel::new().font_size(12))
@@ -701,7 +701,7 @@ pub fn algorithm_ape_line_chart(iterations: Vec<Vec<APE>>, test_definition: &Tes
                 .name("L")
                 .data(xy_lower)
                 .line_style(LineStyle::new().opacity(0))
-                .stack("confidence-band")
+                .stack("low-band")
                 .symbol(Symbol::None)
         )
         .series(
@@ -710,7 +710,7 @@ pub fn algorithm_ape_line_chart(iterations: Vec<Vec<APE>>, test_definition: &Tes
                 .data(xy_up)
                 .line_style(LineStyle::new().opacity(0))
                 .area_style(AreaStyle::new().color("rgba(100, 149, 237, 0.3)"))
-                .stack("confidence-band")
+                .stack("upper-band")
                 .symbol(Symbol::None)
         );
 
@@ -791,8 +791,8 @@ pub fn algorithm_rpe_line_chart(iterations: Vec<Vec<RPE>>, test_definition: &Tes
     let mut chart = Chart::new()
         .x_axis(
             Axis::new()
-                .type_(AxisType::Time)
-                .name("Time")
+                .type_(AxisType::Value)
+                .name("Time (s)")
                 .name_gap(25)
                 .name_text_style(TextStyle::new().font_size(14))
                 .axis_label(AxisLabel::new().font_size(12))
@@ -810,7 +810,7 @@ pub fn algorithm_rpe_line_chart(iterations: Vec<Vec<RPE>>, test_definition: &Tes
                 .name("L")
                 .data(xy_lower)
                 .line_style(LineStyle::new().opacity(0))
-                .stack("confidence-band")
+                .stack("low-band")
                 .symbol(Symbol::None)
         )
         .series(
@@ -819,7 +819,7 @@ pub fn algorithm_rpe_line_chart(iterations: Vec<Vec<RPE>>, test_definition: &Tes
                 .data(xy_up)
                 .line_style(LineStyle::new().opacity(0))
                 .area_style(AreaStyle::new().color("rgba(203, 116, 237, 0.35)"))
-                .stack("confidence-band")
+                .stack("upper-band")
                 .symbol(Symbol::None)
         )
         .series(
@@ -850,8 +850,6 @@ pub fn test_cpu_load_line_chart(data: &HashMap<AlgorithmRun, Vec<Vec<ContainerSt
 
     //For each algorithm//Stats in data I need to get a series!!!
     let mut lines_vec: Vec<[Line;3]> = Vec::new();
-
-    info!("Size of thing: {}", data.len());
 
     for (algo_run, stats_vec) in data{
 
@@ -922,17 +920,17 @@ pub fn test_cpu_load_line_chart(data: &HashMap<AlgorithmRun, Vec<Vec<ContainerSt
             .data(xy_lower)
             .line_style(LineStyle::new().opacity(0.0))
             .symbol(Symbol::None)
-            .stack(format!("std-band-{}", algo_run.algo.name));
+            .stack(format!("lower-band-{}-{}", algo_run.algo.name, algo_run.bag_speed));
 
         let upper_band = Line::new()
             .data(xy_up)
             .line_style(LineStyle::new().opacity(0.0))
             .area_style(
                 AreaStyle::new()
-                    .color(algo_run.algo.get_rgba(0.2)) // light blue
+                    .color(algo_run.get_distinct_rgba(0.2))
             )
             .symbol(Symbol::None)
-            .stack(format!("std-band-{}", algo_run.algo.name));
+            .stack(format!("upper-band-{}-{}", algo_run.algo.name, algo_run.bag_speed));
         
         lines_vec.push([main_line, lower_band, upper_band]);
 
@@ -941,8 +939,8 @@ pub fn test_cpu_load_line_chart(data: &HashMap<AlgorithmRun, Vec<Vec<ContainerSt
     let mut chart = Chart::new()
         .x_axis(
             Axis::new()
-                .type_(AxisType::Time)
-                .name("Time")
+                .type_(AxisType::Value)
+                .name("Time (s)")
                 .name_text_style(TextStyle::new().font_size(16).font_weight("bold"))
                 .axis_label(AxisLabel::new().font_size(13)),
         )
@@ -1043,7 +1041,7 @@ pub fn test_memory_usage_line_chart(data: &HashMap<AlgorithmRun, Vec<Vec<Contain
             .data(xy_lower)
             .line_style(LineStyle::new().opacity(0.0))
             .symbol(Symbol::None)
-            .stack(format!("std-band-{}", algo_run.algo.name));
+            .stack(format!("lower-band-{}-{}", algo_run.algo.name, algo_run.bag_speed));
 
         let upper_band = Line::new()
             .data(xy_up)
@@ -1053,7 +1051,7 @@ pub fn test_memory_usage_line_chart(data: &HashMap<AlgorithmRun, Vec<Vec<Contain
                     .color(algo_run.get_distinct_rgba(0.2))
             )
             .symbol(Symbol::None)
-            .stack(format!("std-band-{}", algo_run.algo.name));
+            .stack(format!("upper-band-{}-{}", algo_run.algo.name, algo_run.bag_speed));
         
         lines_vec.push([main_line, lower_band, upper_band]);
 
@@ -1062,8 +1060,8 @@ pub fn test_memory_usage_line_chart(data: &HashMap<AlgorithmRun, Vec<Vec<Contain
     let mut chart = Chart::new()
         .x_axis(
             Axis::new()
-                .type_(AxisType::Time)
-                .name("Time")
+                .type_(AxisType::Value)
+                .name("Time (s)")
                 .name_text_style(TextStyle::new().font_size(16).font_weight("bold"))
                 .axis_label(AxisLabel::new().font_size(13)),
         )
@@ -1156,7 +1154,7 @@ pub fn test_ape_line_chart(data: &HashMap<AlgorithmRun, Vec<Vec<APE>>>)  -> Resu
             .data(xy_lower)
             .line_style(LineStyle::new().opacity(0.0))
             .symbol(Symbol::None)
-            .stack(format!("std-band-{}", algo_run.algo.name));
+            .stack(format!("lower-band-{}-{}", algo_run.algo.name, algo_run.bag_speed));
 
         let upper_band = Line::new()
             .data(xy_up)
@@ -1166,7 +1164,7 @@ pub fn test_ape_line_chart(data: &HashMap<AlgorithmRun, Vec<Vec<APE>>>)  -> Resu
                     .color(algo_run.get_distinct_rgba(0.2))
             )
             .symbol(Symbol::None)
-            .stack(format!("std-band-{}", algo_run.algo.name));
+            .stack(format!("upper-band-{}-{}", algo_run.algo.name, algo_run.bag_speed));
         
         lines_vec.push([main_line, lower_band, upper_band]);
 
@@ -1175,8 +1173,8 @@ pub fn test_ape_line_chart(data: &HashMap<AlgorithmRun, Vec<Vec<APE>>>)  -> Resu
     let mut chart = Chart::new()
         .x_axis(
             Axis::new()
-                .type_(AxisType::Time)
-                .name("Time")
+                .type_(AxisType::Value)
+                .name("Time (s)")
                 .name_text_style(TextStyle::new().font_size(16).font_weight("bold"))
                 .axis_label(AxisLabel::new().font_size(13)),
         )
@@ -1270,7 +1268,7 @@ pub fn test_rpe_line_chart(data: &HashMap<AlgorithmRun, Vec<Vec<RPE>>>)  -> Resu
             .data(xy_lower)
             .line_style(LineStyle::new().opacity(0.0))
             .symbol(Symbol::None)
-            .stack(format!("std-band-{}", algo_run.algo.name));
+            .stack(format!("lower-band-{}-{}", algo_run.algo.name, algo_run.bag_speed));
 
         let upper_band = Line::new()
             .data(xy_up)
@@ -1280,7 +1278,7 @@ pub fn test_rpe_line_chart(data: &HashMap<AlgorithmRun, Vec<Vec<RPE>>>)  -> Resu
                     .color(algo_run.get_distinct_rgba(0.2))
             )
             .symbol(Symbol::None)
-            .stack(format!("std-band-{}", algo_run.algo.name));
+            .stack(format!("upper-band-{}-{}", algo_run.algo.name, algo_run.bag_speed));
         
         lines_vec.push([main_line, lower_band, upper_band]);
 
@@ -1289,8 +1287,8 @@ pub fn test_rpe_line_chart(data: &HashMap<AlgorithmRun, Vec<Vec<RPE>>>)  -> Resu
     let mut chart = Chart::new()
         .x_axis(
             Axis::new()
-                .type_(AxisType::Time)
-                .name("Time")
+                .type_(AxisType::Value)
+                .name("Time (s)")
                 .name_text_style(TextStyle::new().font_size(16).font_weight("bold"))
                 .axis_label(AxisLabel::new().font_size(13)),
         )
