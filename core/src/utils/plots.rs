@@ -87,7 +87,7 @@ pub fn cpu_load_line_chart(data: &Vec<ContainerStats>) -> Result<Chart, PlotErro
             Axis::new()
                 .type_(AxisType::Value)
                 .name("CPU Load (%)")
-                .max(max_y)
+                //.max(max_y)
                 .name_text_style(TextStyle::new().font_size(16).font_weight("bold"))
                 .axis_label(AxisLabel::new().font_size(14)),
         )
@@ -525,11 +525,12 @@ pub fn algorithm_cpu_load_chart(iterations: Vec<Vec<ContainerStats>>) -> Result<
             let mean = loads.iter().sum::<f64>() / loads.len() as f64;
             let variance = loads.iter().map(|&x| (x - mean).powi(2)).sum::<f64>() / loads.len() as f64;
             let std_dev = variance.sqrt();
+
             DataItem {
                 time,
                 value: mean,
                 l: (mean - std_dev).max(0.0),
-                u: (mean + std_dev).min(100.0),
+                u: (mean + std_dev),
             }
         })
         .collect();
@@ -851,6 +852,8 @@ pub fn test_cpu_load_line_chart(data: &HashMap<AlgorithmRun, Vec<Vec<ContainerSt
     //For each algorithm//Stats in data I need to get a series!!!
     let mut lines_vec: Vec<[Line;3]> = Vec::new();
 
+    let mut max_y_list: Vec<f64> = Vec::new();
+
     for (algo_run, stats_vec) in data{
 
         let mut time_buckets: BTreeMap<i64, Vec<f64>> = BTreeMap::new();
@@ -868,7 +871,7 @@ pub fn test_cpu_load_line_chart(data: &HashMap<AlgorithmRun, Vec<Vec<ContainerSt
                 .map(|cs| {
                     let load_used = (cs.cpu_stats.cpu_usage.total_usage - cs.precpu_stats.cpu_usage.total_usage) as f64;
                     let available = (cs.cpu_stats.system_cpu_usage.unwrap() - cs.precpu_stats.system_cpu_usage.unwrap()) as f64;
-                    (load_used / available * 100.0 * cs.cpu_stats.online_cpus.unwrap() as f64).clamp(0.0, 100.0)
+                    (load_used / available * 100.0 * cs.cpu_stats.online_cpus.unwrap() as f64).clamp(0.0, f64::MAX)
                 })
                 .collect();
     
@@ -885,16 +888,20 @@ pub fn test_cpu_load_line_chart(data: &HashMap<AlgorithmRun, Vec<Vec<ContainerSt
                 let mean = loads.iter().sum::<f64>() / loads.len() as f64;
                 let variance = loads.iter().map(|&x| (x - mean).powi(2)).sum::<f64>() / loads.len() as f64;
                 let std_dev = variance.sqrt();
+
                 DataItem {
                     time,
                     value: mean,
                     l: (mean - std_dev).max(0.0),
-                    u: (mean + std_dev).min(100.0),
+                    u: (mean + std_dev),
                 }
             })
             .collect();
     
-        let max_y = data_items.iter().map(|d| d.u).fold(100.0, f64::max).ceil();
+        let max_y = data_items.iter().map(|d| d.value).fold(100.0, f64::max).ceil();
+
+
+        max_y_list.push(max_y);
     
         let time_labels: Vec<f64> = data_items.iter().map(|d| d.time as f64).collect();
         let lower_band: Vec<f64> = data_items.iter().map(|d| d.l).collect();
@@ -936,6 +943,13 @@ pub fn test_cpu_load_line_chart(data: &HashMap<AlgorithmRun, Vec<Vec<ContainerSt
 
     }
 
+
+    let max_y = max_y_list
+        .iter()
+        .copied()
+        .fold(f64::NEG_INFINITY, f64::max)
+        .max(100.0);
+
     let mut chart = Chart::new()
         .x_axis(
             Axis::new()
@@ -948,6 +962,7 @@ pub fn test_cpu_load_line_chart(data: &HashMap<AlgorithmRun, Vec<Vec<ContainerSt
             Axis::new()
                 .type_(AxisType::Value)
                 .name("CPU Load (%)")
+                .max((max_y + max_y*0.1).floor())
                 .name_text_style(TextStyle::new().font_size(16).font_weight("bold"))
                 .axis_label(AxisLabel::new().font_size(13)),
         ).legend(
