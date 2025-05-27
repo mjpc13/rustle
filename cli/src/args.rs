@@ -214,7 +214,7 @@ pub struct DeleteTest {
 #[derive(Debug, Args)]
 pub struct CleanTest{
     /// Name of the test to clean
-    pub name: String,
+    pub name: Option<String>,
 
     /// Clean all tests
     #[clap(short, long)]

@@ -207,11 +207,14 @@ async fn handle_clean_cmd(clean_test: CleanTest, service: &TestDefinitionService
         info!("All tests clean!");
 
     } else {
-        // If --all isn't present, execute a specific test (by name)
-        let test = service.get_by_name(&clean_test.name).await?.unwrap();
-        service.clean_by_name(test).await?;
 
-        info!("Test {} clean!", &clean_test.name);
+        if let Some(name) = clean_test.name {
+
+            // If --all isn't present, execute a specific test (by name)
+            let test = service.get_by_name(&name).await?.unwrap();
+            service.clean_by_name(test).await?;
+            info!("Test {} clean!", &name);
+        }
 
     }
 
