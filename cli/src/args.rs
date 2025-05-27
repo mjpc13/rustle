@@ -157,6 +157,9 @@ pub enum TestSubCommand {
     /// Add a new test setup
     Add(AddTest),
 
+    /// Cleans the results for an existing test setup
+    Clean(CleanTest),
+
     /// Delete an existing test setup
     Delete(DeleteTest),
 
@@ -207,6 +210,18 @@ pub struct DeleteTest {
     /// Name of the test to delete
     pub name: String,
 }
+
+#[derive(Debug, Args)]
+pub struct CleanTest{
+    /// Name of the test to clean
+    pub name: String,
+
+    /// Clean all tests
+    #[clap(short, long)]
+    pub all: bool,
+}
+
+
 
 /// Arguments for running a test.
 #[derive(Debug, Args)]

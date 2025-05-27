@@ -8,7 +8,7 @@ use rustle_core::{ models::{
 };
 
 
-use crate::args::{ShowTest, TestCommand, TestSubCommand};
+use crate::args::{CleanTest, ShowTest, TestCommand, TestSubCommand};
 use std::{error::Error, fs::{create_dir_all, File}, path::Path};
 use serde_yaml::from_reader;
 
@@ -19,164 +19,165 @@ pub async fn handle_test(
 ) -> Result<(), Box<dyn Error>> {
     match cmd.command {
         TestSubCommand::Add(add) => {
-                            if let Some(file_path) = add.file {
-                                let _config: TestDefinitionsConfig = load_yaml_config(&file_path)?;
-                                let defs = service.create_from_yaml(&file_path).await?;
-                                println!("Added {} test definitions from '{}'", defs.len(), file_path);
-                            } else {
-                                println!("YAML file required for adding test definitions (use --file)");
-                            }
-                }
+                                if let Some(file_path) = add.file {
+                                    let _config: TestDefinitionsConfig = load_yaml_config(&file_path)?;
+                                    let defs = service.create_from_yaml(&file_path).await?;
+                                    println!("Added {} test definitions from '{}'", defs.len(), file_path);
+                                } else {
+                                    println!("YAML file required for adding test definitions (use --file)");
+                                }
+                    }
         TestSubCommand::List => {
-                    let tests = service.get_all().await;
+                        let tests = service.get_all().await;
 
-                    if tests.is_empty() {
-                        println!("No test definitions found.");
+                        if tests.is_empty() {
+                            println!("No test definitions found.");
+                            return Ok(());
+                        }
+
+                        let mut table = Table::new();
+                        table.load_preset(ASCII_MARKDOWN);
+                        table.set_content_arrangement(ContentArrangement::Dynamic);
+                        table.set_header(vec!["Name", "Type", "Iterations", "Datasets", "Algorithms"]);
+
+                        for test in tests {
+                            table.add_row(vec![
+                                test.name,
+                                format!("{:?}", test.test_type),
+                                test.iterations.to_string(),
+                                format!("{:?}", test.dataset_name),
+                                format!("{:?}", test.algo_list),
+                            ]);
+                        }
+
+                        println!("{table}");
+                    }
+        TestSubCommand::Delete(del) => {
+                        service.delete_test_by_name(&del.name).await;
+                        println!("Deleted test definition '{}'", del.name);
+                    }
+        TestSubCommand::Run(run) => {
+                        // If --all flag is present, run all test definitions
+                        if run.all {
+                            let tests = service.get_all().await;
+                            if tests.is_empty() {
+                                println!("No test definitions available to run.");
+                                return Ok(());
+                            }
+
+                            // Loop through all tests and start execution
+                            for test in tests {
+                                info!("Running test: {}", test.name);
+
+                                // Create initial execution object
+                                let execution = TestExecution {
+                                    id: None,
+                                    status: TestExecutionStatus::Scheduled,
+                                    num_iterations: test.iterations,
+                                    start_time: None,
+                                    end_time: None,
+                                    results: None,
+                                };
+
+                                let _ = test_exec_service.start_execution(execution, &test).await;
+                            }
+
+                            println!("Started execution for all tests.");
+                        } else {
+                            // If --all isn't present, execute a specific test (by name)
+                            if let Some(name) = run.name {
+                                let test = service.get_by_name(&name).await?.unwrap();
+                                info!("Running test: {}", test.name);
+
+                                let execution = TestExecution {
+                                    id: None,
+                                    status: TestExecutionStatus::Scheduled,
+                                    num_iterations: test.iterations,
+                                    start_time: None,
+                                    end_time: None,
+                                    results: None,
+                                };
+
+                                let _ = test_exec_service.start_execution(execution, &test).await;
+                                //println!("Started execution for test: {}", test.name);
+                            }
+                        }
+                    }
+        TestSubCommand::Plot(plot_test) => {
+            
+                    //Ensures the output path exists
+                    let output_path = match plot_test.output_dir {
+                        Some(p) => p,
+                        None => {
+                            let config = Config::load()?; // Load from config file
+                            config.data.path.clone()
+                        }
+                    };
+
+                    if !Path::new(&output_path).exists() {
+                        create_dir_all(&output_path)?; // Ensure output directory exists
+                    }
+        
+                    let allowed_formats = ["png", "svg", "pdf"];
+                    if !allowed_formats.contains(&plot_test.format.as_str()) {
+                        error!("Invalid format '{}'. Allowed formats: png, svg, pdf", plot_test.format);
                         return Ok(());
                     }
 
-                    let mut table = Table::new();
-                    table.load_preset(ASCII_MARKDOWN);
-                    table.set_content_arrangement(ContentArrangement::Dynamic);
-                    table.set_header(vec!["Name", "Type", "Iterations", "Datasets", "Algorithms"]);
-
-                    for test in tests {
-                        table.add_row(vec![
-                            test.name,
-                            format!("{:?}", test.test_type),
-                            test.iterations.to_string(),
-                            format!("{:?}", test.dataset_name),
-                            format!("{:?}", test.algo_list),
-                        ]);
-                    }
-
-                    println!("{table}");
-                }
-        TestSubCommand::Delete(del) => {
-                    service.delete_test_by_name(&del.name).await;
-                    println!("Deleted test definition '{}'", del.name);
-                }
-        TestSubCommand::Run(run) => {
-                    // If --all flag is present, run all test definitions
-                    if run.all {
+                    if plot_test.all {
                         let tests = service.get_all().await;
                         if tests.is_empty() {
-                            println!("No test definitions available to run.");
+                            warn!("No test definitions available to plot.");
                             return Ok(());
                         }
 
                         // Loop through all tests and start execution
-                        for test in tests {
-                            info!("Running test: {}", test.name);
+                        for test in tests { 
+                            // CALL THE PLOT THING FOR EACH TEST DEF. BE CAREFULL THEY MIGHT NOT HAVE DATA YET!
+                                        
+                            //Get the test executions derived from test definition
+                            //let exec = service.get_executions(test).await;
 
-                            // Create initial execution object
-                            let execution = TestExecution {
-                                id: None,
-                                status: TestExecutionStatus::Scheduled,
-                                num_iterations: test.iterations,
-                                start_time: None,
-                                end_time: None,
-                                results: None,
-                            };
+                            //plot for every tests, but some tests may not have the necessary data, 
+                            // this will throw an error for sure. DEAL WITH IT
+                            if let Err(e) = test_exec_service
+                                .plot_execution(&test, &output_path, plot_test.overwrite, &plot_test.format)
+                                .await {
+                                    warn!("Failed to plot test '{}': {}", test.name, e);
+                            }
 
-                            let _ = test_exec_service.start_execution(execution, &test).await;
                         }
 
-                        println!("Started execution for all tests.");
                     } else {
                         // If --all isn't present, execute a specific test (by name)
-                        if let Some(name) = run.name {
-                            let test = service.get_by_name(&name).await?.unwrap();
-                            info!("Running test: {}", test.name);
+                        if let Some(name) = plot_test.name {
+                            //todo!("Not implemented yet. Should be the same logic as to compute for all.");
 
-                            let execution = TestExecution {
-                                id: None,
-                                status: TestExecutionStatus::Scheduled,
-                                num_iterations: test.iterations,
-                                start_time: None,
-                                end_time: None,
-                                results: None,
+                            let test = match service.get_by_name(&name).await? {
+                                Some(t) => t,
+                                None => {
+                                    error!("Test definition '{}' not found", name);
+                                    return Ok(());
+                                }
                             };
 
-                            let _ = test_exec_service.start_execution(execution, &test).await;
-                            //println!("Started execution for test: {}", test.name);
-                        }
-                    }
-                }
-        TestSubCommand::Plot(plot_test) => {
-            
-                //Ensures the output path exists
-                let output_path = match plot_test.output_dir {
-                    Some(p) => p,
-                    None => {
-                        let config = Config::load()?; // Load from config file
-                        config.data.path.clone()
-                    }
-                };
-
-                if !Path::new(&output_path).exists() {
-                    create_dir_all(&output_path)?; // Ensure output directory exists
-                }
-        
-                let allowed_formats = ["png", "svg", "pdf"];
-                if !allowed_formats.contains(&plot_test.format.as_str()) {
-                    error!("Invalid format '{}'. Allowed formats: png, svg, pdf", plot_test.format);
-                    return Ok(());
-                }
-
-                if plot_test.all {
-                    let tests = service.get_all().await;
-                    if tests.is_empty() {
-                        warn!("No test definitions available to plot.");
-                        return Ok(());
-                    }
-
-                    // Loop through all tests and start execution
-                    for test in tests { 
-                        // CALL THE PLOT THING FOR EACH TEST DEF. BE CAREFULL THEY MIGHT NOT HAVE DATA YET!
-                                        
-                        //Get the test executions derived from test definition
-                        //let exec = service.get_executions(test).await;
-
-                        //plot for every tests, but some tests may not have the necessary data, 
-                        // this will throw an error for sure. DEAL WITH IT
-                        if let Err(e) = test_exec_service
-                            .plot_execution(&test, &output_path, plot_test.overwrite, &plot_test.format)
-                            .await {
-                                warn!("Failed to plot test '{}': {}", test.name, e);
-                        }
-
-                    }
-
-                } else {
-                    // If --all isn't present, execute a specific test (by name)
-                    if let Some(name) = plot_test.name {
-                        //todo!("Not implemented yet. Should be the same logic as to compute for all.");
-
-                        let test = match service.get_by_name(&name).await? {
-                            Some(t) => t,
-                            None => {
-                                error!("Test definition '{}' not found", name);
-                                return Ok(());
+                            if let Err(e) = test_exec_service
+                                .plot_execution(&test, &output_path, plot_test.overwrite, &plot_test.format)
+                                .await {
+                                    warn!("Failed to plot test '{}': {}", test.name, e);
                             }
-                        };
 
-                        if let Err(e) = test_exec_service
-                            .plot_execution(&test, &output_path, plot_test.overwrite, &plot_test.format)
-                            .await {
-                                warn!("Failed to plot test '{}': {}", test.name, e);
+                            // CALL THE PLOT THING FOR A SINGLE TEST DEF. BE CAREFULL THEY MIGHT NOT HAVE DATA YET!
                         }
-
-                        // CALL THE PLOT THING FOR A SINGLE TEST DEF. BE CAREFULL THEY MIGHT NOT HAVE DATA YET!
                     }
-                }
 
-            },
-            
-            TestSubCommand::Show(show_test) => {
-                let _ = handle_show_cmd(show_test, service, test_exec_service).await;
-            },
-
+                },
+        TestSubCommand::Show(show_test) => {
+                    let _ = handle_show_cmd(show_test, service, test_exec_service).await;
+                },
+        TestSubCommand::Clean(clean_test) => {
+                    let _ = handle_clean_cmd(clean_test, service).await;
+                },
     }
 
     Ok(())
@@ -186,6 +187,38 @@ fn load_yaml_config<T: serde::de::DeserializeOwned>(path: &str) -> Result<T, Box
     let file = File::open(path)?;
     Ok(from_reader(file)?)
 }
+
+
+
+async fn handle_clean_cmd(clean_test: CleanTest, service: &TestDefinitionService)  -> Result<(), Box<dyn Error>>{
+
+    // If --all flag is present, clean all test definitions
+    if clean_test.all {
+        let tests = service.get_all().await;
+        if tests.is_empty() {
+            println!("No test definitions available to clean.");
+            return Ok(());
+        }
+
+        // Loop through all tests and start cleaning
+        for test in tests {
+            service.clean_by_name(test).await?;
+        }
+        info!("All tests clean!");
+
+    } else {
+        // If --all isn't present, execute a specific test (by name)
+        let test = service.get_by_name(&clean_test.name).await?.unwrap();
+        service.clean_by_name(test).await?;
+
+        info!("Test {} clean!", &clean_test.name);
+
+    }
+
+
+    Ok(())
+}
+
 
 async fn handle_show_cmd(show_test: ShowTest, service: &TestDefinitionService, test_exec_service: &TestExecutionService) -> Result<(), Box<dyn Error>>{
 

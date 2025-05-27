@@ -22,8 +22,6 @@ impl TestExecutionRepo {
             .content(execution.clone())
             .await?;
 
-        info!("The execution record was CREATED!!!!");
-
            if let Some(created) = created {
                 execution.id = created.id;
             }

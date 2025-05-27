@@ -1,9 +1,10 @@
+use core::error;
 use std::sync::{Arc};
 
-use log::info;
-use surrealdb::{engine::local::Db, Surreal};
+use log::{info, warn};
+use surrealdb::{engine::local::Db, sql::Thing, Object, Surreal};
 use tokio::sync::Mutex;
-use crate::{models::{TestDefinition, TestExecution}, services::DbError};
+use crate::{models::{metrics::pose_error::APE, TestDefinition, TestExecution}, services::DbError};
 
 #[derive(Debug, Clone)]
 pub struct TestDefinitionRepo {
@@ -97,9 +98,151 @@ impl TestDefinitionRepo {
             .bind(("name", name))
             .await
             .map_err(DbError::Operation)?;
+
     
         Ok(())
     }
 
+    pub async fn clean_by_name(&self, test_def: TestDefinition) -> Result<(), DbError> {
+
+
+        let test_id = test_def.id
+            .ok_or(DbError::MissingField("TestDefinition ID"))?;
+
+        let mut delete_list: Vec<Thing> = Vec::new();
+
+
+        // Get things for the test executions
+        let mut result_exec = self.conn.lock().await
+            .query("RETURN (
+                      SELECT out FROM defines WHERE in = $id
+                    ).out;" )
+            .bind(("id", test_id.clone()))
+            .await
+            .map_err(DbError::Operation).unwrap();
+        let exec_id_list: Vec<Thing> = result_exec.take(0).unwrap();
+
+        delete_list.extend(exec_id_list.iter().cloned());
+
+        for exec_id in exec_id_list{
+
+            // Get things for the test executions
+            let mut result_algo = self.conn.lock().await
+                .query("RETURN (
+                          SELECT out FROM has_run WHERE in = $id
+                        ).out;" )
+                .bind(("id", exec_id))
+                .await
+                .map_err(DbError::Operation).unwrap();
+
+            let algo_run_id_list: Vec<Thing> = result_algo.take(0).unwrap();
+
+            delete_list.extend(algo_run_id_list.iter().cloned());
+
+
+            for algo_run_id in algo_run_id_list{
+
+                                // Get things for the test executions
+                let mut result_iter = self.conn.lock().await
+                    .query("RETURN (
+                              SELECT out FROM has_iteration WHERE in = $id
+                            ).out;" )
+                    .bind(("id", algo_run_id))
+                    .await
+                    .map_err(DbError::Operation).unwrap();
+                
+                let iter_id_list: Vec<Thing> = result_iter.take(0).unwrap();
+                delete_list.extend(iter_id_list.iter().cloned());
+
+                for iter_id in iter_id_list {
+
+                    let iter_id = Arc::new(iter_id);
+
+                    //Get APEs
+                    let mut result_ape = self.conn.lock().await
+                        .query("RETURN (
+                                  SELECT out FROM has_ape WHERE in = $name
+                                ).out;" )
+                        .bind(("name", iter_id.clone()))
+                        .await
+                        .map_err(DbError::Operation).unwrap();
+                    let mut apes: Vec<Thing> = result_ape.take(0).unwrap();
+
+                    //Get RPEs
+                    let mut result_rpe = self.conn.lock().await
+                        .query("RETURN (
+                                  SELECT out FROM has_rpe WHERE in = $name
+                                ).out;" )
+                        .bind(("name", iter_id.clone()))
+                        .await
+                        .map_err(DbError::Operation).unwrap();
+                    let mut rpes: Vec<Thing> = result_rpe.take(0).unwrap();
+
+                    //Get Odometry
+                    let mut result_odom = self.conn.lock().await
+                        .query("RETURN (
+                                  SELECT out FROM has_odometry WHERE in = $name
+                                ).out;" )
+                        .bind(("name", iter_id.clone()))
+                        .await
+                        .map_err(DbError::Operation).unwrap();
+                    let mut odoms: Vec<Thing> = result_odom.take(0).unwrap();          
+
+                    //Get Position
+                    let mut result_pos = self.conn.lock().await
+                        .query("RETURN (
+                                  SELECT out FROM has_position WHERE in = $name
+                                ).out;" )
+                        .bind(("name", iter_id.clone()))
+                        .await
+                        .map_err(DbError::Operation).unwrap();
+                    let mut positions: Vec<Thing> = result_pos.take(0).unwrap();              
+                    
+                    //Get Metric
+                    let mut result_metric = self.conn.lock().await
+                        .query("RETURN (
+                                  SELECT out FROM has_metric WHERE in = $name
+                                ).out;" )
+                        .bind(("name", iter_id.clone()))
+                        .await
+                        .map_err(DbError::Operation).unwrap();
+                    let mut metrics: Vec<Thing> = result_metric.take(0).unwrap();
+
+                    //Get Stats
+                    let mut result_stat = self.conn.lock().await
+                        .query("RETURN (
+                                  SELECT out FROM has_stat WHERE in = $name
+                                ).out;" )
+                        .bind(("name", iter_id.clone()))
+                        .await
+                        .map_err(DbError::Operation).unwrap();
+                    let mut stats: Vec<Thing> = result_stat.take(0).unwrap();
+
+                    delete_list.append(&mut apes);
+                    delete_list.append(&mut rpes);
+                    delete_list.append(&mut stats);
+                    delete_list.append(&mut metrics);
+                    delete_list.append(&mut odoms);
+                    delete_list.append(&mut positions);
+
+                }
+
+
+
+            }
+
+
+        }
+
+        //Delete all items
+        self.conn.lock().await
+            .query("DELETE $items" )
+            .bind(("items", delete_list))
+            .await
+            .map_err(DbError::Operation).unwrap();
+
+        Ok(())
+    
+    }
 
 }
