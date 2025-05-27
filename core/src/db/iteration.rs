@@ -229,6 +229,10 @@ impl IterationRepo {
             .await?;
     
         let ape: Vec<APE> = result.take(0)?;
+
+        if ape.is_empty(){
+            return Err(DbError::Empty("List of APE is empty".to_owned()));
+        }
     
         Ok(ape)
     }

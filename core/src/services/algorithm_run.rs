@@ -86,7 +86,6 @@ impl AlgorithmRunService {
         //Create the directories if they dont exist
         fs::create_dir_all(&full_path).unwrap();
 
-
         // Call the other plots
         let files = ["aggregated_cpu_load", "aggregated_memory_usage", "aggregated_ape", "aggregated_rpe"];
 
@@ -105,7 +104,11 @@ impl AlgorithmRunService {
                     "aggregated_rpe" => self.plot_rpe(&iterations, &test_def).await,
                     &_ => todo!("This should be fine")
                 };
-                hash.insert(filepath, chart?);
+
+                if let Ok(c) = chart {
+                    hash.insert(filepath, c);
+                }
+
             }
 
         }
@@ -115,25 +118,29 @@ impl AlgorithmRunService {
 
     async fn plot_ape(&self, iterations: &Vec<Iteration>, test_def: &TestDefinition) -> Result<Chart, PlotError>{
 
-        let algo_ape: Vec<Vec<APE>> = join_all(
-            iterations.iter().map(|iter| async {
-                self.iter_service.get_ape(iter).await.unwrap()
-            })
-        ).await;
+        let mut algo_ape: Vec<Vec<APE>> = Vec::new();
 
-            //PLOTS
+        for it in iterations{
+            match self.iter_service.get_ape(it).await {
+                Ok(ape_vec) => algo_ape.push(ape_vec),
+                Err(_) => warn!("Iteration {} of container {} does not have APE values", it.iteration_num, it.container.image_name),
+            }
+        }
 
-            algorithm_ape_line_chart(algo_ape, test_def)
-            //algorithm_rpe_line_chart(algo_rpe, test_def);
+        //PLOTS
+        algorithm_ape_line_chart(algo_ape, test_def)
     }
 
     async fn plot_rpe(&self, iterations: &Vec<Iteration>, test_def: &TestDefinition) -> Result<Chart, PlotError>{
 
-        let algo_rpe: Vec<Vec<RPE>> = join_all(
-            iterations.iter().map(|iter| async {
-                self.iter_service.get_rpe(iter).await.unwrap()
-            })
-        ).await;
+        let mut algo_rpe: Vec<Vec<RPE>> = Vec::new();
+
+        for it in iterations{
+            match self.iter_service.get_rpe(it).await {
+                Ok(rpe_vec) => algo_rpe.push(rpe_vec),
+                Err(_) => warn!("Iteration {} of container {} does not have APE values", it.iteration_num, it.container.image_name),
+            }
+        }
 
         algorithm_rpe_line_chart(algo_rpe, test_def)
     }
@@ -194,11 +201,16 @@ impl AlgorithmRunService {
 
         //For each AlgorithmRun I need the container stats
         let iterations = self.repo.get_iterations(run).await.unwrap();
-        let algo_ape: Vec<Vec<APE>> = join_all(
-            iterations.iter().map(|iter| async {
-                self.iter_service.get_ape(iter).await.unwrap()
-            })
-        ).await;
+
+        let mut algo_ape: Vec<Vec<APE>> = Vec::new();
+
+        for it in iterations{
+            match self.iter_service.get_ape(&it).await {
+                Ok(ape_vec) => algo_ape.push(ape_vec),
+                Err(_) => (),
+            }
+        }
+
         algo_ape
     }
 
@@ -206,11 +218,16 @@ impl AlgorithmRunService {
 
         //For each AlgorithmRun I need the container stats
         let iterations = self.repo.get_iterations(run).await.unwrap();
-        let algo_rpe: Vec<Vec<RPE>> = join_all(
-            iterations.iter().map(|iter| async {
-                self.iter_service.get_rpe(iter).await.unwrap()
-            })
-        ).await;
+
+        let mut algo_rpe: Vec<Vec<RPE>> = Vec::new();
+
+        for it in iterations{
+            match self.iter_service.get_rpe(&it).await {
+                Ok(rpe_vec) => algo_rpe.push(rpe_vec),
+                Err(_) => warn!("Iteration {} of container {} does not have APE values", it.iteration_num, it.container.image_name),
+            }
+        }
+
         algo_rpe
     }
 

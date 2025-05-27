@@ -5,7 +5,7 @@ use std::collections::{BTreeMap, HashMap};
 
 use chrono::{format::Item, DateTime, Utc};
 use log::{info, warn};
-use crate::{models::{metrics::{pose_error::{APE, RPE}, ContainerStats, PoseErrorMetrics}, Algorithm, TestDefinition, TestType}, services::error::PlotError};
+use crate::{models::{metrics::{pose_error::{APE, RPE}, ContainerStats, PoseErrorMetrics}, Algorithm, AlgorithmRun, TestDefinition, TestType}, services::error::PlotError};
 
 use rand::Rng;
 
@@ -619,7 +619,6 @@ pub fn algorithm_ape_line_chart(iterations: Vec<Vec<APE>>, test_definition: &Tes
             })
             .collect();
 
-
         for (t, usage) in time_sec.into_iter().zip(ape_values) {
             let bucket_key = (t * 1000.0) as i64; // ms precision for alignment
             time_buckets
@@ -847,12 +846,14 @@ pub fn algorithm_rpe_line_chart(iterations: Vec<Vec<RPE>>, test_definition: &Tes
 
 
 //PLOTS COMPARING THE DIFFERENT METHODS
-pub fn test_cpu_load_line_chart(data: &HashMap<Algorithm, Vec<Vec<ContainerStats>>>)  -> Result<Chart, PlotError> {
+pub fn test_cpu_load_line_chart(data: &HashMap<AlgorithmRun, Vec<Vec<ContainerStats>>>)  -> Result<Chart, PlotError> {
 
     //For each algorithm//Stats in data I need to get a series!!!
     let mut lines_vec: Vec<[Line;3]> = Vec::new();
 
-    for (algo, stats_vec) in data{
+    info!("Size of thing: {}", data.len());
+
+    for (algo_run, stats_vec) in data{
 
         let mut time_buckets: BTreeMap<i64, Vec<f64>> = BTreeMap::new();
 
@@ -907,31 +908,31 @@ pub fn test_cpu_load_line_chart(data: &HashMap<Algorithm, Vec<Vec<ContainerStats
         let xy_lower: Vec<Vec<f64>> = time_labels.iter().zip(&lower_band).map(|(x, y)| vec![*x, *y]).collect();
 
         let main_line = Line::new()
-            .name(&algo.name)
+            .name(format!("{}_{}x",&algo_run.algo.name, &algo_run.bag_speed))
             .data(xy_mean)
             .smooth(false)
-            .show_symbol(false)
-            .symbol(Symbol::None) 
+            .show_symbol(true)
+            //.symbol(Symbol::None) 
             .line_style(LineStyle::new()
                 .width(3)
-                .color(algo.get_rgba(0.9)) // blue
+                .color(algo_run.get_distinct_rgba(0.9))
         );
 
         let lower_band = Line::new()
             .data(xy_lower)
             .line_style(LineStyle::new().opacity(0.0))
             .symbol(Symbol::None)
-            .stack(format!("std-band-{}", algo.name));
+            .stack(format!("std-band-{}", algo_run.algo.name));
 
         let upper_band = Line::new()
             .data(xy_up)
             .line_style(LineStyle::new().opacity(0.0))
             .area_style(
                 AreaStyle::new()
-                    .color(algo.get_rgba(0.2)) // light blue
+                    .color(algo_run.algo.get_rgba(0.2)) // light blue
             )
             .symbol(Symbol::None)
-            .stack(format!("std-band-{}", algo.name));
+            .stack(format!("std-band-{}", algo_run.algo.name));
         
         lines_vec.push([main_line, lower_band, upper_band]);
 
@@ -967,13 +968,13 @@ pub fn test_cpu_load_line_chart(data: &HashMap<Algorithm, Vec<Vec<ContainerStats
 
 }
 
-pub fn test_memory_usage_line_chart(data: &HashMap<Algorithm, Vec<Vec<ContainerStats>>>)  -> Result<Chart, PlotError> {
+pub fn test_memory_usage_line_chart(data: &HashMap<AlgorithmRun, Vec<Vec<ContainerStats>>>)  -> Result<Chart, PlotError> {
 
 
     //For each algorithm//Stats in data I need to get a series!!!
     let mut lines_vec: Vec<[Line;3]> = Vec::new();
 
-    for (algo, stats_vec) in data{
+    for (algo_run, stats_vec) in data{
 
         let mut time_buckets: BTreeMap<i64, Vec<f64>> = BTreeMap::new();
 
@@ -1028,31 +1029,31 @@ pub fn test_memory_usage_line_chart(data: &HashMap<Algorithm, Vec<Vec<ContainerS
         let xy_lower: Vec<Vec<f64>> = time_labels.iter().zip(&lower_band).map(|(x, y)| vec![*x, *y]).collect();
 
         let main_line = Line::new()
-            .name(&algo.name)
+            .name(format!("{}_{}x",&algo_run.algo.name, &algo_run.bag_speed))
             .data(xy_mean)
             .smooth(false)
-            .show_symbol(false)
+            .show_symbol(true)
             //.symbol(Symbol::None) 
             .line_style(LineStyle::new()
                 .width(3)
-                .color(algo.get_rgba(0.9))
+                .color(algo_run.get_distinct_rgba(0.9))
         );
 
         let lower_band = Line::new()
             .data(xy_lower)
             .line_style(LineStyle::new().opacity(0.0))
             .symbol(Symbol::None)
-            .stack(format!("std-band-{}", algo.name));
+            .stack(format!("std-band-{}", algo_run.algo.name));
 
         let upper_band = Line::new()
             .data(xy_up)
             .line_style(LineStyle::new().opacity(0.0))
             .area_style(
                 AreaStyle::new()
-                    .color(algo.get_rgba(0.2))
+                    .color(algo_run.get_distinct_rgba(0.2))
             )
             .symbol(Symbol::None)
-            .stack(format!("std-band-{}", algo.name));
+            .stack(format!("std-band-{}", algo_run.algo.name));
         
         lines_vec.push([main_line, lower_band, upper_band]);
 
@@ -1085,16 +1086,15 @@ pub fn test_memory_usage_line_chart(data: &HashMap<Algorithm, Vec<Vec<ContainerS
 
 
     Ok(chart)
-
 }
 
 
-pub fn test_ape_line_chart(data: &HashMap<Algorithm, Vec<Vec<APE>>>)  -> Result<Chart, PlotError> {
+pub fn test_ape_line_chart(data: &HashMap<AlgorithmRun, Vec<Vec<APE>>>)  -> Result<Chart, PlotError> {
 
     //For each algorithm//Stats in data I need to get a series!!!
     let mut lines_vec: Vec<[Line;3]> = Vec::new();
 
-    for (algo, iterations) in data{
+    for (algo_run, iterations) in data{
 
         let mut time_buckets: BTreeMap<i64, Vec<f64>> = BTreeMap::new();
 
@@ -1142,31 +1142,31 @@ pub fn test_ape_line_chart(data: &HashMap<Algorithm, Vec<Vec<APE>>>)  -> Result<
         let xy_lower: Vec<Vec<f64>> = time_labels.iter().zip(&lower_band).map(|(x, y)| vec![*x, *y]).collect();
 
         let main_line = Line::new()
-            .name(&algo.name)
+            .name(format!("{}_{}x",&algo_run.algo.name, &algo_run.bag_speed))
             .data(xy_mean)
             .smooth(false)
-            .show_symbol(false)
-            .symbol(Symbol::None)
+            .show_symbol(true)
+            //.symbol(Symbol::None)
             .line_style(LineStyle::new()
                 .width(3)
-                .color(algo.get_rgba(0.9))
+                .color(algo_run.get_distinct_rgba(0.9))
         );
 
         let lower_band = Line::new()
             .data(xy_lower)
             .line_style(LineStyle::new().opacity(0.0))
             .symbol(Symbol::None)
-            .stack(format!("std-band-{}", algo.name));
+            .stack(format!("std-band-{}", algo_run.algo.name));
 
         let upper_band = Line::new()
             .data(xy_up)
             .line_style(LineStyle::new().opacity(0.0))
             .area_style(
                 AreaStyle::new()
-                    .color(algo.get_rgba(0.2))
+                    .color(algo_run.get_distinct_rgba(0.2))
             )
             .symbol(Symbol::None)
-            .stack(format!("std-band-{}", algo.name));
+            .stack(format!("std-band-{}", algo_run.algo.name));
         
         lines_vec.push([main_line, lower_band, upper_band]);
 
@@ -1203,12 +1203,12 @@ pub fn test_ape_line_chart(data: &HashMap<Algorithm, Vec<Vec<APE>>>)  -> Result<
 }
 
 
-pub fn test_rpe_line_chart(data: &HashMap<Algorithm, Vec<Vec<RPE>>>)  -> Result<Chart, PlotError> {
+pub fn test_rpe_line_chart(data: &HashMap<AlgorithmRun, Vec<Vec<RPE>>>)  -> Result<Chart, PlotError> {
 
     //For each algorithm//Stats in data I need to get a series!!!
     let mut lines_vec: Vec<[Line;3]> = Vec::new();
 
-    for (algo, iterations) in data{
+    for (algo_run, iterations) in data{
 
         let mut time_buckets: BTreeMap<i64, Vec<f64>> = BTreeMap::new();
 
@@ -1257,30 +1257,30 @@ pub fn test_rpe_line_chart(data: &HashMap<Algorithm, Vec<Vec<RPE>>>)  -> Result<
         let xy_lower: Vec<Vec<f64>> = time_labels.iter().zip(&lower_band).map(|(x, y)| vec![*x, *y]).collect();
 
         let main_line = Line::new()
-            .name(&algo.name)
+            .name(format!("{}_{}x",&algo_run.algo.name, &algo_run.bag_speed))
             .data(xy_mean)
             .smooth(false)
             .show_symbol(true)
             .line_style(LineStyle::new()
                 .width(3)
-                .color(algo.get_rgba(0.9))
+                .color(algo_run.get_distinct_rgba(0.9))
         );
 
         let lower_band = Line::new()
             .data(xy_lower)
             .line_style(LineStyle::new().opacity(0.0))
             .symbol(Symbol::None)
-            .stack(format!("std-band-{}", algo.name));
+            .stack(format!("std-band-{}", algo_run.algo.name));
 
         let upper_band = Line::new()
             .data(xy_up)
             .line_style(LineStyle::new().opacity(0.0))
             .area_style(
                 AreaStyle::new()
-                    .color(algo.get_rgba(0.2))
+                    .color(algo_run.get_distinct_rgba(0.2))
             )
             .symbol(Symbol::None)
-            .stack(format!("std-band-{}", algo.name));
+            .stack(format!("std-band-{}", algo_run.algo.name));
         
         lines_vec.push([main_line, lower_band, upper_band]);
 

@@ -368,5 +368,4 @@ fn show_simple(algo_runs: &Vec<AlgorithmRun>){
     }
 
     println!("{table}");
-
 }

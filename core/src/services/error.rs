@@ -90,7 +90,10 @@ pub enum DbError {
     
     #[error("Record not found: {0}")]
     NotFound(String),
-    
+
+    #[error("List is empty: {0}")]
+    Empty(String),
+
     #[error("Missing required field: {0}")]
     MissingField(&'static str),
     

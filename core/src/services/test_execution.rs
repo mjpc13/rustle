@@ -106,41 +106,47 @@ impl TestExecutionService {
 
         let execution: TestExecution = self.definition_repo.get_test_executions(def).await.map_err(|_err| PlotError::MissingData("Test run was not found".to_owned()))?;
         let execution_id = execution.clone().id.ok_or(PlotError::MissingData("Test run ID is missing, probably was never run".to_owned()))?;
-
         let config = Config::load().expect("Unable to load configuration.");
-
         let iterations = self.execution_repo.get_iterations(&execution_id).await.map_err(|_e| PlotError::MissingData(format!("No iterations found for test {}. Did you run the test?", def.name)))?;
+        
         // Plot for each iteration!
         for iter in iterations{
-            let hash_plots = self.iteration_service.plot(iter, def, path, overwrite, format).await?;
 
-            for (p, ch) in hash_plots{
-                // The Theme and shape can be in the Config file!
-                let mut renderer = ImageRenderer::new(1000, 1000).theme(Theme::Infographic);
-                let _ = renderer.save(&ch, p);
+            match self.iteration_service.plot(iter, def, path, overwrite, format).await{
+                Ok(hash_plots) => {
+                    for (p, ch) in hash_plots{
+
+                        let mut renderer = ImageRenderer::new(config.plotting.width, config.plotting.height).theme(Theme::Infographic);
+                        let _ = renderer.save(&ch, p);
+                    }
+                },
+                Err(e) => match e {
+                    PlotError::MissingData(e) => warn!("Error when plotting for iteration: {e}"),
+                    PlotError::FileExists(_) => warn!("File already exist, use the --overwrite flag"),
+                },
             }
+
         }
 
         
-        //get all algorithm runs
+        //Plot for each Algorithm
         let algo_run_list = self.execution_repo.get_algorithm_runs(&execution_id).await.map_err(|_err| PlotError::MissingData("Test run was not found".to_owned()))?;
         for algo_run in &algo_run_list{
-            self.algorithm_run_service.set_aggregate_metrics(algo_run).await;
 
-            let hash_plots = self.algorithm_run_service.plot(algo_run, path, overwrite, format).await?;
+            match self.algorithm_run_service.plot(algo_run, path, overwrite, format).await{
+                Ok(hash_plots) => {
+                    for (p, ch) in hash_plots{
 
-            for (p, ch) in hash_plots{
-
-                // The Theme and shape can be in the Config file!
-                let mut renderer = ImageRenderer::new(config.plotting.width, config.plotting.height).theme(Theme::Infographic);
-                let _ = renderer.save(&ch, p);
+                        let mut renderer = ImageRenderer::new(config.plotting.width, config.plotting.height).theme(Theme::Infographic);
+                        let _ = renderer.save(&ch, p);
+                    }
+                },
+                Err(_) => (),
             }
         }
 
         let charts = self.plot(execution, &algo_run_list, path, overwrite, format).await?;
         for (p, ch) in charts{
-
-            // The Theme and shape can be in the Config file!
             let mut renderer = ImageRenderer::new(config.plotting.width, config.plotting.height).theme(Theme::Infographic);
             let _ = renderer.save(&ch, p);
         }
@@ -320,15 +326,17 @@ impl TestExecutionService {
     pub async fn plot_cpu_load(&self, algo_run_list: &Vec<AlgorithmRun>) -> Result<Chart, PlotError>{
 
         //get algorithms and algo runs and build a Hashmap<Algorithm, Vec<Vec<ContainerStats>>>
-        let mut algo_cs_hashmap: HashMap<Algorithm, Vec<Vec<ContainerStats>>> = HashMap::new();
+        let mut algo_cs_hashmap: HashMap<AlgorithmRun, Vec<Vec<ContainerStats>>> = HashMap::new();
 
         for algo_run in algo_run_list{
-            let algo = self.algorithm_run_service.get_algorithm(&algo_run).await.unwrap();
             
             //For each AlgorithmRun I need the container stats
             let container_stats = self.algorithm_run_service.get_all_container_stats(&algo_run).await;
 
-            algo_cs_hashmap.insert(algo, container_stats);
+            if !container_stats.is_empty(){
+                algo_cs_hashmap.insert(algo_run.clone(), container_stats);
+            }
+
 
         };
 
@@ -340,15 +348,17 @@ impl TestExecutionService {
     pub async fn plot_memory_usage(&self, algo_run_list: &Vec<AlgorithmRun>) -> Result<Chart, PlotError>{
 
         //get algorithms and algo runs and build a Hashmap<Algorithm, Vec<Vec<ContainerStats>>>
-        let mut algo_cs_hashmap: HashMap<Algorithm, Vec<Vec<ContainerStats>>> = HashMap::new();
+        let mut algo_cs_hashmap: HashMap<AlgorithmRun, Vec<Vec<ContainerStats>>> = HashMap::new();
 
         for algo_run in algo_run_list{
-            let algo = self.algorithm_run_service.get_algorithm(&algo_run).await.unwrap();
             
             //For each AlgorithmRun I need the container stats
             let container_stats = self.algorithm_run_service.get_all_container_stats(&algo_run).await;
 
-            algo_cs_hashmap.insert(algo, container_stats);
+            if !container_stats.is_empty(){
+                algo_cs_hashmap.insert(algo_run.clone(), container_stats);
+            }
+
 
         };
 
@@ -360,16 +370,17 @@ impl TestExecutionService {
     pub async fn plot_ape(&self, algo_run_list: &Vec<AlgorithmRun>) -> Result<Chart, PlotError>{
 
         //get algorithms and algo runs and build a Hashmap<Algorithm, Vec<Vec<ContainerStats>>>
-        let mut algo_ape_hashmap: HashMap<Algorithm, Vec<Vec<APE>>> = HashMap::new();
+        let mut algo_ape_hashmap: HashMap<AlgorithmRun, Vec<Vec<APE>>> = HashMap::new();
 
         for algo_run in algo_run_list{
-            let algo = self.algorithm_run_service.get_algorithm(&algo_run).await.unwrap();
             
             //For each AlgorithmRun I need the container stats
             let ape_list: Vec<Vec<APE>> = self.algorithm_run_service.get_all_ape(&algo_run).await;
 
+            if !ape_list.is_empty(){
+                algo_ape_hashmap.insert(algo_run.clone(), ape_list);
+            }
 
-            algo_ape_hashmap.insert(algo, ape_list);
 
         };
 
@@ -381,16 +392,16 @@ impl TestExecutionService {
     pub async fn plot_rpe(&self, algo_run_list: &Vec<AlgorithmRun>) -> Result<Chart, PlotError>{
 
         //get algorithms and algo runs and build a Hashmap<Algorithm, Vec<Vec<ContainerStats>>>
-        let mut algo_rpe_hashmap: HashMap<Algorithm, Vec<Vec<RPE>>> = HashMap::new();
+        let mut algo_rpe_hashmap: HashMap<AlgorithmRun, Vec<Vec<RPE>>> = HashMap::new();
 
         for algo_run in algo_run_list{
-            let algo = self.algorithm_run_service.get_algorithm(&algo_run).await.unwrap();
             
             //For each AlgorithmRun I need the container stats
             let rpe_list: Vec<Vec<RPE>> = self.algorithm_run_service.get_all_rpe(&algo_run).await;
 
-
-            algo_rpe_hashmap.insert(algo, rpe_list);
+            if !rpe_list.is_empty(){
+                algo_rpe_hashmap.insert(algo_run.clone(), rpe_list);
+            }
 
         };
 
