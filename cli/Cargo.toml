@@ -28,9 +28,10 @@ bollard = "0.16.0" # Manage Docker
 directories= "*"
 toml = "*"
 
-
 # Output formatting
 comfy-table = "*"
+owo-colors = "*"
+
 #indicatif = "0.17.7"
 #console = "0.15.8"
 

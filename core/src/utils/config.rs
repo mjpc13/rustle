@@ -12,6 +12,7 @@ pub struct Config {
     pub data: DataConfig,
     pub plotting: PlottingConfig,
     pub evo: EvoConfig,
+    pub rustle: RustleConfig
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -41,6 +42,11 @@ pub struct DataConfig {
 pub struct PlottingConfig {
     pub width: u32,  // Store the full path directly
     pub height: u32,
+    pub show_cut_band: bool,
+    pub show_drop_band: bool,
+    pub show_markers: bool,
+    pub show_confidence_band: bool,
+    pub confidence_color_offset: u8,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -51,6 +57,13 @@ pub struct EvoConfig {
     pub t_offset: f64,
     pub scale: bool,
     pub n_to_align: u32
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct RustleConfig {
+    pub start_offset: f32, //The offset to start playing the bag
+    pub dataset_duration: f32, // Duration to play the dataset, default is maximum duration (None)
+    pub dataset_start: f32, // Start the dataset from N seconds
 }
 
 
@@ -82,7 +95,15 @@ impl Default for Config {
                 level: String::from("info"), // Default logging level
             },
             data: DataConfig { path: result_path_str },
-            plotting: PlottingConfig { width: 1000, height: 1000 },
+            plotting: PlottingConfig { 
+                width: 1000, 
+                height: 1000, 
+                show_cut_band: true, 
+                show_drop_band: true, 
+                show_markers: true, 
+                show_confidence_band: true, 
+                confidence_color_offset: 15 
+            },
             evo: EvoConfig { 
                 align: true, 
                 align_origin: true, 
@@ -90,6 +111,11 @@ impl Default for Config {
                 t_offset: 0.0, 
                 scale: true,
                 n_to_align: 100, 
+            },
+            rustle: RustleConfig { 
+                start_offset: 10.0, //awaits 10s delay between start of algorithm and dataset play
+                dataset_duration: -1.0, // Dataset duration, default is None to play the whole dataset
+                dataset_start: 0.0 // Dataset start at N, default is None to start at the begining.
             },
         }
     }
