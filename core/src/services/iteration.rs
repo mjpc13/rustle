@@ -23,6 +23,7 @@ use crate::models::metrics::metric::StatisticalMetrics;
 use crate::models::metrics::pose_error::{PoseErrorMetrics, Position, APE, RPE};
 use crate::models::metrics::{ContainerStats, CpuMetrics};
 use crate::models::TestDefinition;
+use crate::utils::config::Config;
 use crate::utils::evo_wrapper::{self, run_metrics_py, EvoApeArg, EvoRpeArg, PlotArg};
 use crate::utils::plots::{ape_line_chart, cpu_load_line_chart, memory_usage_line_chart, rpe_line_chart};
 use crate::{
@@ -41,6 +42,7 @@ use super::{dataset, error::RunError, DatasetService, RosService, StatService};
 #[derive(Clone)]
 pub struct IterationService {
     repo: IterationRepo,
+    config: Config,
     ros_service: RosService,
     dataset_service: DatasetService,
     stat_service: StatService,
@@ -50,7 +52,8 @@ pub struct IterationService {
 
 impl IterationService {
     pub fn new(repo: IterationRepo, docker: Arc<Docker>, ros_service: RosService, dataset_service: DatasetService, stat_service: StatService, metric_service: MetricService,) -> Self {
-        Self { repo, docker, ros_service, dataset_service, stat_service, metric_service }
+        let config = Config::load().expect("Missing Configuration");
+        Self { repo, docker, ros_service, dataset_service, stat_service, metric_service, config }
     }
 
     pub async fn create(&self, iter_number: u8, algo:Algorithm, algorithm_run_id: &Thing, test_type: String) -> Result<(), DbError> {
@@ -93,7 +96,11 @@ impl IterationService {
         //get the corresponding algorithm run
         let algorithm_run = self.repo.get_algorithm_run(&iter).await.unwrap();
 
-        let cmd = format!("rosbag play -r {} --clock /rustle/dataset/*.bag", algorithm_run.bag_speed);
+        let cmd = match self.config.rustle.dataset_duration {
+            -1.0 => format!("rosbag play -s {} -r {} --clock /rustle/dataset/*.bag", self.config.rustle.dataset_start, algorithm_run.bag_speed),
+            _ => format!("rosbag play -s {} -u {} -r {} --clock /rustle/dataset/*.bag", self.config.rustle.dataset_start, self.config.rustle.dataset_duration, algorithm_run.bag_speed)
+        };
+
         //let cmd = format!("rosbag play -d 9 -r {} --clock -u 50 /rustle/dataset/*.bag", algorithm_run.bag_speed);
         let rustle_cmd = format!("roslaunch rustle-ros rustle.launch --wait test_type:={}", &iter.test_type);
 
@@ -124,7 +131,6 @@ impl IterationService {
         let ten_sec = time::Duration::from_secs(1);
         thread::sleep(ten_sec);
 
-        //let config_clone = self.config.clone();
         let roslaunch_id = execs[0].id.clone();
         let task_token = token.clone();
         let docker_clone = self.docker.clone();
@@ -220,7 +226,7 @@ impl IterationService {
 
 
        // Wait a certain number of seconds for the algorithm to init
-       let ten_sec = time::Duration::from_secs(5);
+       let ten_sec = time::Duration::from_secs(self.config.rustle.start_offset as u64);
        thread::sleep(ten_sec);
 
        //Start the STATS collection
@@ -411,10 +417,10 @@ impl IterationService {
                 return Err(PlotError::FileExists(filepath));
             } else {
                 let chart = match f {
-                    "cpu_load" => cpu_load_line_chart(&stats),
-                    "memory_usage" => memory_usage_line_chart(&stats),
-                    "ape" => ape_line_chart(&ape_data, def),
-                    "rpe" => rpe_line_chart(&rpe_data, def),
+                    "cpu_load" => cpu_load_line_chart(&stats, &self.config),
+                    "memory_usage" => memory_usage_line_chart(&stats, &self.config),
+                    "ape" => ape_line_chart(&ape_data, def, &self.config),
+                    "rpe" => rpe_line_chart(&rpe_data, def, &self.config),
                     &_ => todo!("This should be fine")
                 };
                 hash_chart.insert(filepath, chart?);
@@ -759,8 +765,6 @@ impl IterationService {
 
     async fn compute_metrics<R: EvoArg>(&self, iter: &Iteration, args: &R, result_path: &String, dataset_path: &String) -> Result<StatisticalMetrics, EvoError>{
 
-        //WRITE GT TO A FILE -> THIS SHOULD NOT BE NEEDED IF THERE IS ALREADY A GT FILE. TODO
-
         let ground_truth_data = self.repo.get_dataset(iter)
             .await.unwrap()
             .ground_truth  // Clone the Option first
@@ -773,9 +777,7 @@ impl IterationService {
 
         let evo_ape_str = args.compute(&format!("{dataset_path}/groundtruth"), &format!("{result_path}/{}",&iter.container.container_name))?;
         
-        run_metrics_py(&format!("{dataset_path}/groundtruth"), &format!("{result_path}/{}",&iter.container.container_name), 0.1, &result_path);
-
-
+        run_metrics_py(&format!("{dataset_path}/groundtruth"), &format!("{result_path}/{}",&iter.container.container_name), &self.config, &result_path);
 
         let metric = StatisticalMetrics::from_str(&evo_ape_str); //TODO Dont unwrap() this
         metric

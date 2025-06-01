@@ -1,7 +1,7 @@
 use std::{collections::HashMap, fs, path::Path};
 
 use crate::{
-    db::AlgorithmRunRepo, models::{algorithm_run::AlgorithmRun, metric::{Metric, MetricType}, metrics::{pose_error::{APE, RPE}, ContainerStats, CpuMetrics, PoseErrorMetrics}, Algorithm, Iteration, TestDefinition}, services::error::ProcessingError, utils::plots::{algorithm_ape_line_chart, algorithm_cpu_load_chart, algorithm_memory_usage_chart, algorithm_rpe_line_chart, memory_usage_line_chart}
+    db::AlgorithmRunRepo, models::{algorithm_run::AlgorithmRun, metric::{Metric, MetricType}, metrics::{pose_error::{APE, RPE}, ContainerStats, CpuMetrics, PoseErrorMetrics}, Algorithm, Iteration, TestDefinition}, services::error::ProcessingError, utils::{config::Config, plots::{algorithm_ape_line_chart, algorithm_cpu_load_chart, algorithm_memory_usage_chart, algorithm_rpe_line_chart, memory_usage_line_chart}}
 };
 
 use bollard::secret::ContainerState;
@@ -74,7 +74,7 @@ impl AlgorithmRunService {
     }
 
 
-    pub async fn plot(&self, run: &AlgorithmRun, path: &str, overwrite: bool, format:  &str) -> Result<HashMap<String, Chart>, PlotError>{
+    pub async fn plot(&self, run: &AlgorithmRun, path: &str, overwrite: bool, format:  &str, config: &Config) -> Result<HashMap<String, Chart>, PlotError>{
 
         let mut hash: HashMap<String, Chart> = HashMap::new();
         let iterations = self.repo.get_iterations(run).await.unwrap();
@@ -98,10 +98,10 @@ impl AlgorithmRunService {
                 return Err(PlotError::FileExists(filepath));
             } else {
                 let chart = match f {
-                    "aggregated_cpu_load" => self.plot_cpu_load(&iterations).await,
-                    "aggregated_memory_usage" => self.plot_memory_usage(&iterations).await,
-                    "aggregated_ape" => self.plot_ape(&iterations, &test_def).await,
-                    "aggregated_rpe" => self.plot_rpe(&iterations, &test_def).await,
+                    "aggregated_cpu_load" => self.plot_cpu_load(&iterations, config).await,
+                    "aggregated_memory_usage" => self.plot_memory_usage(&iterations, config).await,
+                    "aggregated_ape" => self.plot_ape(&iterations, &test_def, config).await,
+                    "aggregated_rpe" => self.plot_rpe(&iterations, &test_def, config).await,
                     &_ => todo!("This should be fine")
                 };
 
@@ -116,7 +116,7 @@ impl AlgorithmRunService {
         Ok(hash)
     }
 
-    async fn plot_ape(&self, iterations: &Vec<Iteration>, test_def: &TestDefinition) -> Result<Chart, PlotError>{
+    async fn plot_ape(&self, iterations: &Vec<Iteration>, test_def: &TestDefinition, config: &Config) -> Result<Chart, PlotError>{
 
         let mut algo_ape: Vec<Vec<APE>> = Vec::new();
 
@@ -128,10 +128,10 @@ impl AlgorithmRunService {
         }
 
         //PLOTS
-        algorithm_ape_line_chart(algo_ape, test_def)
+        algorithm_ape_line_chart(algo_ape, test_def, config)
     }
 
-    async fn plot_rpe(&self, iterations: &Vec<Iteration>, test_def: &TestDefinition) -> Result<Chart, PlotError>{
+    async fn plot_rpe(&self, iterations: &Vec<Iteration>, test_def: &TestDefinition, config: &Config) -> Result<Chart, PlotError>{
 
         let mut algo_rpe: Vec<Vec<RPE>> = Vec::new();
 
@@ -142,10 +142,10 @@ impl AlgorithmRunService {
             }
         }
 
-        algorithm_rpe_line_chart(algo_rpe, test_def)
+        algorithm_rpe_line_chart(algo_rpe, test_def,config)
     }
 
-    async fn plot_cpu_load(&self, iterations: &Vec<Iteration>) -> Result<Chart, PlotError>{
+    async fn plot_cpu_load(&self, iterations: &Vec<Iteration>, config: &Config) -> Result<Chart, PlotError>{
 
         let algo_stats: Vec<Vec<ContainerStats>> = join_all(
             iterations.iter().map(|iter| async {
@@ -153,11 +153,11 @@ impl AlgorithmRunService {
             })
         ).await;
 
-        algorithm_cpu_load_chart(algo_stats)
+        algorithm_cpu_load_chart(algo_stats, config)
 
     }
 
-    async fn plot_memory_usage(&self, iterations: &Vec<Iteration>) -> Result<Chart, PlotError>{
+    async fn plot_memory_usage(&self, iterations: &Vec<Iteration>, config: &Config) -> Result<Chart, PlotError>{
 
         let algo_stats: Vec<Vec<ContainerStats>> = join_all(
             iterations.iter().map(|iter| async {
@@ -165,7 +165,7 @@ impl AlgorithmRunService {
             })
         ).await;
 
-        algorithm_memory_usage_chart(algo_stats)
+        algorithm_memory_usage_chart(algo_stats, config)
     }
 
     async fn get_parents_string(&self, algo_run: &AlgorithmRun) -> Result<String, RunError>{

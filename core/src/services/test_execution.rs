@@ -133,7 +133,7 @@ impl TestExecutionService {
         let algo_run_list = self.execution_repo.get_algorithm_runs(&execution_id).await.map_err(|_err| PlotError::MissingData("Test run was not found".to_owned()))?;
         for algo_run in &algo_run_list{
 
-            match self.algorithm_run_service.plot(algo_run, path, overwrite, format).await{
+            match self.algorithm_run_service.plot(algo_run, path, overwrite, format, &config).await{
                 Ok(hash_plots) => {
                     for (p, ch) in hash_plots{
 
@@ -145,7 +145,7 @@ impl TestExecutionService {
             }
         }
 
-        let charts = self.plot(execution, &algo_run_list, path, overwrite, format).await?;
+        let charts = self.plot(execution, &algo_run_list, path, overwrite, format, &config).await?;
         for (p, ch) in charts{
             let mut renderer = ImageRenderer::new(config.plotting.width, config.plotting.height).theme(Theme::Infographic);
             let _ = renderer.save(&ch, p);
@@ -285,7 +285,7 @@ impl TestExecutionService {
 
 
 
-    pub async fn plot(&self, exec: TestExecution, algo_run_list: &Vec<AlgorithmRun>, path: &str, overwrite: bool, format:  &str) -> Result<HashMap<String, Chart>, PlotError>{
+    pub async fn plot(&self, exec: TestExecution, algo_run_list: &Vec<AlgorithmRun>, path: &str, overwrite: bool, format:  &str, config: &Config) -> Result<HashMap<String, Chart>, PlotError>{
 
         let mut hash: HashMap<String, Chart> = HashMap::new();
 
@@ -308,10 +308,10 @@ impl TestExecutionService {
                 return Err(PlotError::FileExists(filepath));
             } else {
                 let chart = match f {
-                    "test_cpu_load" => self.plot_cpu_load(&algo_run_list).await,
-                    "test_memory_usage" => self.plot_memory_usage(&algo_run_list).await,
-                    "test_ape" => self.plot_ape(&algo_run_list).await,
-                    "test_rpe" => self.plot_rpe(&algo_run_list).await,
+                    "test_cpu_load" => self.plot_cpu_load(&algo_run_list, config).await,
+                    "test_memory_usage" => self.plot_memory_usage(&algo_run_list, config).await,
+                    "test_ape" => self.plot_ape(&algo_run_list, config).await,
+                    "test_rpe" => self.plot_rpe(&algo_run_list, config).await,
                     &_ => todo!()
                 };
                 hash.insert(filepath, chart?);
@@ -323,7 +323,7 @@ impl TestExecutionService {
 
 
 
-    pub async fn plot_cpu_load(&self, algo_run_list: &Vec<AlgorithmRun>) -> Result<Chart, PlotError>{
+    pub async fn plot_cpu_load(&self, algo_run_list: &Vec<AlgorithmRun>, config: &Config) -> Result<Chart, PlotError>{
 
         //get algorithms and algo runs and build a Hashmap<Algorithm, Vec<Vec<ContainerStats>>>
         let mut algo_cs_hashmap: HashMap<AlgorithmRun, Vec<Vec<ContainerStats>>> = HashMap::new();
@@ -340,12 +340,12 @@ impl TestExecutionService {
 
         };
 
-        let cpu_chart = test_cpu_load_line_chart(&algo_cs_hashmap);
+        let cpu_chart = test_cpu_load_line_chart(&algo_cs_hashmap, config);
 
         cpu_chart
     }
 
-    pub async fn plot_memory_usage(&self, algo_run_list: &Vec<AlgorithmRun>) -> Result<Chart, PlotError>{
+    pub async fn plot_memory_usage(&self, algo_run_list: &Vec<AlgorithmRun>, config: &Config) -> Result<Chart, PlotError>{
 
         //get algorithms and algo runs and build a Hashmap<Algorithm, Vec<Vec<ContainerStats>>>
         let mut algo_cs_hashmap: HashMap<AlgorithmRun, Vec<Vec<ContainerStats>>> = HashMap::new();
@@ -362,12 +362,12 @@ impl TestExecutionService {
 
         };
 
-        let mem_chart = test_memory_usage_line_chart(&algo_cs_hashmap);
+        let mem_chart = test_memory_usage_line_chart(&algo_cs_hashmap, config);
 
         mem_chart
     }
 
-    pub async fn plot_ape(&self, algo_run_list: &Vec<AlgorithmRun>) -> Result<Chart, PlotError>{
+    pub async fn plot_ape(&self, algo_run_list: &Vec<AlgorithmRun>, config: &Config) -> Result<Chart, PlotError>{
 
         //get algorithms and algo runs and build a Hashmap<Algorithm, Vec<Vec<ContainerStats>>>
         let mut algo_ape_hashmap: HashMap<AlgorithmRun, Vec<Vec<APE>>> = HashMap::new();
@@ -384,12 +384,12 @@ impl TestExecutionService {
 
         };
 
-        let ape_chart = test_ape_line_chart(&algo_ape_hashmap);
+        let ape_chart = test_ape_line_chart(&algo_ape_hashmap, config);
 
         ape_chart
     }
 
-    pub async fn plot_rpe(&self, algo_run_list: &Vec<AlgorithmRun>) -> Result<Chart, PlotError>{
+    pub async fn plot_rpe(&self, algo_run_list: &Vec<AlgorithmRun>, config: &Config) -> Result<Chart, PlotError>{
 
         //get algorithms and algo runs and build a Hashmap<Algorithm, Vec<Vec<ContainerStats>>>
         let mut algo_rpe_hashmap: HashMap<AlgorithmRun, Vec<Vec<RPE>>> = HashMap::new();
@@ -405,7 +405,7 @@ impl TestExecutionService {
 
         };
 
-        let rpe_chart = test_rpe_line_chart(&algo_rpe_hashmap);
+        let rpe_chart = test_rpe_line_chart(&algo_rpe_hashmap, config);
 
         rpe_chart
     }

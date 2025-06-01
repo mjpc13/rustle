@@ -10,6 +10,8 @@ use crate::services::error::{EvoError, RosError};
 use pyo3::{prelude::*, types::PyDict};
 use pyo3::types::IntoPyDict;
 
+use super::config::Config;
+
 const PY_CODE: &str = r#"
 import os
 import numpy as np
@@ -17,15 +19,23 @@ from evo.tools import file_interface
 from evo.core import sync, metrics
 import copy
 
-def compute_metrics(gt_path, data_path, max_diff, output_dir):
+def compute_metrics(gt_path, data_path, max_diff, align, n_to_align, t_offset, align_origin, scale, output_dir):
     # Trajectory processing
     traj_ref = file_interface.read_tum_trajectory_file(gt_path)
     traj_est = file_interface.read_tum_trajectory_file(data_path)
-    traj_ref, traj_est = sync.associate_trajectories(traj_ref, traj_est, max_diff)
+    traj_ref, traj_est = sync.associate_trajectories(traj_ref, traj_est, max_diff, offset_2=t_offset)
 
     # Alignment
     traj_est_aligned = copy.deepcopy(traj_est)
-    traj_est_aligned.align(traj_ref, correct_scale=True, correct_only_scale=False)
+
+    if align:
+        if n_to_align>0:
+            traj_est_aligned.align(traj_ref, correct_scale=scale, correct_only_scale=False, n=n_to_align)
+        else:
+            traj_est_aligned.align(traj_ref, correct_scale=scale, correct_only_scale=False)
+
+    if align_origin:
+        traj_est_aligned.align_origin(traj_ref)
 
     # Calculate time from start
     timestamps = traj_est.timestamps
@@ -59,18 +69,30 @@ def compute_metrics(gt_path, data_path, max_diff, output_dir):
 pub fn run_metrics_py(
     gt_path: &str,
     data_path: &str,
-    max_diff: f64,
+    evo_config: &Config,
     output_dir: &str
 ){
     Python::with_gil(|py| {
         // Create a Python module from the embedded code
         let embedded_module = PyModule::from_code(py, PY_CODE, "embedded_module", "embedded_module").unwrap();
         
+        let max_diff = evo_config.evo.t_max_diff;
+        let align = evo_config.evo.align;
+        let n_to_align = evo_config.evo.n_to_align;
+        let t_offset = evo_config.evo.t_offset;
+        let align_origin = evo_config.evo.align_origin;
+        let scale = evo_config.evo.scale;
+
         // Prepare arguments
         let kwargs = [
             ("gt_path", gt_path.to_object(py)),
             ("data_path", data_path.to_object(py)),
             ("max_diff", max_diff.to_object(py)),
+            ("align", align.to_object(py)),
+            ("n_to_align", n_to_align.to_object(py)),
+            ("t_offset", t_offset.to_object(py)),
+            ("align_origin", align_origin.to_object(py)),
+            ("scale", scale.to_object(py)),
             ("output_dir", output_dir.to_object(py)),
         ].into_py_dict(py);
 

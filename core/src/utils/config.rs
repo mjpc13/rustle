@@ -1,6 +1,7 @@
+use charming::element::Symbol;
 use serde::{Deserialize, Serialize};
 use directories::ProjectDirs;
-use std::{fs, path::PathBuf};
+use std::{fmt, fs, path::PathBuf, str::FromStr};
 use toml;
 use std::error::Error;
 
@@ -42,12 +43,86 @@ pub struct DataConfig {
 pub struct PlottingConfig {
     pub width: u32,  // Store the full path directly
     pub height: u32,
-    pub show_cut_band: bool,
-    pub show_drop_band: bool,
-    pub show_markers: bool,
+    pub smooth: bool,
+    pub y_axis_label_size: u8,
+    pub x_axis_label_size: u8,
+    pub y_axis_title_size: u8,
+    pub x_axis_title_size: u8,
+    pub show_legend: bool,
+    pub legend_size: u8,
+    pub show_band: bool,
+    pub marker_type: MarkerType,
+    pub marker_size: f32,
     pub show_confidence_band: bool,
     pub confidence_color_offset: u8,
 }
+
+
+#[derive(Debug, Deserialize, Serialize, Clone, Copy)]
+pub enum MarkerType{
+    Circle,
+    Rect,
+    RoundRect,
+    Triangle,
+    Diamond,
+    Pin,
+    Arrow,
+    None
+}
+
+impl FromStr for MarkerType {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "circle" => Ok(MarkerType::Circle),
+            "rect" => Ok(MarkerType::Rect),
+            "roundrect" => Ok(MarkerType::RoundRect),
+            "triangle" => Ok(MarkerType::Triangle),
+            "diamond" => Ok(MarkerType::Diamond),
+            "none" => Ok(MarkerType::None),
+            "pin" => Ok(MarkerType::Pin),
+            "arrow" => Ok(MarkerType::Arrow),
+            _ => Err(format!("Invalid MarkerType: {}", s)),
+        }
+    }
+}
+
+impl From<MarkerType> for Symbol {
+    fn from(marker: MarkerType) -> Self {
+        match marker {
+            MarkerType::Circle => Symbol::Circle,
+            MarkerType::Rect => Symbol::Rect,
+            MarkerType::RoundRect => Symbol::RoundRect,
+            MarkerType::Triangle => Symbol::Triangle,
+            MarkerType::Diamond => Symbol::Diamond,
+            MarkerType::None => Symbol::None,
+            MarkerType::Pin => Symbol::Pin,
+            MarkerType::Arrow => Symbol::Arrow,
+        }
+    }
+}
+
+impl fmt::Display for MarkerType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let s = match self {
+            MarkerType::Circle => "circle",
+            MarkerType::Rect => "rect",
+            MarkerType::RoundRect => "roundrect",
+            MarkerType::Triangle => "triangle",
+            MarkerType::Diamond => "diamond",
+            MarkerType::Pin => "pin",
+            MarkerType::Arrow => "arrow",
+            MarkerType::None => "none",
+        };
+        write!(f, "{}", s)
+    }
+}
+
+
+
+
+
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct EvoConfig {
@@ -98,11 +173,18 @@ impl Default for Config {
             plotting: PlottingConfig { 
                 width: 1000, 
                 height: 1000, 
-                show_cut_band: true, 
-                show_drop_band: true, 
-                show_markers: true, 
+                show_band: true, 
+                marker_type: MarkerType::Circle, 
                 show_confidence_band: true, 
-                confidence_color_offset: 15 
+                confidence_color_offset: 15,
+                y_axis_label_size: 13,
+                x_axis_label_size: 13,
+                y_axis_title_size: 16,
+                x_axis_title_size: 16,
+                show_legend: true,
+                legend_size: 14,
+                smooth: false,
+                marker_size: 4.0, 
             },
             evo: EvoConfig { 
                 align: true, 
@@ -113,8 +195,8 @@ impl Default for Config {
                 n_to_align: 100, 
             },
             rustle: RustleConfig { 
-                start_offset: 10.0, //awaits 10s delay between start of algorithm and dataset play
-                dataset_duration: -1.0, // Dataset duration, default is None to play the whole dataset
+                start_offset: 5.0, //awaits 1s delay between start of algorithm and dataset play
+                dataset_duration: -1.0, // Dataset duration, default is -1 to play the whole dataset
                 dataset_start: 0.0 // Dataset start at N, default is None to start at the begining.
             },
         }

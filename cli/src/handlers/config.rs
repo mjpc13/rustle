@@ -62,9 +62,8 @@ fn handle_config_show() -> Result<(), Box<dyn std::error::Error>> {
     print_section("PLOTTING".green().to_string(), &[
         ("width".green().to_string(), config.plotting.width.to_string()),
         ("height".green().to_string(), config.plotting.height.to_string()),
-        ("show_cut_band".green().to_string(), format_bool(config.plotting.show_cut_band)),
-        ("show_drop_band".green().to_string(), format_bool(config.plotting.show_drop_band)),
-        ("show_markers".green().to_string(), format_bool(config.plotting.show_markers)),
+        ("show_band".green().to_string(), format_bool(config.plotting.show_band)),
+        ("marker_type".green().to_string(), config.plotting.marker_type.to_string()),
         ("show_confidence_band".green().to_string(), format_bool(config.plotting.show_confidence_band)),
         ("confidence_color_offset".green().to_string(), config.plotting.confidence_color_offset.to_string()),
     ]);
