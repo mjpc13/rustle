@@ -5,14 +5,20 @@ algorithms:
     parameters: "/home/mjpc13/Documents/rustle/test/config/ig-lio/params.yaml"
     odom_topics: ["/lio_odom"]
 
-  - name: "test"
+  - name: "point-lio"
     version: "1.0"
-    image_name: "mjpc13/rustle:ig-lio"
-    parameters: "/home/mjpc13/Documents/rustle/test/config/ig-lio/params.yaml"
-    odom_topics: ["/lio_odom"]
+    image_name: "mjpc13/rustle:point-lio"
+    parameters: "/home/mjpc13/Documents/rustle/test/config/point-lio/params.yaml"
+    odom_topics: ["/aft_mapped_to_init"]
 
-  - name: "LIO-SAM"
-    version: "2.1"
-    image_name: "mjpc13/rustle:lio-sam"
-    parameters: "/home/mjpc13/Documents/rustle/test/config/lio-sam/params.yaml"
-    odom_topics: ["/lio_sam/mapping/odometry_incremental"]
+#  - name: "test"
+#    version: "1.0"
+#    image_name: "mjpc13/rustle:ig-lio"
+#    parameters: "/home/mjpc13/Documents/rustle/test/config/ig-lio/params.yaml"
+#    odom_topics: ["/lio_odom"]
+#
+#  - name: "LIO-SAM"
+#    version: "2.1"
+#    image_name: "mjpc13/rustle:lio-sam"
+#    parameters: "/home/mjpc13/Documents/rustle/test/config/lio-sam/params.yaml"
+#    odom_topics: ["/lio_sam/mapping/odometry_incremental"]

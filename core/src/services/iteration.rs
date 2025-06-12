@@ -103,7 +103,7 @@ impl IterationService {
 
         info!("{}", cmd);
 
-        let rustle_cmd = format!("roslaunch rustle-ros rustle.launch --wait test_type:={} algo_topic:={}", &iter.test_type, &algorithm.odom_topics[0]);
+        let rustle_cmd = format!("roslaunch rustle rustle.launch --wait test_type:={} algo_topic:={}", &iter.test_type, &algorithm.odom_topics[0]);
 
         //Vector of commands to run inside the container
         let commands: Vec<_> = vec![
@@ -143,7 +143,7 @@ impl IterationService {
                 loop{
                     select!{
                         Some(Ok(msg)) = output.next() => {
-                           //trace!("ROS MSG: {msg}");
+                           info!("ROS MSG: {msg}");
                         },
                         _ = task_token.cancelled()=>{
                             info!("Container Stopped");
@@ -276,7 +276,7 @@ impl IterationService {
         let rosplay_task = tokio::spawn(async move {
             if let StartExecResults::Attached { mut output, .. } = docker_clone.start_exec(&rosplay_id, None).await.unwrap() {
                 while let Some(Ok(msg)) = output.next().await {
-                    //trace!("ROSBAG: {msg}");
+                    info!("ROSBAG: {msg}");
                 }
             } else {
                 warn!("STREAM PLAY ENDED");

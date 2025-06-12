@@ -1,7 +1,45 @@
 <launch>
 
-    <node pkg="point_lio" type="pointlio_mapping" name="laserMapping" output="screen">
-        <rosparam command="load" file="/rustle/config/params.yaml" />
-	</node>
+    <!--Don't change this file!!!-->
+    <arg name="test_type" default="simple"/>  <!-- or any default value -->
+    <arg name="algo_topic" default=""/>
+    <param name="use_sim_time" value="true" />
+    <param name="algo_topic" value="$(arg algo_topic)" />
+    
+    <rosparam command="load" file="/rustle/config/params.yaml" />
+
+
+    <!--=================== iG-LIO for the Simple Test =======================-->
+    <node pkg="point_lio" type="pointlio_mapping" name="laserMapping" 
+      if="$(eval arg('test_type') == 'simple')" output="screen">
+          <rosparam command="load" file="/rustle/config/params.yaml" />
+    </node>
+
+    <!-- ==================  iG-LIO for the Speed Test =======================-->
+    <node pkg="point_lio_speed" type="pointlio_mapping" name="laserMapping" 
+      if="$(eval arg('test_type') == 'speed')" output="screen">
+          <rosparam command="load" file="/rustle/config/params.yaml" />
+    </node>
+
+    <!-- ================== iG-LIO for the DROP TEST =========================-->
+    <node pkg="point_lio" type="pointlio_mapping" name="laserMapping" 
+      if="$(eval arg('test_type') == 'drop')" output="screen">
+          <rosparam command="load" file="/rustle/config/params.yaml" />
+    </node>
+
+    <node pkg="rustle-ros" type="drop_manager.py" name="drop_manager" 
+          if="$(eval arg('test_type') == 'drop')" output="screen">
+    </node>
+
+    <!-- ================== iG-LIO for the Cut-Off TEST ======================-->
+    <node pkg="point_lio" type="pointlio_mapping" name="laserMapping" 
+      if="$(eval arg('test_type') == 'cut')" output="screen">
+          <rosparam command="load" file="/rustle/config/params.yaml" />
+    </node>
+
+
+    <node pkg="rustle-ros" type="cut_manager.py" name="cut_manager" 
+          if="$(eval arg('test_type') == 'cut')" output="screen">
+    </node>
 
 </launch>
