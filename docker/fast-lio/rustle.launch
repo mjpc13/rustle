@@ -1,10 +1,35 @@
 <launch>
 
     <!--Don't change this file!!!-->
-    <rosparam command="load" file="/rustle/config/params.yaml" />
+    <arg name="test_type" default="simple"/>  <!-- or any default value -->
+    <arg name="algo_topic" default=""/>
+    <param name="use_sim_time" value="true" />
+    <param name="algo_topic" value="$(arg algo_topic)" />
+    
+    <rosparam command="load" file="/rustle/config/params.yaml"/>
 
+    <!--=================== FAST-LIO for the Simple Test =======================-->
+    <group if="$(eval arg('test_type') == 'simple')">
+        <node pkg="fast_lio" type="fastlio_mapping" name="laserMapping" output="screen" /> 
+    </group>
 
-    <node pkg="fast_lio" type="fastlio_mapping" name="laserMapping" output="screen" /> 
+    <!-- ==================  FAST-LIO for the Speed Test =======================-->
+    <group if="$(eval arg('test_type') == 'speed')">
+        <node pkg="fast_lio_speed" type="fastlio_mapping" name="laserMapping" output="screen" /> 
+    </group>
 
+    <!-- ================== FAST-LIO for the DROP TEST =========================-->
+    <group if="$(eval arg('test_type') == 'drop')">
+        <node pkg="fast_lio" type="fastlio_mapping" name="laserMapping" output="screen" /> 
+
+        <node pkg="rustle-ros" type="drop_manager.py" name="drop_manager" output="screen"/>
+    </group>
+
+    <!-- ================== FAST-LIO for the Cut-Off TEST ======================-->
+    <group if="$(eval arg('test_type') == 'cut')">
+        <node pkg="fast_lio" type="fastlio_mapping" name="laserMapping" output="screen" /> 
+
+        <node pkg="rustle-ros" type="cut_manager.py" name="cut_manager" output="screen"/>
+    </group>
 
 </launch>
