@@ -259,7 +259,7 @@ impl fmt::Display for EvoApeArg {
                         _ => (),
                     }
                 } else{
-                    println!("{s:}")
+                    //println!("{s:}")
                 }
 
             }).collect();

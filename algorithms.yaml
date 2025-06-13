@@ -22,6 +22,12 @@ algorithms:
     image_name: "mjpc13/rustle:fast-lio"
     parameters: "/home/mjpc13/Documents/rustle/test/config/fast-lio/params.yaml"
     odom_topics: ["/Odometry"]
+    
+  - name: "faster-lio"
+    version: "1.1.1"
+    image_name: "mjpc13/rustle:faster-lio"
+    parameters: "/home/mjpc13/Documents/rustle/test/config/faster-lio/params.yaml"
+    odom_topics: ["/Odometry"]
 
 #  - name: "test"
 #    version: "1.0"
