@@ -39,11 +39,7 @@ impl DropParams {
 
         let drops_yaml = serde_yaml::to_string(self).unwrap();
 
-        warn!("thing before: {modified_content}");
-
         modified_content.push_str(&format!("\n{}\n", drops_yaml));
-        
-        info!("My yaml after thing: {modified_content}");
 
         
         modified_content

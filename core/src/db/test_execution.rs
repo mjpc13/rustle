@@ -176,9 +176,6 @@ impl TestExecutionRepo {
             .bind(("test_execution_id", test_execution_id.clone()))
             .await?;
 
-            warn!("My test execution id {:?}", test_execution_id);
-
-
         // Handle nested array structure from graph traversal
         let nested_iterations: Vec<Vec<Iteration>> = result.take("iterations")?;
 

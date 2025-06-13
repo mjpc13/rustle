@@ -32,7 +32,6 @@ impl CutParams {
                 &format!("{}", cut.topic),
                 &format!("{}_cut", cut.topic)
             );
-
         }
 
         let cuts_yaml = serde_yaml::to_string(self).unwrap();

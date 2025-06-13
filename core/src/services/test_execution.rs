@@ -7,11 +7,12 @@ use charming::{theme::Theme, ImageRenderer};
 use chrono::Utc;
 use directories::ProjectDirs;
 use log::{debug, info, warn};
+use tokio::sync::mpsc::Sender;
 use tokio::sync::Mutex;
 
 use crate::models::metric::Metric;
 use crate::models::metrics::pose_error::{APE, RPE};
-use crate::models::AlgorithmRun;
+use crate::models::{AlgorithmRun, ProgressMessage};
 use crate::utils::config::Config;
 
 use crate::utils::plots::{test_ape_line_chart, test_memory_usage_line_chart, test_rpe_line_chart};
@@ -37,7 +38,8 @@ impl TestExecutionService {
     pub async fn start_execution(
         &self,
         mut execution: TestExecution,
-        def: &TestDefinition
+        def: &TestDefinition,
+        msg_tx: Option<Sender<ProgressMessage>>
     ) -> Result<TestExecution, ProcessingError> {
 
 
@@ -71,7 +73,7 @@ impl TestExecutionService {
                 if let Some(iter) = iteration{
 
                     //RUN ITERATION JOB
-                    let iter_job = self.iteration_service.run(iter.clone()).await;
+                    let iter_job = self.iteration_service.run(iter.clone(), msg_tx.clone()).await;
 
                     match iter_job {
                         Ok(_) => (),

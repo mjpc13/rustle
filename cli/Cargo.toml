@@ -32,7 +32,7 @@ toml = "*"
 comfy-table = "*"
 owo-colors = "*"
 
-#indicatif = "0.17.7"
+indicatif = "0.17.7"
 #console = "0.15.8"
 
 # Error handling

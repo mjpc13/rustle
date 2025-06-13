@@ -4,12 +4,14 @@ use std::str::FromStr;
 use std::{collections::HashMap, env, fs::OpenOptions, path::PathBuf, sync::Arc, thread, time};
 use std::io::Write;
 
+use bollard::container::LogOutput;
 use bollard::{container::{self, RemoveContainerOptions, StatsOptions}, exec::{CreateExecOptions, StartExecResults}, secret::{HostConfig, ResourcesUlimits}, Docker};
 use charming::Chart;
 use chrono::Utc;
 use futures_util::{future, StreamExt};
 use log::{debug, info, trace, warn};
 use rand::{distr::Alphanumeric, Rng};
+use tokio::sync::mpsc::Sender;
 use tokio::{select, sync::Mutex};
 
 use surrealdb::sql::Thing;
@@ -22,7 +24,7 @@ use crate::models::metrics::metric::StatisticalMetrics;
 
 use crate::models::metrics::pose_error::{PoseErrorMetrics, Position, APE, RPE};
 use crate::models::metrics::{ContainerStats, CpuMetrics};
-use crate::models::TestDefinition;
+use crate::models::{ProgressMessage, TestDefinition};
 use crate::utils::config::Config;
 use crate::utils::evo_wrapper::{self, run_metrics_py, EvoApeArg, EvoRpeArg, PlotArg};
 use crate::utils::plots::{ape_line_chart, cpu_load_line_chart, memory_usage_line_chart, rpe_line_chart};
@@ -86,7 +88,7 @@ impl IterationService {
         Ok(())
     }
 
-    pub async fn run(&self, iter: Iteration) -> Result<(), RunError> {
+    pub async fn run(&self, iter: Iteration, msg_tx: Option<Sender<ProgressMessage>>) -> Result<(), RunError> {
 
         let algorithm = self.repo.get_algorithm(&iter).await.unwrap(); //Maybe wrap in an Arc<>, Also, maybe wrap iter in an Arc
     
@@ -100,8 +102,6 @@ impl IterationService {
             -1.0 => format!("rosbag play -s {} -r {} --clock /rustle/dataset/*.bag", self.config.rustle.dataset_start, algorithm_run.bag_speed),
             _ => format!("rosbag play -s {} -u {} -r {} --clock /rustle/dataset/*.bag", self.config.rustle.dataset_start, self.config.rustle.dataset_duration, algorithm_run.bag_speed)
         };
-
-        info!("{}", cmd);
 
         let rustle_cmd = format!("roslaunch rustle rustle.launch --wait test_type:={} algo_topic:={}", &iter.test_type, &algorithm.odom_topics[0]);
 
@@ -143,10 +143,10 @@ impl IterationService {
                 loop{
                     select!{
                         Some(Ok(msg)) = output.next() => {
-                           info!("ROS MSG: {msg}");
+                           //info!("ROS MSG: {msg}");
                         },
                         _ = task_token.cancelled()=>{
-                            info!("Container Stopped");
+                            //info!("Container Stopped");
                             //logic to cancel this task
 
                             let record_options_future = docker_clone
@@ -275,16 +275,39 @@ impl IterationService {
         //Start the rosbag play
         let rosplay_task = tokio::spawn(async move {
             if let StartExecResults::Attached { mut output, .. } = docker_clone.start_exec(&rosplay_id, None).await.unwrap() {
-                while let Some(Ok(msg)) = output.next().await {
-                    info!("ROSBAG: {msg}");
+                while let Some(Ok(log)) = output.next().await {
+                    let line = match log {
+                        LogOutput::StdOut { message } |
+                        LogOutput::StdErr { message } |
+                        LogOutput::Console { message } => {
+                            String::from_utf8_lossy(&message).to_string()
+                        },
+                        _ => continue, // Ignore unknown log types
+                    };
+        
+                    if let Some(progress) = parse_rosbag_line(&line, iter.iteration_num.into(), algorithm_run.to_string() ) {
+                        if let Some(tx) = &msg_tx {
+                            if tx.send(progress).await.is_err() {
+                                warn!("Progress receiver dropped for iteration {}", iter.iteration_num);
+                            }
+                        } else {
+                            info!(
+                                "Iter {} Bag Time: {:.6}   Duration: {:.6} / {:.6}",
+                                progress.iteration_num,
+                                progress.bag_time,
+                                progress.duration,
+                                progress.total_duration
+                            );
+                        }
+                    }
                 }
             } else {
-                warn!("STREAM PLAY ENDED");
-                unreachable!();
+                warn!("STREAM PLAY ENDED unexpectedly for iteration {}", iter.iteration_num);
             }
-                //Loop to give the prints;
         });
-                
+
+
+
         let _ = tokio::join!(rosplay_task);
         debug!("Stopped rosbag play, send cancel signal to the other tasks");
         token.cancel(); // the end of the rosbag will be the first point where the other tasks need
@@ -332,8 +355,6 @@ impl IterationService {
 
 
             //Create the folder for this iteration:
-            // test_execution_id/algo_run_id/iteration_id/
-            //something like self.repo.get_parents_id()
             let iter_path = self.get_parents_string(&iter).await?;
             let dataset_path = self.get_dataset_string(&iter).await?;
 
@@ -618,7 +639,7 @@ impl IterationService {
                                     let _ = ros_service.process_message(r, &iteration_id).await;
                                 }
                                 Err(e) => {
-                                    info!("{e:}");
+                                    warn!("{e:}");
                                 }
                             }
 
@@ -801,4 +822,16 @@ impl IterationService {
     }
 
 
+}
+
+pub fn parse_rosbag_line(line: &str, iter_num: usize, algo: String) -> Option<ProgressMessage> {
+    let re = regex::Regex::new(r"Bag Time: (\d+\.\d+)\s+Duration: (\d+\.\d+) / (\d+\.\d+)").ok()?;
+    let caps = re.captures(line)?;
+    Some(ProgressMessage {
+        iteration_num: iter_num,
+        bag_time: caps.get(1)?.as_str().parse().ok()?,
+        duration: caps.get(2)?.as_str().parse().ok()?,
+        total_duration: caps.get(3)?.as_str().parse().ok()?,
+        algo,
+    })
 }

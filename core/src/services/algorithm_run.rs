@@ -60,8 +60,6 @@ impl AlgorithmRunService {
 
         let aggregate_metrics = Metric::mean(metric_list);
 
-        info!("My aggregate_metrics: {:?}", aggregate_metrics);
-
         for metric in aggregate_metrics{
             let _ = self.repo.update_aggregate_metric(run, metric).await;
         }

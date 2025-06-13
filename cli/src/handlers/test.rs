@@ -3,14 +3,22 @@ use log::{error, info, warn};
 use rustle_core::{ models::{
         algorithm_run::AlgorithmRun, metric::MetricType::{
             Cpu, Frequency, Memory, PoseError
-        }, test_definitions::TestDefinitionsConfig, TestExecution, TestExecutionStatus
+        }, test_definitions::TestDefinitionsConfig, ProgressMessage, TestExecution, TestExecutionStatus
     }, services::{TestDefinitionService, TestExecutionService}, utils::config::Config
 };
+use tokio::sync::mpsc;
+
 
 
 use crate::args::{CleanTest, ShowTest, TestCommand, TestSubCommand};
 use std::{error::Error, fs::{create_dir_all, File}, path::Path};
 use serde_yaml::from_reader;
+
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+use tokio::sync::mpsc::Receiver;
+
 
 pub async fn handle_test(
     cmd: TestCommand,
@@ -57,6 +65,47 @@ pub async fn handle_test(
                         println!("Deleted test definition '{}'", del.name);
                     }
         TestSubCommand::Run(run) => {
+                        
+                        let (msg_tx, mut msg_rx) = mpsc::channel::<ProgressMessage>(100);
+
+
+                        let multi = Arc::new(MultiProgress::new());
+                        let bars = Arc::new(Mutex::new(HashMap::new()));
+
+                        tokio::spawn({
+                            let multi = multi.clone();
+                            let bars = bars.clone();
+                            async move {
+                                while let Some(msg) = msg_rx.recv().await {
+                                    let mut bars = bars.lock().unwrap();
+                                
+                                    let bar = bars.entry(msg.iteration_num).or_insert_with(|| {
+                                        let pb = multi.add(ProgressBar::new((msg.total_duration * 1000.0) as u64));
+                                        pb.set_style(
+                                            ProgressStyle::with_template(
+                                                "{elapsed_precise} | {prefix} |> {bar:40.cyan/blue} {percent}% | {pos:.2}/{len:.2} sec"
+                                            )
+                                            .unwrap()
+                                            .progress_chars("█▇▅▃▁  "),
+                                        );
+                                        pb.set_prefix(format!(
+                                            "\x1b[93m{} | Iter {}\x1b[0m",
+                                            msg.algo, msg.iteration_num
+                                        ));
+                                        pb
+                                    });
+                                
+                                    bar.set_position((msg.duration * 1000.0) as u64);
+                                }
+                            
+                                // Finish remaining bars
+                                for bar in bars.lock().unwrap().values() {
+                                    bar.finish();
+                                }
+                            }
+                        });
+
+
                         // If --all flag is present, run all test definitions
                         if run.all {
                             let tests = service.get_all().await;
@@ -79,7 +128,7 @@ pub async fn handle_test(
                                     results: None,
                                 };
 
-                                let _ = test_exec_service.start_execution(execution, &test).await;
+                                let _ = test_exec_service.start_execution(execution, &test, Some(msg_tx.clone())).await;
                             }
 
                             println!("Started execution for all tests.");
@@ -98,7 +147,7 @@ pub async fn handle_test(
                                     results: None,
                                 };
 
-                                let _ = test_exec_service.start_execution(execution, &test).await;
+                                let _ = test_exec_service.start_execution(execution, &test, Some(msg_tx)).await;
                                 //println!("Started execution for test: {}", test.name);
                             }
                         }

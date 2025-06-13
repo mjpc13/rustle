@@ -9,6 +9,8 @@ pub mod algorithm_run;
 pub mod test_execution;
 pub mod iteration;
 
+pub mod messages;
+
 // Re-export main structs for ergonomic imports
 pub use self::{
     dataset::Dataset,
@@ -20,5 +22,5 @@ pub use self::{
     algorithm_run::{AlgorithmRun},
     test_execution::{TestExecution, TestExecutionStatus, Environment, TestResults},
     iteration::Iteration,
+    messages::ProgressMessage,
 };
-

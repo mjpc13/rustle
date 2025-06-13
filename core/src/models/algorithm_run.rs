@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use surrealdb::sql::Thing;
-use std::hash::{DefaultHasher, Hash, Hasher};
+use std::{fmt, hash::{DefaultHasher, Hash, Hasher}};
 
 use super::{metric::Metric, metrics::PoseErrorMetrics, Algorithm};
 
@@ -79,4 +79,10 @@ fn hsl_to_rgb(h: f64, s: f64, l: f64) -> (u8, u8, u8) {
         (color * 255.0).round() as u8
     };
     (f(0.0), f(8.0), f(4.0))
+}
+
+impl fmt::Display for AlgorithmRun {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}_{}x", self.algo.name, self.bag_speed)
+    }
 }
