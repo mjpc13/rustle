@@ -13,8 +13,8 @@ use surrealdb::sql::Thing;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct APE{
     pub id: Option<Thing>,
-    pub value: f64,
-    pub time_from_start: f64
+    pub value: f32,
+    pub time_from_start: f32
 }
 
 impl APE {
@@ -54,8 +54,8 @@ impl APE {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RPE{
     pub id: Option<Thing>,
-    pub value: f64,
-    pub time_from_start: f64
+    pub value: f32,
+    pub time_from_start: f32
 }
 impl RPE {
     pub fn read_from_file(path: &str) -> Result<Vec<RPE>, MetricError> {
@@ -96,10 +96,10 @@ impl RPE {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Position{
     pub id: Option<Thing>,
-    pub x: f64,
-    pub y: f64,
-    pub z: f64,
-    pub time_from_start: f64
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+    pub time_from_start: f32
 }
 impl Position {
     pub fn read_from_file(path: &str) -> Result<Vec<Position>, MetricError> {
@@ -177,7 +177,7 @@ impl PoseErrorMetrics {
         })
     }
 
-    pub fn from_values(ape_values: &Vec<f64>, rpe_values: &Vec<f64>) -> Result<PoseErrorMetrics, MetricError> {
+    pub fn from_values(ape_values: &Vec<f32>, rpe_values: &Vec<f32>) -> Result<PoseErrorMetrics, MetricError> {
 
         let ape = StatisticalMetrics::from_values(ape_values, true).ok_or(MetricError::ComputeError("Missing APE".to_owned()))?;
         let rpe = StatisticalMetrics::from_values(rpe_values, true).ok_or(MetricError::ComputeError("Missing RPE".to_owned()))?;
@@ -189,7 +189,7 @@ impl PoseErrorMetrics {
 }
 
 // Helper function to read metric files
-fn read_metric_file(path: &str) -> Result<Vec<f64>, MetricError> {
+fn read_metric_file(path: &str) -> Result<Vec<f32>, MetricError> {
     let file = File::open(path)
         .map_err(|e| MetricError::IOError(format!("Failed to open {}: {}", path, e)))?;
         

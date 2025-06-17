@@ -12,9 +12,9 @@ use surrealdb::sql::Thing;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MemoryMetrics {
-    pub limit_mb: f64,
+    pub limit_mb: f32,
     pub usage: StatisticalMetrics,
-    pub usage_trend_mb_sec: f64,
+    pub usage_trend_mb_sec: f32,
     #[serde(rename = "created_at")] // Match SurrealDB's field name
     pub created_at: DateTime<Utc>
 }
@@ -27,7 +27,7 @@ impl MemoryMetrics {
 
         let limit = stats[0]
             .memory_stats.limit
-            .ok_or(MetricError::MissingError("Missing limit memory".to_owned()))? as f64;
+            .ok_or(MetricError::MissingError("Missing limit memory".to_owned()))? as f32;
 
         let limit_mb = limit / 1e6;
 
@@ -39,15 +39,15 @@ impl MemoryMetrics {
                 let mem = &stat.memory_stats;
                 
                 // Memory usage in MB
-                u.push(mem.usage.ok_or(MetricError::MissingError("Missing limit memory".to_owned())).unwrap() as f64 / 1e6);
+                u.push(mem.usage.ok_or(MetricError::MissingError("Missing limit memory".to_owned())).unwrap() as f32 / 1e6);
                 
                 u
             },
         );
 
         // Usage trend calculation
-        let time_points: Vec<f64> = stats.iter()
-            .map(|s| s.created_at.timestamp() as f64)
+        let time_points: Vec<f32> = stats.iter()
+            .map(|s| s.created_at.timestamp() as f32)
             .collect();
         let usage_trend = linear_regression_slope(&time_points, &usage_values);
 
@@ -67,7 +67,7 @@ impl MemoryMetrics {
             return None;
         }
 
-        let count = metrics.len() as f64;
+        let count = metrics.len() as f32;
         let created_at = metrics.iter()
             .map(|m| m.created_at)
             .max()
@@ -75,16 +75,16 @@ impl MemoryMetrics {
 
         // Collect all stats references
         let load_list: Vec<&StatisticalMetrics> = metrics.iter().map(|m| &m.usage).collect();
-        let usage_trend_list: Vec<&f64> = metrics.iter().map(|m| &m.usage_trend_mb_sec).collect();
+        let usage_trend_list: Vec<&f32> = metrics.iter().map(|m| &m.usage_trend_mb_sec).collect();
         let limit_mb = metrics.iter().next().ok_or(MetricError::MissingError("Missing memory limit".to_owned())).unwrap().limit_mb;
 
 
-        // Convert to Vec<f64> by dereferencing
-        let values: Vec<f64> = usage_trend_list.into_iter().copied().collect();
+        // Convert to Vec<f32> by dereferencing
+        let values: Vec<f32> = usage_trend_list.into_iter().copied().collect();
 
         // Compute mean
         let mean = if !values.is_empty() {
-            Some(values.iter().sum::<f64>() / values.len() as f64)
+            Some(values.iter().sum::<f32>() / values.len() as f32)
         } else {
             None
         };
@@ -104,7 +104,7 @@ impl MemoryMetrics {
 
 }
 
-fn compute_statistical_metrics(data: &[f64]) -> StatisticalMetrics {
+fn compute_statistical_metrics(data: &[f32]) -> StatisticalMetrics {
     if data.is_empty() {
         return StatisticalMetrics {
             mean: 0.0,
@@ -117,7 +117,7 @@ fn compute_statistical_metrics(data: &[f64]) -> StatisticalMetrics {
         };
     }
 
-    let mean = data.iter().sum::<f64>() / data.len() as f64;
+    let mean = data.iter().sum::<f32>() / data.len() as f32;
     
     let mut sorted = data.to_vec();
     sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(Ordering::Equal));
@@ -134,7 +134,7 @@ fn compute_statistical_metrics(data: &[f64]) -> StatisticalMetrics {
 
     let variance = data.iter()
         .map(|x| (x - mean).powi(2))
-        .sum::<f64>() / data.len() as f64;
+        .sum::<f32>() / data.len() as f32;
     let std = variance.sqrt();
 
     StatisticalMetrics {
@@ -149,13 +149,13 @@ fn compute_statistical_metrics(data: &[f64]) -> StatisticalMetrics {
 }
 
 // Helper function for trend calculation
-fn linear_regression_slope(x: &[f64], y: &[f64]) -> f64 {
+fn linear_regression_slope(x: &[f32], y: &[f32]) -> f32 {
     // Implementation of simple linear regression
-    let n = x.len() as f64;
-    let sum_x: f64 = x.iter().sum();
-    let sum_y: f64 = y.iter().sum();
-    let sum_xy: f64 = x.iter().zip(y).map(|(x, y)| x * y).sum();
-    let sum_x2: f64 = x.iter().map(|x| x * x).sum();
+    let n = x.len() as f32;
+    let sum_x: f32 = x.iter().sum();
+    let sum_y: f32 = y.iter().sum();
+    let sum_xy: f32 = x.iter().zip(y).map(|(x, y)| x * y).sum();
+    let sum_x2: f32 = x.iter().map(|x| x * x).sum();
     
     (n * sum_xy - sum_x * sum_y) / (n * sum_x2 - sum_x * sum_x)
 }

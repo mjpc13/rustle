@@ -306,8 +306,6 @@ impl IterationService {
             }
         });
 
-
-
         let _ = tokio::join!(rosplay_task);
         debug!("Stopped rosbag play, send cancel signal to the other tasks");
         token.cancel(); // the end of the rosbag will be the first point where the other tasks need
@@ -328,7 +326,7 @@ impl IterationService {
 
         //Compute the frequency
         let freq = self.repo.get_odom_frequency(&iter).await.map_err(|_e| RunError::Evo("Unable to extract find odometries".to_owned()))?;
-        let freq_metric = StatisticalMetrics::from_single_value(freq);
+        let freq_metric = StatisticalMetrics::from_single_value(freq as f32);
 
         let _ = self.metric_service.create_freq_metric(iteration_id_clone.clone(), freq_metric).await; // add to DB
 

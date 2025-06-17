@@ -137,13 +137,13 @@ pub trait MetricTypeInfo {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StatisticalMetrics {
-    pub mean: f64,
-    pub median: f64,
-    pub min: f64,
-    pub max: f64,
-    pub std: f64,
-    pub rmse: Option<f64>,    // Only for pose errors
-    pub sse: Option<f64>,     // Only for pose errors
+    pub mean: f32,
+    pub median: f32,
+    pub min: f32,
+    pub max: f32,
+    pub std: f32,
+    pub rmse: Option<f32>,    // Only for pose errors
+    pub sse: Option<f32>,     // Only for pose errors
 }
 
 
@@ -151,19 +151,19 @@ impl StatisticalMetrics{
     // Helper to compute mean of StatisticalMetrics
     pub fn mean(stats_metrics: &[&Self]) -> Option<StatisticalMetrics> {
 
-        let count = stats_metrics.len() as f64;
+        let count = stats_metrics.len() as f32;
         Some(StatisticalMetrics {
-            mean: stats_metrics.iter().map(|s| s.mean).sum::<f64>() / count,
-            median: stats_metrics.iter().map(|s| s.median).sum::<f64>() / count,
-            min: stats_metrics.iter().map(|s| s.min).sum::<f64>() / count,
-            max: stats_metrics.iter().map(|s| s.max).sum::<f64>() / count,
-            std: stats_metrics.iter().map(|s| s.std).sum::<f64>() / count,
-            rmse: Some(stats_metrics.iter().filter_map(|s| s.rmse).sum::<f64>() / count),
-            sse: Some(stats_metrics.iter().filter_map(|s| s.sse).sum::<f64>() / count),
+            mean: stats_metrics.iter().map(|s| s.mean).sum::<f32>() / count,
+            median: stats_metrics.iter().map(|s| s.median).sum::<f32>() / count,
+            min: stats_metrics.iter().map(|s| s.min).sum::<f32>() / count,
+            max: stats_metrics.iter().map(|s| s.max).sum::<f32>() / count,
+            std: stats_metrics.iter().map(|s| s.std).sum::<f32>() / count,
+            rmse: Some(stats_metrics.iter().filter_map(|s| s.rmse).sum::<f32>() / count),
+            sse: Some(stats_metrics.iter().filter_map(|s| s.sse).sum::<f32>() / count),
         })
     }
 
-    pub fn from_values(values: &Vec<f64>, compute_rmse: bool) -> Option<Self> {
+    pub fn from_values(values: &Vec<f32>, compute_rmse: bool) -> Option<Self> {
         if values.is_empty() {
             return None;
         }
@@ -173,7 +173,7 @@ impl StatisticalMetrics{
         values_sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
     
         // Calculate mean
-        let mean = values_sorted.iter().sum::<f64>() / values_sorted.len() as f64;
+        let mean = values_sorted.iter().sum::<f32>() / values_sorted.len() as f32;
     
         // Calculate median
         let median = if values_sorted.len() % 2 == 0 {
@@ -186,15 +186,15 @@ impl StatisticalMetrics{
         // Calculate standard deviation
         let variance = values_sorted.iter()
             .map(|x| (x - mean).powi(2))
-            .sum::<f64>() / values_sorted.len() as f64;
+            .sum::<f32>() / values_sorted.len() as f32;
         let std = variance.sqrt();
     
         // Calculate RMSE and SSE
 
         let (sse, rmse) = match compute_rmse{
             true => {
-                let s = values_sorted.iter().map(|x| x.powi(2)).sum::<f64>();
-                let r = (s / values_sorted.len() as f64).sqrt();
+                let s = values_sorted.iter().map(|x| x.powi(2)).sum::<f32>();
+                let r = (s / values_sorted.len() as f32).sqrt();
                 (Some(s), Some(r))
             },
             false => (None, None)
@@ -212,7 +212,7 @@ impl StatisticalMetrics{
     }
 
 
-    pub fn from_single_value(value: f64) -> Self {
+    pub fn from_single_value(value: f32) -> Self {
         Self {
             mean: value,
             median: value,
@@ -232,7 +232,7 @@ impl FromStr for StatisticalMetrics {
     type Err = services::error::EvoError;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
 
-        let mut hash: HashMap<&str, f64> = HashMap::new();
+        let mut hash: HashMap<&str, f32> = HashMap::new();
 
         let data_vec: Vec<_> = s.split("\n")
             .filter(|&s| s.contains("\t"))
@@ -250,7 +250,7 @@ impl FromStr for StatisticalMetrics {
             }
             )
             .map(|(k, v)| {
-                let n = v.parse::<f64>().unwrap();
+                let n = v.parse::<f32>().unwrap();
                     hash.insert(k, n);
             }
         )

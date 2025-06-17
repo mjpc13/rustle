@@ -42,7 +42,7 @@ impl CpuMetrics {
             let delta_system = current_system - prev_system;
             let delta_total = stat.cpu_stats.cpu_usage.total_usage
                 .checked_sub(stat.precpu_stats.cpu_usage.total_usage)
-                .unwrap_or(0) as f64;
+                .unwrap_or(0) as f32;
 
             if delta_system == 0 {
                 continue; // Skip invalid data points
@@ -53,7 +53,7 @@ impl CpuMetrics {
                 _ => continue,
             };
 
-            let cpu_percent = (delta_total as f64 / delta_system as f64) * 100.0 * num_cores as f64;
+            let cpu_percent = (delta_total as f32 / delta_system as f32) * 100.0 * num_cores as f32;
             cpu_percentages.push(cpu_percent);
 
             // Calculate throttling percentage
@@ -63,7 +63,7 @@ impl CpuMetrics {
                 - stat.precpu_stats.throttling_data.throttled_periods;
 
             if delta_periods > 0 {
-                let throttling_pct = (delta_throttled as f64 / delta_periods as f64) * 100.0 * num_cores as f64;
+                let throttling_pct = (delta_throttled as f32 / delta_periods as f32) * 100.0 * num_cores as f32;
                 throttling_percentages.push(throttling_pct);
             }
         }
@@ -84,7 +84,7 @@ impl CpuMetrics {
         })
     }
 
-    fn compute_statistical_metrics(data: &[f64]) -> StatisticalMetrics {
+    fn compute_statistical_metrics(data: &[f32]) -> StatisticalMetrics {
         if data.is_empty() {
             return StatisticalMetrics {
                 mean: 0.0,
@@ -97,7 +97,7 @@ impl CpuMetrics {
             };
         }
 
-        let mean = data.iter().sum::<f64>() / data.len() as f64;
+        let mean = data.iter().sum::<f32>() / data.len() as f32;
         
         let mut sorted = data.to_vec();
         sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(Ordering::Equal));
@@ -114,7 +114,7 @@ impl CpuMetrics {
 
         let variance = data.iter()
             .map(|x| (x - mean).powi(2))
-            .sum::<f64>() / data.len() as f64;
+            .sum::<f32>() / data.len() as f32;
         let std = variance.sqrt();
 
         StatisticalMetrics {
@@ -135,7 +135,7 @@ impl CpuMetrics {
             return None;
         }
 
-        let count = metrics.len() as f64;
+        let count = metrics.len() as f32;
         let created_at = metrics.iter()
             .map(|m| m.created_at)
             .max()
