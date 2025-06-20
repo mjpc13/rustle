@@ -81,7 +81,7 @@ RUN sed -i 's/faster_lio/faster_lio_speed/g' src/faster-lio_speed/include/ivox3d
 RUN catkin config --extend /opt/ros/$ROS_DISTRO && catkin create pkg -p src/ rustle
 
 #Copy custom launch file into our package
-COPY ./rustle.launch /rustle/catkin_ws/src/rustle/launch/rustle.launch
+COPY ./rustle.launch /rustle/catkin_ws/src/rustle-ros/launch/rustle.launch
 
 #Compile packages
 RUN catkin build -s -j2

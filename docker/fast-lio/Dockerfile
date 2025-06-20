@@ -57,7 +57,7 @@ RUN sed -i 's/<name>fast_lio<\/name>/<name>fast_lio_speed<\/name>/g' src/FAST_LI
 RUN catkin config --extend /opt/ros/$ROS_DISTRO && catkin create pkg -p src/ rustle
 
 #Copy custom launch file into our package
-COPY ./rustle.launch /rustle/catkin_ws/src/rustle/launch/rustle.launch
+COPY ./rustle.launch /rustle/catkin_ws/src/rustle-ros/launch/rustle.launch
 
 #Compile packages
 RUN catkin build -s

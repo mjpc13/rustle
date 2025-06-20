@@ -38,15 +38,26 @@ WORKDIR ${ROS_WS}
 RUN git clone --depth 1 --recurse-submodules https://github.com/vectr-ucla/direct_lidar_inertial_odometry.git src/direct_lidar_inertial_odometry
 ### CLONE SLAM ALGORITHM
 
+### CLONE ANOTHER VERSION TO REDUCE THE QUEUE SIZE TO 1 FOR THE SPEED TEST
+#RUN git clone --depth 1 --recurse-submodules https://github.com/vectr-ucla/direct_lidar_inertial_odometry.git src/direct_lidar_inertial_odometry_speed
+
+#Replaces their subscriber queue to 1
+#RUN sed -i '31s/100/1/g' src/direct_lidar_inertial_odometry_speed/src/dlio/odom.cc
+#RUN sed -i '79s|<direct_lidar_inertial_odometry/save_pcd.h>|<direct_lidar_inertial_odometry_speed/save_pcd.h>|' src/direct_lidar_inertial_odometry_speed/include/dlio/dlio.h
+#RUN sed -i 's/^project(direct_lidar_inertial_odometry)$/project(direct_lidar_inertial_odometry_speed)/' src/direct_lidar_inertial_odometry_speed/CMakeLists.txt
+#RUN sed -i 's/<name>direct_lidar_inertial_odometry<\/name>/<name>direct_lidar_inertial_odometry_speed<\/name>/g' src/direct_lidar_inertial_odometry_speed/package.xml
+
 
 # Build ros package source (compiles every package in the workspace, don't change this!)
 RUN catkin config --extend /opt/ros/$ROS_DISTRO && catkin create pkg -p src/ rustle
+
+RUN git clone --depth 1 --recurse-submodules https://github.com/mjpc13/rustle-ros.git  src/rustle-ros
 
 #Copy custom launch file into our package
 COPY ./rustle.launch /rustle/catkin_ws/src/rustle/launch/rustle.launch
 
 #Compile packages
-RUN catkin build -s
+RUN catkin build -s -j 2
 
 # source catkin workspace
 RUN echo "source /rustle/catkin_ws/devel/setup.bash" >> /root/.profile
