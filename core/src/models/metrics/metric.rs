@@ -1,11 +1,9 @@
 use std::{collections::HashMap, str::FromStr};
 
-use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use itertools::Itertools;
-use serde_json::Value;
 
-use crate::services::{self, DbError};
+use crate::services::{self};
 use surrealdb::sql::Thing;
 use super::{cpu::CpuMetrics, memory::MemoryMetrics, pose_error::PoseErrorMetrics};
 
@@ -234,7 +232,7 @@ impl FromStr for StatisticalMetrics {
 
         let mut hash: HashMap<&str, f32> = HashMap::new();
 
-        let data_vec: Vec<_> = s.split("\n")
+        let _: Vec<_> = s.split("\n")
             .filter(|&s| s.contains("\t"))
             .map(|s| s.split("\t"))
             .flatten()

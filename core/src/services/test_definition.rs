@@ -1,7 +1,6 @@
 use std::fs::File;
 
 use chrono::Utc;
-use log::{error, warn};
 
 use crate::{db::TestDefinitionRepo, models::{test_definitions::{test_definition::TestDefinitionsConfig, CutParams, DropParams}, SpeedTestParams, TestDefinition, TestExecution, TestType}};
 use super::{error::ValidationError, DbError, TestDefinitionError};
@@ -98,7 +97,7 @@ impl TestDefinitionService {
     }
 
     pub async fn delete_test_by_name(&self, name: &String){
-        self.repo.delete_by_name(name.to_string()).await;
+        let _ = self.repo.delete_by_name(name.to_string()).await;
     }
 
     pub async fn get_executions(&self, def: TestDefinition) -> Result<TestExecution, DbError>{

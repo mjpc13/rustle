@@ -1,7 +1,3 @@
-use std::collections::HashMap;
-
-use chrono::Utc;
-use log::{info, warn};
 use serde::{Serialize, Deserialize};
 
 use super::test_definition::Sensor;

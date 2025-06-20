@@ -1,4 +1,3 @@
-use chrono::{DateTime, Utc};
 use nalgebra::{Matrix6, Vector3};
 use serde::{Deserialize, Serialize};
 use yaml_rust2::Yaml;
@@ -37,7 +36,7 @@ impl Ros1 for Twist {
         let linear = Vector3::from([l_x, l_y, l_z]);
         let angular = Vector3::from([a_x, a_y, a_z]);
 
-        let mut twist =  Twist{
+        let twist =  Twist{
             linear,
             angular,
             covariance: None

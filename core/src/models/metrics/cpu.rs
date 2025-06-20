@@ -135,7 +135,6 @@ impl CpuMetrics {
             return None;
         }
 
-        let count = metrics.len() as f32;
         let created_at = metrics.iter()
             .map(|m| m.created_at)
             .max()

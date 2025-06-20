@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use surrealdb::sql::Thing;
 use std::{fmt, hash::{DefaultHasher, Hash, Hasher}};
 
-use super::{metric::Metric, metrics::PoseErrorMetrics, Algorithm};
+use super::{metric::Metric, Algorithm};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AlgorithmRun {

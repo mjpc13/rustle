@@ -1,12 +1,10 @@
 use std::path::Path;
 use std::{collections::HashMap, fs, sync::Arc};
 
-use bollard::exec;
 use charming::Chart;
 use charming::{theme::Theme, ImageRenderer};
 use chrono::Utc;
-use directories::ProjectDirs;
-use log::{debug, info, warn};
+use log::warn;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::Mutex;
 
@@ -19,7 +17,7 @@ use crate::utils::plots::{test_ape_line_chart, test_memory_usage_line_chart, tes
 use crate::{db::{TestDefinitionRepo, TestExecutionRepo}, models::{metrics::ContainerStats, test_definitions::{test_definition::{TestDefinition, TestType}, CutParams, DropParams}, test_execution::{TestExecution, TestExecutionStatus}, Algorithm, Iteration, SpeedTestParams, TestResults}, services::error::ProcessingError, utils::plots::test_cpu_load_line_chart
 };
 
-use super::{error::{ExecutionError, PlotError, RunError}, AlgorithmRunService, IterationService};
+use super::{error::PlotError, AlgorithmRunService, IterationService};
 use surrealdb::sql::Thing;
 
 pub struct TestExecutionService {
@@ -58,7 +56,7 @@ impl TestExecutionService {
             TestType::Cut(params) => self.create_cut_runs(&execution, &list_algos, params).await?
         }
 
-        let mut list_iterations = self.execution_repo
+        let list_iterations = self.execution_repo
             .get_iterations(
                 &execution_id
             ).await?;
@@ -69,7 +67,7 @@ impl TestExecutionService {
         while jobs.lock().await.len() != 0 {
             let results = (0..def.workers).map(|_| async {
 
-                let mut iteration: Option<Iteration> = jobs.lock().await.pop();
+                let iteration: Option<Iteration> = jobs.lock().await.pop();
                 if let Some(iter) = iteration{
 
                     //RUN ITERATION JOB
@@ -156,19 +154,6 @@ impl TestExecutionService {
         Ok(())
     }
 
-
-
-
-    pub async fn get_execution_results(
-        &self,
-        def: &TestDefinition,
-    ) -> Result<(), PlotError>{
-
-        todo!("Get executions results for a test definition is not implemented yet!");
-
-        return Ok(())
-    }
-
     pub async fn get_iterations_by_algo_run(&self, run: AlgorithmRun) -> Result<Vec<Iteration>, ProcessingError>{
         let iterations = self.algorithm_run_service.get_iterations(&run).await;
         iterations.map_err(|_e| ProcessingError::InvalidIteration("iterations were not found".to_owned()))
@@ -230,7 +215,7 @@ impl TestExecutionService {
         &self,
         execution: &TestExecution,
         algo_list: &Vec<Algorithm>,
-        params: &DropParams,
+        _params: &DropParams,
     ) -> Result<(), ProcessingError> {
         
         //Migh be better if I pass the Degradations params in here
@@ -253,10 +238,9 @@ impl TestExecutionService {
         &self,
         execution: &TestExecution,
         algo_list: &Vec<Algorithm>,
-        params: &CutParams,
+        _params: &CutParams,
     ) -> Result<(), ProcessingError> {
         
-        //Migh be better if I pass the Degradations params in here
         for algorithm in algo_list {
 
             self.algorithm_run_service.create_run(

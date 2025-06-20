@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
-use futures_util::future::ok;
-use log::{info, warn};
+use log::{warn};
 // db/iteration.rs
 use surrealdb::{Surreal, engine::local::Db, sql::Thing};
 use tokio::sync::Mutex;
@@ -32,7 +31,7 @@ impl IterationRepo {
         match iteration.id.clone(){
             Some(id) => {
                 // Create relationships
-                let t = self.conn.lock().await
+                self.conn.lock().await
                     .query("RELATE $algorithm_run -> has_iteration -> $iteration")
                     .bind(("algorithm_run", algorithm_run_id.clone()))
                     .bind(("iteration", id))

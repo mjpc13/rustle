@@ -1,6 +1,5 @@
-use std::{fmt::format, sync::Arc};
+use std::sync::Arc;
 
-use log::{info, warn};
 use surrealdb::{engine::local::Db, Surreal};
 use tokio::sync::Mutex;
 use crate::{models::{test_execution::TestExecution, Algorithm, AlgorithmRun, Dataset, Iteration, TestDefinition}, services::error::DbError};
@@ -30,10 +29,8 @@ impl TestExecutionRepo {
             let execution_id = execution.id.clone()
                 .ok_or(DbError::NotFound("TestExecution ID not found after creation".into()))?;
 
-            let test_execution = format!("test_execution:{}", execution_id.clone());
-
             // Create relationship with TestDefinition
-            let rel = self.conn.lock().await
+            self.conn.lock().await
                 .query("RELATE $def -> defines -> $test_execution")
                 .bind(("test_execution", execution_id.clone()))
                 .bind(("def", def.id.clone().unwrap()))
@@ -43,7 +40,7 @@ impl TestExecutionRepo {
             // Create Dataset relationship
             let dataset = self.get_dataset_by_name(def.dataset_name.clone()).await.unwrap();
             // Create Dataset relationship
-            let rel = self.conn.lock().await
+            self.conn.lock().await
                 .query("RELATE $test_execution -> tested_in -> $dataset")
                 .bind(("test_execution", execution_id.clone()))
                 .bind(("dataset", dataset.id.clone()))
@@ -54,7 +51,7 @@ impl TestExecutionRepo {
                 let algo = self.get_algorithm_by_name(algo).await.unwrap();
 
                 // Create Dataset relationship
-                let rel = self.conn.lock().await
+                self.conn.lock().await
                     .query("RELATE $test_execution -> compares -> $algo")
                     .bind(("test_execution", execution_id.clone()))
                     .bind(("algo", algo.id.clone()))

@@ -1,4 +1,4 @@
-use std::{fs::File, io::{self, BufRead, BufReader}};
+use std::{fs::File, io::{BufRead, BufReader}};
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -189,18 +189,18 @@ impl PoseErrorMetrics {
 }
 
 // Helper function to read metric files
-fn read_metric_file(path: &str) -> Result<Vec<f32>, MetricError> {
-    let file = File::open(path)
-        .map_err(|e| MetricError::IOError(format!("Failed to open {}: {}", path, e)))?;
-        
-    BufReader::new(file)
-        .lines()
-        .map(|line| {
-            line.map_err(|e| MetricError::IOError(format!("Read error: {}", e)))
-                .and_then(|s| {
-                    s.trim().parse()
-                        .map_err(|e| MetricError::ParseError(format!("Failed to parse value: {}", e)))
-                })
-        })
-        .collect()
-}
+//fn read_metric_file(path: &str) -> Result<Vec<f32>, MetricError> {
+//    let file = File::open(path)
+//        .map_err(|e| MetricError::IOError(format!("Failed to open {}: {}", path, e)))?;
+//        
+//    BufReader::new(file)
+//        .lines()
+//        .map(|line| {
+//            line.map_err(|e| MetricError::IOError(format!("Read error: {}", e)))
+//                .and_then(|s| {
+//                    s.trim().parse()
+//                        .map_err(|e| MetricError::ParseError(format!("Failed to parse value: {}", e)))
+//                })
+//        })
+//        .collect()
+//}

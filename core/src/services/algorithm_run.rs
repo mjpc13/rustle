@@ -1,14 +1,12 @@
 use std::{collections::HashMap, fs, path::Path};
 
 use crate::{
-    db::AlgorithmRunRepo, models::{algorithm_run::AlgorithmRun, metric::{Metric, MetricType}, metrics::{pose_error::{APE, RPE}, ContainerStats, CpuMetrics, PoseErrorMetrics}, Algorithm, Iteration, TestDefinition}, services::error::ProcessingError, utils::{config::Config, plots::{algorithm_ape_line_chart, algorithm_cpu_load_chart, algorithm_memory_usage_chart, algorithm_rpe_line_chart, memory_usage_line_chart}}
+    db::AlgorithmRunRepo, models::{algorithm_run::AlgorithmRun, metric::{Metric}, metrics::{pose_error::{APE, RPE}, ContainerStats}, Algorithm, Iteration, TestDefinition}, services::error::ProcessingError, utils::{config::Config, plots::{algorithm_ape_line_chart, algorithm_cpu_load_chart, algorithm_memory_usage_chart, algorithm_rpe_line_chart}}
 };
 
-use bollard::secret::ContainerState;
 use charming::Chart;
-use directories::ProjectDirs;
 use futures_util::future::join_all;
-use log::{info, warn};
+use log::warn;
 use surrealdb::sql::Thing;
 
 use super::{error::{PlotError, RunError}, DbError, IterationService};
@@ -229,37 +227,4 @@ impl AlgorithmRunService {
         algo_rpe
     }
 
-}
-
-
-
-fn group_metrics(metrics: Vec<Metric>) -> MetricGroups {
-    let mut groups = MetricGroups::default();
-    for metric in metrics {
-        groups.add(&metric);
-    }
-    groups
-}
-
-
-//A Struct to easily get the multiple metrics in a Vec<Metric>
-#[derive(Default)]
-struct MetricGroups {
-    inner: HashMap<&'static str, Vec<Box<dyn std::any::Any>>>,
-}
-
-impl MetricGroups {
-    pub fn add(&mut self, metric: &Metric) {
-        let type_name = metric.metric_type.type_name();
-        let entry = self.inner.entry(type_name).or_default();
-        entry.push(Box::new(metric.metric_type.clone()));
-    }
-
-    pub fn get<T: 'static>(&self) -> Option<Vec<&T>> {
-        self.inner.get(std::any::type_name::<T>())
-            .map(|vec| vec.iter()
-                .filter_map(|any| any.downcast_ref::<T>())
-                .collect()
-            )
-    }
 }

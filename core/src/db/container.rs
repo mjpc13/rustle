@@ -1,5 +1,6 @@
+#[allow(unused)]
 use surrealdb::{Surreal, engine::remote::ws::Client};
-use crate::models::Container;
+
 
 pub struct ContainerRepo {
     conn: Surreal<Client>,

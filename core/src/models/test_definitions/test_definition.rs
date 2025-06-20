@@ -1,5 +1,4 @@
 use core::fmt;
-use std::path::Display;
 
 use chrono::Utc;
 use serde::{Serialize, Deserialize};

@@ -1,10 +1,4 @@
-use std::collections::HashMap;
-
-use chrono::Utc;
-use log::{info, warn};
 use serde::{Serialize, Deserialize};
-use surrealdb::sql::Thing;
-
 use super::test_definition::Sensor;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -1,13 +1,11 @@
 use std::cmp::Ordering;
 
-use bollard::container::{MemoryStatsStats, MemoryStatsStatsV1};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::services::error::MetricError;
 
 use super::{metric::{MetricTypeInfo, StatisticalMetrics}, ContainerStats};
-use surrealdb::sql::Thing;
 
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -67,7 +65,6 @@ impl MemoryMetrics {
             return None;
         }
 
-        let count = metrics.len() as f32;
         let created_at = metrics.iter()
             .map(|m| m.created_at)
             .max()

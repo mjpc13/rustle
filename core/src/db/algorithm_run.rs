@@ -1,12 +1,9 @@
 use std::sync::Arc;
 
-use log::warn;
-use serde_json::Value;
-// db/algorithm_run.rs
-use surrealdb::{engine::local::Db, sql::Thing, Response, Surreal};
+use surrealdb::{engine::local::Db, sql::Thing, Surreal};
 use tokio::sync::Mutex;
 
-use crate::{models::{metric::Metric, metrics::pose_error::APE, Algorithm, AlgorithmRun, Iteration, TestDefinition, TestExecution}, services::DbError};
+use crate::{models::{metric::Metric, Algorithm, AlgorithmRun, Iteration, TestDefinition, TestExecution}, services::DbError};
 
 pub struct AlgorithmRunRepo {
     conn: Arc<Mutex<Surreal<Db>>>,
@@ -212,7 +209,7 @@ impl AlgorithmRunRepo {
         let run_id = run.id.clone()
         .ok_or(DbError::MissingField("AlgorithmRun ID"))?;
 
-        let mut result = self.conn.lock().await
+        self.conn.lock().await
             .query("
                 UPDATE $run_id SET metrics += $metric
             ")

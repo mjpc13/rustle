@@ -1,6 +1,5 @@
 use crate::{db::odometry::OdometryRepo, models::ros::{odometry::Odometry, ros_msg::RosMsg}, services::error::ProcessingError};
 
-use log::warn;
 use surrealdb::sql::Thing;
 
 #[derive(Clone)]

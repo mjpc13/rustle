@@ -49,11 +49,11 @@ impl Ros1 for Odometry {
 
         let pose = match Pose::from_yaml(yaml["pose"]["pose"].clone()){
             Ok(p) => Some(p),
-            Err(e) => None
+            Err(_) => None
         };
         let twist = match Twist::from_yaml(yaml["twist"]["twist"].clone()){
             Ok(t) => Some(t),
-            Err(e) => None
+            Err(_) => None
         };
 
         let child_frame_id = match yaml["child_frame_id"].as_str(){

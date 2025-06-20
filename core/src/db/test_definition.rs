@@ -1,10 +1,8 @@
-use core::error;
 use std::sync::{Arc};
 
-use log::{info, warn};
-use surrealdb::{engine::local::Db, sql::Thing, Object, Surreal};
+use surrealdb::{engine::local::Db, sql::Thing, Surreal};
 use tokio::sync::Mutex;
-use crate::{models::{metrics::pose_error::APE, TestDefinition, TestExecution}, services::DbError};
+use crate::{models::{TestDefinition, TestExecution}, services::DbError};
 
 #[derive(Debug, Clone)]
 pub struct TestDefinitionRepo {

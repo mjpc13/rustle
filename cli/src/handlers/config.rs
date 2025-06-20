@@ -1,6 +1,6 @@
 use crate::args::{ConfigCommand, ConfigSubCommand, SetConfig};
 use rustle_core::utils::config::{Config, DatabaseConfig, DockerConfig, LoggingConfig, DataConfig};
-use comfy_table::{presets::{UTF8_FULL, UTF8_HORIZONTAL_ONLY}, Cell, Table};
+use comfy_table::{presets::{UTF8_HORIZONTAL_ONLY}, Table};
 use std::{error::Error, fs};
 use toml;
 use owo_colors::OwoColorize;

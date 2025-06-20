@@ -1,5 +1,3 @@
-use std::sync::mpsc::Receiver;
-use std::sync::mpsc::Sender;
 use std::sync::Arc;
 use bollard::Docker;
 use surrealdb::{Surreal, engine::local::RocksDb};
@@ -16,7 +14,6 @@ pub struct AppContext {
     pub dataset_service: DatasetService,
     pub test_def_service: TestDefinitionService,
     pub test_exec_service: TestExecutionService,
-    pub config: Config,
 }
 
 pub async fn build_app() -> Result<AppContext, Box<dyn std::error::Error>> {
@@ -69,6 +66,5 @@ pub async fn build_app() -> Result<AppContext, Box<dyn std::error::Error>> {
         dataset_service,
         test_def_service,
         test_exec_service,
-        config,
     })
 }

@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::Path;
 use std::str::FromStr;
-use std::{collections::HashMap, env, fs::OpenOptions, path::PathBuf, sync::Arc, thread, time};
+use std::{collections::HashMap, fs::OpenOptions, path::PathBuf, sync::Arc, thread, time};
 use std::io::Write;
 
 use bollard::container::LogOutput;
@@ -9,10 +9,11 @@ use bollard::{container::{self, RemoveContainerOptions, StatsOptions}, exec::{Cr
 use charming::Chart;
 use chrono::Utc;
 use futures_util::{future, StreamExt};
-use log::{debug, info, trace, warn};
+use log::{debug, info, warn};
+use rand::rng;
 use rand::{distr::Alphanumeric, Rng};
 use tokio::sync::mpsc::Sender;
-use tokio::{select, sync::Mutex};
+use tokio::{select};
 
 use surrealdb::sql::Thing;
 use tokio_util::sync::CancellationToken;
@@ -26,21 +27,21 @@ use crate::models::metrics::pose_error::{PoseErrorMetrics, Position, APE, RPE};
 use crate::models::metrics::{ContainerStats, CpuMetrics};
 use crate::models::{ProgressMessage, TestDefinition};
 use crate::utils::config::Config;
-use crate::utils::evo_wrapper::{self, run_metrics_py, EvoApeArg, EvoRpeArg, PlotArg};
+use crate::utils::evo_wrapper::{run_metrics_py, EvoApeArg, EvoRpeArg, PlotArg};
 use crate::utils::plots::{ape_line_chart, cpu_load_line_chart, memory_usage_line_chart, rpe_line_chart};
 use crate::{
-    db::{iteration::IterationRepo, OdometryRepo}, 
+    db::{iteration::IterationRepo}, 
     models::{iteration::{DockerContainer, Iteration}, 
     ros::ros_msg::RosMsg, Algorithm, Dataset, Odometry}, 
     services::error::{DbError, ProcessingError, RosError}, 
     utils::evo_wrapper::EvoArg
 };
 
-use directories::{BaseDirs, UserDirs, ProjectDirs};
+use directories::ProjectDirs;
 
 use super::error::{EvoError, PlotError};
 use super::{MetricService};
-use super::{dataset, error::RunError, DatasetService, RosService, StatService};
+use super::{error::RunError, DatasetService, RosService, StatService};
 #[derive(Clone)]
 pub struct IterationService {
     repo: IterationRepo,
@@ -63,7 +64,7 @@ impl IterationService {
         let sanitized = algo.name.replace(|c: char| !c.is_alphanumeric(), "_")
         .to_lowercase();
 
-        let rng = rand::thread_rng();
+        let rng = rng();
         let rand_str: String = rng
             .sample_iter(Alphanumeric)
             .take(8)
@@ -139,11 +140,11 @@ impl IterationService {
 
         //Execute the rustle.launch
         let roslaunch_task = tokio::spawn(async move {
-            if let StartExecResults::Attached { mut output, mut input } = docker_clone.start_exec(&roslaunch_id, None).await.unwrap() {
+            if let StartExecResults::Attached { mut output, input: _ } = docker_clone.start_exec(&roslaunch_id, None).await.unwrap() {
                 loop{
                     select!{
-                        Some(Ok(msg)) = output.next() => {
-                           //info!("ROS MSG: {msg}");
+                        Some(Ok(_msg)) = output.next() => {
+                           //info!("ROS MSG: {_msg}");
                         },
                         _ = task_token.cancelled()=>{
                             //info!("Container Stopped");
@@ -194,7 +195,7 @@ impl IterationService {
          .ok_or_else(|| ProcessingError::MissingField("ground_truth_topic".into())).unwrap();
         
         //TODO: OPTIMIZE THIS, THINK OF A BETTER WAY TO SAVE THE GT TOPIC
-        let res_tasks: Vec<_> = topic_list
+        let _res_tasks: Vec<_> = topic_list
             .into_iter()
             .map( |s: String| {
                 let iter_id_clone = iter.id
@@ -240,7 +241,7 @@ impl IterationService {
         let docker_clone = self.docker.clone();
         let stat_service_clone = self.stat_service.clone();
 
-       let stream_task = tokio::spawn(async move{
+       let _stream_task = tokio::spawn(async move{
            let stream= &mut docker_clone
                    .stats(
                        &task_id_clone,
@@ -249,9 +250,7 @@ impl IterationService {
                            one_shot: false
                        }),
                    );
-           let mut count=0;
            loop{
-               count+=1;
                select!{
                    Some(Ok(msg)) = stream.next() => {
 
@@ -325,7 +324,7 @@ impl IterationService {
 
 
         //Compute the frequency
-        let freq = self.repo.get_odom_frequency(&iter).await.map_err(|_e| RunError::Evo("Unable to extract find odometries".to_owned()))?;
+        let freq = self.repo.get_odom_frequency(&iter).await.map_err(|_e| RunError::Evo("Unable to find odometries".to_owned()))?;
         let freq_metric = StatisticalMetrics::from_single_value(freq as f32);
 
         let _ = self.metric_service.create_freq_metric(iteration_id_clone.clone(), freq_metric).await; // add to DB
@@ -526,7 +525,7 @@ impl IterationService {
             crate::models::TestType::Simple => {
                 hm.insert("/rustle/config/params.yaml", &algorithm.parameters);
             },
-            crate::models::TestType::Speed(speed_test_params) => {
+            crate::models::TestType::Speed(_) => {
                 hm.insert("/rustle/config/params.yaml", &algorithm.parameters);
             },
             crate::models::TestType::Drop(drop_params) => {
@@ -535,7 +534,7 @@ impl IterationService {
                     let cache_dir = proj_dirs.cache_dir();
                     let cache_dir_str = cache_dir.to_str().ok_or(RunError::Execution("Unable to find application path".to_owned())).unwrap();
 
-                    let mut params_string = fs::read_to_string(&algorithm.parameters).unwrap();
+                    let params_string = fs::read_to_string(&algorithm.parameters).unwrap();
 
                     let drop_yaml = drop_params.update_file(&params_string);
 
@@ -556,7 +555,7 @@ impl IterationService {
                     let cache_dir = proj_dirs.cache_dir();
                     let cache_dir_str = cache_dir.to_str().ok_or(RunError::Execution("Unable to find application path".to_owned())).unwrap();
 
-                    let mut params_string = fs::read_to_string(&algorithm.parameters).unwrap();
+                    let params_string = fs::read_to_string(&algorithm.parameters).unwrap();
 
                     let cut_yaml = cut_params.update_file(&params_string);
 
@@ -747,7 +746,7 @@ impl IterationService {
 
         let yaml = match YamlLoader::load_from_str(&msg.replace("\n---\n", "")){
             Ok(y) => y,
-            Err(e) => {
+            Err(_) => {
                 return Err(RosError::FormatError(msg.into()))
             },
         };
@@ -790,10 +789,10 @@ impl IterationService {
             .ground_truth  // Clone the Option first
             .ok_or_else(|| ProcessingError::NotFound("Dataset Odometries were not found".into())).unwrap();
         
-        Self::write_file(&ground_truth_data, "groundtruth", &mut PathBuf::from_str(&dataset_path).unwrap());
+        let _ = Self::write_file(&ground_truth_data, "groundtruth", &mut PathBuf::from_str(&dataset_path).unwrap());
 
         let odoms: Vec<Odometry> = self.repo.get_odometries(iter).await.unwrap();
-        Self::write_file(&odoms, &iter.container.container_name, &mut PathBuf::from_str(&result_path).unwrap());
+        let _ = Self::write_file(&odoms, &iter.container.container_name, &mut PathBuf::from_str(&result_path).unwrap());
 
         let evo_ape_str = args.compute(&format!("{dataset_path}/groundtruth"), &format!("{result_path}/{}",&iter.container.container_name))?;
         

@@ -3,15 +3,11 @@
 use core::f32;
 use std::collections::{BTreeMap, HashMap};
 
-use bollard::container::StopContainerOptions;
-use chrono::{format::Item, DateTime, Utc};
-use log::{info, warn};
-use crate::{models::{metrics::{pose_error::{APE, RPE}, ContainerStats, PoseErrorMetrics}, Algorithm, AlgorithmRun, TestDefinition, TestType}, services::error::PlotError};
-
-use rand::Rng;
+use chrono::{DateTime, Utc};
+use crate::{models::{metrics::{pose_error::{APE, RPE}, ContainerStats}, AlgorithmRun, TestDefinition, TestType}, services::error::PlotError};
 
 use charming::{
-    component::{Axis, Legend}, datatype::{Dataset, Transform}, element::{AreaStyle, AxisLabel, AxisType, ItemStyle, Label, LabelPosition, LineStyle, LineStyleType, MarkArea, MarkAreaData, MarkLine, MarkLineData, MarkLineVariant, Orient, SplitArea, SplitLine, Symbol, TextStyle}, series::{Boxplot, Graph, Line}, theme::Theme, Chart, ImageRenderer
+    component::{Axis, Legend}, element::{AreaStyle, AxisLabel, AxisType, ItemStyle, Label, LabelPosition, LineStyle, LineStyleType, MarkArea, MarkAreaData, MarkLine, MarkLineData, MarkLineVariant, Orient, Symbol, TextStyle}, series::Line, Chart
 };
 
 use super::config::Config;
@@ -402,7 +398,7 @@ pub fn algorithm_memory_usage_chart(iterations: Vec<Vec<ContainerStats>>, config
     let data_items: Vec<DataItem> = time_buckets
         .into_iter()
         .map(|(key, loads)| {
-            let time = ((key as f32) / 1000.0); // Convert back to seconds
+            let time = (key as f32) / 1000.0; // Convert back to seconds
             let mean = loads.iter().sum::<f32>() / loads.len() as f32;
 
             let variance = loads.iter()
@@ -514,7 +510,7 @@ pub fn algorithm_cpu_load_chart(iterations: Vec<Vec<ContainerStats>>, config: &C
     let data_items: Vec<DataItem> = time_buckets
         .into_iter()
         .map(|(key, loads)| {
-            let time = ((key as f32) / 1000.0);
+            let time = (key as f32) / 1000.0;
             let mean = loads.iter().sum::<f32>() / loads.len() as f32;
             let variance = loads.iter().map(|&x| (x - mean).powi(2)).sum::<f32>() / loads.len() as f32;
             let std_dev = variance.sqrt();
@@ -618,7 +614,7 @@ pub fn algorithm_ape_line_chart(iterations: Vec<Vec<APE>>, test_definition: &Tes
         .into_iter()
         .map(|(key, loads)| {
             
-            let time = ((key as f32) / 1000.0); // Convert back to seconds
+            let time = (key as f32) / 1000.0; // Convert back to seconds
             let mean = loads.iter().sum::<f32>() / loads.len() as f32;
             let variance = loads.iter()
                 .map(|&x| (x - mean).powi(2))
@@ -633,10 +629,6 @@ pub fn algorithm_ape_line_chart(iterations: Vec<Vec<APE>>, test_definition: &Tes
             }
         })
         .collect();
-    
-    let max_y = data_items
-        .iter()
-        .fold(-f32::INFINITY, |max, val| f32::floor(f32::max(max, val.u)));
     
     // Create confidence band and mean line points
     let xy_mean = data_items.iter().map(|d| vec![d.time, d.value]).collect::<Vec<_>>();
@@ -731,7 +723,7 @@ pub fn algorithm_rpe_line_chart(iterations: Vec<Vec<RPE>>, test_definition: &Tes
     let data_items: Vec<DataItem> = time_buckets
         .into_iter()
         .map(|(key, loads)| {
-            let time = ((key as f32) / 1000.0); // Convert back to seconds
+            let time = (key as f32) / 1000.0; // Convert back to seconds
             let mean = loads.iter().sum::<f32>() / loads.len() as f32;
             let variance = loads.iter()
                 .map(|&x| (x - mean).powi(2))
@@ -746,10 +738,6 @@ pub fn algorithm_rpe_line_chart(iterations: Vec<Vec<RPE>>, test_definition: &Tes
             }
         })
         .collect();
-    
-    let max_y = data_items
-        .iter()
-        .fold(-f32::INFINITY, |max, val| f32::floor(f32::max(max, val.u)));
     
     // Create confidence band and mean line points
     let xy_mean = data_items.iter().map(|d| vec![d.time, d.value]).collect::<Vec<_>>();
@@ -849,7 +837,7 @@ pub fn test_cpu_load_line_chart(data: &HashMap<AlgorithmRun, Vec<Vec<ContainerSt
         let data_items: Vec<DataItem> = time_buckets
             .into_iter()
             .map(|(key, loads)| {
-                let time = ((key as f32) / 1000.0);
+                let time = (key as f32) / 1000.0;
                 let mean = loads.iter().sum::<f32>() / loads.len() as f32;
                 let variance = loads.iter().map(|&x| (x - mean).powi(2)).sum::<f32>() / loads.len() as f32;
                 let std_dev = variance.sqrt();
@@ -980,7 +968,7 @@ pub fn test_memory_usage_line_chart(data: &HashMap<AlgorithmRun, Vec<Vec<Contain
         let data_items: Vec<DataItem> = time_buckets
             .into_iter()
             .map(|(key, mem)| {
-                let time = ((key as f32) / 1000.0);
+                let time = (key as f32) / 1000.0;
                 let mean = mem.iter().sum::<f32>() / mem.len() as f32;
                 let variance = mem.iter().map(|&x| (x - mean).powi(2)).sum::<f32>() / mem.len() as f32;
                 let std_dev = variance.sqrt();
@@ -1087,7 +1075,7 @@ pub fn test_ape_line_chart(data: &HashMap<AlgorithmRun, Vec<Vec<APE>>>, config: 
         let data_items: Vec<DataItem> = time_buckets
             .into_iter()
             .map(|(key, ape)| {
-                let time = ((key as f32) / 1000.0);
+                let time = (key as f32) / 1000.0;
                 let mean = ape.iter().sum::<f32>() / ape.len() as f32;
                 let variance = ape.iter().map(|&x| (x - mean).powi(2)).sum::<f32>() / ape.len() as f32;
                 let std_dev = variance.sqrt();
@@ -1198,7 +1186,7 @@ pub fn test_rpe_line_chart(data: &HashMap<AlgorithmRun, Vec<Vec<RPE>>>, config: 
         let data_items: Vec<DataItem> = time_buckets
             .into_iter()
             .map(|(key, rpe)| {
-                let time = ((key as f32) / 1000.0);
+                let time = (key as f32) / 1000.0;
                 let mean = rpe.iter().sum::<f32>() / rpe.len() as f32;
                 let variance = rpe.iter().map(|&x| (x - mean).powi(2)).sum::<f32>() / rpe.len() as f32;
                 let std_dev = variance.sqrt();
@@ -1285,7 +1273,7 @@ fn get_area_from_def(test_def: &TestDefinition) -> Vec<MarkArea>{
 
     match &test_def.test_type{
         TestType::Simple => vec![],
-        TestType::Speed(speed_test_params) => vec![],
+        TestType::Speed(_speed_test_params) => vec![],
         TestType::Drop(drop_params) => {
 
             let mut mark_areas_vector = Vec::new();

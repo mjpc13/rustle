@@ -59,18 +59,7 @@ impl DatasetService {
     }
 
     pub async fn delete_dataset_by_name(&self, name: &String){
-        self.repo.delete_by_name(name.to_string()).await;
+        let _ = self.repo.delete_by_name(name.to_string()).await;
     }
 
-
-
-    // Add validation logic
-    //pub fn validate_ground_truth(dataset: &Dataset) -> Result<(), ValidationError> {
-    //    if let Some(truth) = &dataset.ground_truth {
-    //        if truth.is_empty() {
-    //            return Err(ValidationError::new("Ground truth cannot be empty"));
-    //        }
-    //    }
-    //    Ok(())
-    //}
 }

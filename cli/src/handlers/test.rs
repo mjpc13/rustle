@@ -17,7 +17,6 @@ use serde_yaml::from_reader;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
-use tokio::sync::mpsc::Receiver;
 
 
 pub async fn handle_test(
@@ -332,8 +331,7 @@ async fn show_detail(algo_runs: &Vec<AlgorithmRun>, test_exec_service: &TestExec
         let mut mem = String::from("- Memory Usage: Max=NaN, Trend=NaN\n");
         let mut freq = String::from("- Frequency (Hz): Mean: NaN, Min: NaN, Max: NaN, Std: NaN\n");
 
-        let mut algo_string = String::new();
-        algo_string = format!("Algorithm: {}\n--------------------\nSummary (Combined):\n- Bag Speed: {}", ar.algo.name, ar.bag_speed);
+         let algo_string = format!("Algorithm: {}\n--------------------\nSummary (Combined):\n- Bag Speed: {}", ar.algo.name, ar.bag_speed);
 
         println!("{algo_string}");
 
@@ -415,7 +413,7 @@ fn show_simple(algo_runs: &Vec<AlgorithmRun>){
         //Get list of iterations and metrics!!!!
 
         let mut ape: String = String::from("NaN");
-        let mut bag_speed = ar.bag_speed;
+        let bag_speed = ar.bag_speed;
         let mut rpe = String::from("NaN");
         let mut cpu = String::from("NaN");
         let mut mem = String::from("NaN");

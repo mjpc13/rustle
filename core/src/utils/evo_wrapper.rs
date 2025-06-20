@@ -1,13 +1,12 @@
-use core::f64;
 use std::process::Command;
 use std::fmt;
-use log::{debug, error, info, trace, warn};
+use log::{debug};
 use struct_iterable::Iterable;
 
-use crate::services::error::{EvoError, RosError};
+use crate::services::error::{EvoError};
 
 
-use pyo3::{prelude::*, types::PyDict};
+use pyo3::{prelude::*};
 use pyo3::types::IntoPyDict;
 
 use super::config::Config;
@@ -104,23 +103,6 @@ pub fn run_metrics_py(
     })
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 pub trait EvoArg {
     fn compute<'a>(&self, groundtruth: &str, data: &str) -> Result<String, EvoError>;
 }
@@ -154,7 +136,7 @@ pub struct EvoApeArg{
 impl EvoApeArg {
     fn get_commands(&self) -> Vec<String>{
         let mut commands: Vec<String> = Vec::new();
-        let test: Vec<_> = self
+        let _: Vec<_> = self
             .iter()
             .map( | (s, o) | {
                 
@@ -228,7 +210,7 @@ impl fmt::Display for EvoApeArg {
 
         let mut string = String::new();
 
-        let test: Vec<_> = self
+        let _: Vec<_> = self
             .iter()
             .map( | (s, o) | {
                 
@@ -256,7 +238,6 @@ impl fmt::Display for EvoApeArg {
                         PoseRelation::Angle(AngleUnit::Degree) => string.push_str(" -r angle_deg"),
                         PoseRelation::Angle(AngleUnit::Radian) => string.push_str(" -r angle_rad"),
                         PoseRelation::PointDistance => string.push_str(" -r point_distance"),
-                        _ => (),
                     }
                 } else{
                     //println!("{s:}")
@@ -302,7 +283,7 @@ impl PlotArg {
         //commands.push("-p".to_owned());
 
 
-        let test: Vec<_> = self
+        let _: Vec<_> = self
             .iter()
             .map( | (s, o) | {
                 
@@ -321,7 +302,6 @@ impl PlotArg {
                         PlotMode::ZX => commands.push("--plot_mode=zx".to_string()),
                         PlotMode::ZY => commands.push("--plot_mode=zy".to_string()),
                         PlotMode::XYZ => commands.push("--plot_mode=xyz".to_string()),
-                        _ => (),
                     }
                 } 
             }).collect();
@@ -395,7 +375,7 @@ impl EvoRpeArg {
         
         let mut commands: Vec<String> = Vec::new();
 
-        let test: Vec<_> = self
+        let _: Vec<_> = self
             .iter()
             .map( | (s, o) | {
                 

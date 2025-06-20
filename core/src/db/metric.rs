@@ -1,7 +1,5 @@
 use std::sync::Arc;
 
-use log::{info, warn};
-// db/metric.rs
 use surrealdb::{Surreal, engine::local::Db};
 use tokio::sync::Mutex;
 use crate::models::metrics::pose_error::{Position, APE, RPE};
