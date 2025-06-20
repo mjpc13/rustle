@@ -274,9 +274,9 @@ async fn handle_clean_cmd(clean_test: CleanTest, service: &TestDefinitionService
 async fn handle_show_cmd(show_test: ShowTest, service: &TestDefinitionService, test_exec_service: &TestExecutionService) -> Result<(), Box<dyn Error>>{
 
     //Check if an allowed format was passed
-    let allowed_formats = ["cli", "csv", "table", "json"];
+    let allowed_formats = ["csv", "table", "json"];
     if !allowed_formats.contains(&show_test.format.as_str()) {
-        error!("Invalid format '{}'. Allowed formats: png, svg, pdf", show_test.format);
+        error!("Invalid format '{}'. Allowed formats: csv, table (default), json", show_test.format);
         //return Ok(()); Return an error and deal with it in the TestSubCommand::Show arm;
     }
 
@@ -321,7 +321,7 @@ async fn show_detail(algo_runs: &Vec<AlgorithmRun>, test_exec_service: &TestExec
         let mut table = Table::new();
         table.load_preset(ASCII_MARKDOWN);
         table.set_content_arrangement(ContentArrangement::Dynamic);
-        table.set_header(vec!["RUN", "APE" , "RPE" , "CPU (%)" , "Mem (MB)" , "Freq  (Hz)"]);
+        table.set_header(vec!["RUN", "RMSE APE", "Max APE", "Std APE", "RMSE RPE", "Max RPE","Std RPE", "CPU (%)" , "Mem (MB)" , "Freq  (Hz)"]);
 
         //Print the first part!
 
@@ -357,8 +357,12 @@ async fn show_detail(algo_runs: &Vec<AlgorithmRun>, test_exec_service: &TestExec
 
         for it in iterations{
             //Table for the iterations. I need to get all metrics for the iteration
-            let mut ape: String = String::from("NaN");
-            let mut rpe = String::from("NaN");
+            let mut rmse_ape: String = String::from("NaN");
+            let mut max_ape: String = String::from("NaN");
+            let mut std_ape: String = String::from("NaN");
+            let mut rmse_rpe: String = String::from("NaN");
+            let mut max_rpe: String = String::from("NaN");
+            let mut std_rpe: String = String::from("NaN");
             let mut cpu = String::from("NaN");
             let mut mem = String::from("NaN");
             let mut freq = String::from("NaN");
@@ -375,19 +379,26 @@ async fn show_detail(algo_runs: &Vec<AlgorithmRun>, test_exec_service: &TestExec
                         mem = format!("{:.3}", memory_metrics.usage.max);
                     },
                     PoseError(pose_error_metrics) => {
-                        ape = format!("{:.3}", pose_error_metrics.ape.rmse.ok_or(0.0).unwrap());
-                        rpe = format!("{:.3}", pose_error_metrics.rpe.rmse.ok_or(0.0).unwrap());
+                        rmse_ape = format!("{:.3}", pose_error_metrics.ape.rmse.ok_or(0.0).unwrap());
+                        max_ape = format!("{:.3}", pose_error_metrics.ape.max);
+                        std_ape = format!("{:.3}", pose_error_metrics.ape.std);
+                        rmse_rpe = format!("{:.3}", pose_error_metrics.rpe.rmse.ok_or(0.0).unwrap());
+                        max_rpe = format!("{:.3}", pose_error_metrics.rpe.max);
+                        std_rpe = format!("{:.3}", pose_error_metrics.rpe.std);
                     },
                     Frequency(statistical_metrics) => {
                         freq =  format!("{:.3}", statistical_metrics.mean);
                     },
                 }
             }
-    
             table.add_row(vec![
                 format!("{}", it.iteration_num),
-                ape,
-                rpe,
+                rmse_ape,
+                max_ape,
+                std_ape,
+                rmse_rpe,
+                max_rpe,
+                std_rpe,
                 cpu,
                 mem,
                 freq
