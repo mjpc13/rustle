@@ -9,20 +9,6 @@ use super::{cpu::CpuMetrics, memory::MemoryMetrics, pose_error::PoseErrorMetrics
 
 
 
-pub struct AggregatedMetric{
-    //
-}
-
-
-
-
-
-
-
-
-
-
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Metric {
     pub id: Option<Thing>,
@@ -133,7 +119,7 @@ pub trait MetricTypeInfo {
 
 
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct StatisticalMetrics {
     pub mean: f32,
     pub median: f32,
@@ -263,5 +249,74 @@ impl FromStr for StatisticalMetrics {
             sse: Some(hash["sse"]),
             std: hash["std"]
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn mock_statistical_metrics(val: f32) -> StatisticalMetrics {
+        StatisticalMetrics {
+            mean: val,
+            median: val,
+            min: val,
+            max: val,
+            std: 0.0,
+            rmse: Some(val * 2.0),
+            sse: Some(val * 3.0),
+        }
+    }
+
+    #[test]
+    fn test_statistical_metrics_from_values_basic() {
+        let values = vec![1.0, 2.0, 3.0];
+        let metrics = StatisticalMetrics::from_values(&values, true).unwrap();
+
+        assert_eq!(metrics.mean, 2.0);
+        assert_eq!(metrics.median, 2.0);
+        assert_eq!(metrics.min, 1.0);
+        assert_eq!(metrics.max, 3.0);
+        assert!(metrics.std > 0.0);
+        assert!(metrics.rmse.is_some());
+        assert!(metrics.sse.is_some());
+    }
+
+    #[test]
+    fn test_statistical_metrics_mean() {
+        let a = mock_statistical_metrics(1.0);
+        let b = mock_statistical_metrics(3.0);
+
+        let mean = StatisticalMetrics::mean(&[&a, &b]).unwrap();
+
+        assert_eq!(mean.mean, 2.0);
+        assert_eq!(mean.median, 2.0);
+        assert_eq!(mean.min, 2.0);
+        assert_eq!(mean.max, 2.0);
+        assert_eq!(mean.std, 0.0);
+        assert_eq!(mean.rmse.unwrap(), 4.0);  // (2 + 6) / 2
+        assert_eq!(mean.sse.unwrap(), 6.0);   // (3 + 9) / 2
+    }
+
+    #[test]
+    fn test_statistical_metrics_from_str() {
+        let input = "mean\t1.0\nmedian\t2.0\nmin\t0.5\nmax\t3.0\nstd\t0.5\nrmse\t0.8\nsse\t1.2\n";
+        let parsed = input.parse::<StatisticalMetrics>().unwrap();
+
+        assert_eq!(parsed.mean, 1.0);
+        assert_eq!(parsed.median, 2.0);
+        assert_eq!(parsed.min, 0.5);
+        assert_eq!(parsed.max, 3.0);
+        assert_eq!(parsed.std, 0.5);
+        assert_eq!(parsed.rmse.unwrap(), 0.8);
+        assert_eq!(parsed.sse.unwrap(), 1.2);
+    }
+
+    #[test]
+    fn test_statistical_metrics_from_single_value() {
+        let metric = StatisticalMetrics::from_single_value(5.0);
+        assert_eq!(metric.mean, 5.0);
+        assert_eq!(metric.std, 0.0);
+        assert!(metric.rmse.is_none());
     }
 }

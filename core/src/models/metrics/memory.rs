@@ -19,6 +19,7 @@ pub struct MemoryMetrics {
 
 impl MemoryMetrics {
     pub fn from_stats(stats: &[ContainerStats]) -> Result<Option<Self>, MetricError> {
+
         if stats.is_empty() {
             return Ok(None);
         }
@@ -32,8 +33,8 @@ impl MemoryMetrics {
         // Raw value collections
         let usage_values = stats.iter()
         .fold(
-            (Vec::new()),
-            |(mut u), stat| {
+            Vec::new(),
+            |mut u, stat| {
                 let mem = &stat.memory_stats;
                 
                 // Memory usage in MB
@@ -44,9 +45,10 @@ impl MemoryMetrics {
         );
 
         // Usage trend calculation
-        let time_points: Vec<f32> = stats.iter()
-            .map(|s| s.created_at.timestamp() as f32)
+        let time_points: Vec<i64> = stats.iter()
+            .map(|s| s.created_at.timestamp())
             .collect();
+
         let usage_trend = linear_regression_slope(&time_points, &usage_values);
 
         Ok(Some(Self {
@@ -145,19 +147,149 @@ fn compute_statistical_metrics(data: &[f32]) -> StatisticalMetrics {
     }
 }
 
-// Helper function for trend calculation
-fn linear_regression_slope(x: &[f32], y: &[f32]) -> f32 {
-    // Implementation of simple linear regression
-    let n = x.len() as f32;
-    let sum_x: f32 = x.iter().sum();
+fn linear_regression_slope(x: &[i64], y: &[f32]) -> f32 {
+    assert_eq!(x.len(), y.len(), "x and y must be the same length");
+    let n = x.len();
+
+    println!("{:?}", x);
+
+    // Normalize x to prevent floating point precision issues
+    let x0 = x[0];
+    let norm_x: Vec<i64> = x.iter().map(|xi| xi - x0).collect();
+
+    let sum_x: i64 = norm_x.iter().sum();
     let sum_y: f32 = y.iter().sum();
-    let sum_xy: f32 = x.iter().zip(y).map(|(x, y)| x * y).sum();
-    let sum_x2: f32 = x.iter().map(|x| x * x).sum();
-    
-    (n * sum_xy - sum_x * sum_y) / (n * sum_x2 - sum_x * sum_x)
+    let sum_xy: f32 = norm_x.iter().zip(y).map(|(x, y)| (*x as f32) * y).sum();
+    let sum_x2: f32 = norm_x.iter().map(|x| (*x as f32) * (*x as f32)).sum();
+    let n_f32 = n as f32;
+
+    let denominator = n_f32 * sum_x2 - sum_x as f32 * sum_x as f32;
+    if denominator.abs() < f32::EPSILON {
+        return 0.0; // Avoid division by zero or near-zero
+    }
+
+    (n_f32 * sum_xy - sum_x as f32 * sum_y) / denominator
 }
+
+
 
 impl MetricTypeInfo for MemoryMetrics {
     fn type_name(&self) -> &'static str { "memory" }
     fn as_any(&self) -> &dyn std::any::Any { self }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::{Duration, Utc};
+    use bollard::container::{CPUStats, CPUUsage, MemoryStats, ThrottlingData};
+
+    fn make_memory_stats(usage: u64, limit: u64, created_at: DateTime<Utc>) -> ContainerStats {
+        ContainerStats {
+            id: None,
+            memory_stats: MemoryStats {
+                usage: Some(usage),
+                limit: Some(limit),
+                stats: None,
+                max_usage: None,
+                failcnt: None,
+                commit: None,
+                commit_peak: None,
+                commitbytes: None,
+                commitpeakbytes: None,
+                privateworkingset: None,
+            },
+            cpu_stats: CPUStats {
+                cpu_usage: CPUUsage {
+                    total_usage: 10_000_000_000,
+                    usage_in_kernelmode: 0,
+                    usage_in_usermode: 0,
+                    percpu_usage: None,
+                },
+                system_cpu_usage: None,
+                online_cpus: Some(4), // 4 cores
+                throttling_data: ThrottlingData {
+                    periods: 0,
+                    throttled_periods: 0,
+                    throttled_time: 0,
+                },
+            },
+            precpu_stats: CPUStats {
+                cpu_usage: CPUUsage {
+                    total_usage: 10_000_000_000 - 10_000_000,    // delta_total = 10_000_000
+                    usage_in_kernelmode: 0,
+                    usage_in_usermode: 0,
+                    percpu_usage: None,
+                },
+                system_cpu_usage: None, // delta_system = 100_000_000
+                online_cpus: Some(4),
+                throttling_data: ThrottlingData {
+                    periods: 0,
+                    throttled_periods: 0,
+                    throttled_time: 0,
+                },
+            },
+            num_procs: 1,
+            created_at,
+        }
+    }
+
+    fn approx_eq(a: f32, b: f32, epsilon: f32) -> bool {
+        (a - b).abs() < epsilon
+    }
+
+
+    #[test]
+    fn test_memory_metrics_basic_usage() {
+        let now = Utc::now();
+        let stats = vec![
+            make_memory_stats(500_000_000, 1_000_000_000, now),
+            make_memory_stats(600_000_000, 1_000_000_000, now + Duration::seconds(100)),
+            make_memory_stats(700_000_000, 1_000_000_000, now + Duration::seconds(150)),
+        ];
+
+        let metrics = MemoryMetrics::from_stats(&stats).unwrap().unwrap();
+        assert!(metrics.usage.mean > 0.0, "Expected positive memory mean, got {}", metrics.usage.mean);
+        assert!(metrics.usage_trend_mb_sec > 0.0, "Expected positive memory trend, got {}", metrics.usage_trend_mb_sec);
+        assert_eq!(metrics.limit_mb, 1_000.0);
+    }
+
+    #[test]
+    fn test_memory_metrics_empty_input() {
+        let stats = vec![];
+        let result = MemoryMetrics::from_stats(&stats).unwrap();
+        assert!(result.is_none(), "Expected None for empty input");
+    }
+
+    #[test]
+    fn test_memory_metrics_missing_limit() {
+        let now = Utc::now();
+        let mut stats = vec![make_memory_stats(500_000_000, 1_000_000_000, now)];
+        stats[0].memory_stats.limit = None;
+
+        let result = MemoryMetrics::from_stats(&stats);
+        assert!(result.is_err(), "Expected error due to missing memory limit");
+    }
+
+    #[test]
+    fn test_memory_metrics_mean_aggregation() {
+        let now = Utc::now();
+        let stats1 = vec![
+            make_memory_stats(500_000_000, 1_000_000_000, DateTime::from_timestamp(1431648000, 0).expect("invalid timestamp")),
+            make_memory_stats(600_000_000, 1_000_000_000, DateTime::from_timestamp(1431648010, 0).expect("invalid timestamp")),
+            make_memory_stats(750_000_000, 1_000_000_000, DateTime::from_timestamp(1431648015, 0).expect("invalid timestamp")),
+        ];
+        let stats2 = vec![
+            make_memory_stats(550_000_000, 1_000_000_000, now),
+            make_memory_stats(650_000_000, 1_000_000_000, now + Duration::seconds(10)),
+        ];
+
+        let metric1 = MemoryMetrics::from_stats(&stats1).unwrap().unwrap();
+        let metric2 = MemoryMetrics::from_stats(&stats2).unwrap().unwrap();
+        let mean = MemoryMetrics::mean(&[&metric1, &metric2]).unwrap();
+
+        assert!(approx_eq(mean.limit_mb, 1000.0, 1.0), "Expected limit_mb to be ~1000");
+        assert!(mean.usage.mean > 0.0, "Expected non-zero usage mean");
+        assert!(mean.usage_trend_mb_sec > 0.0, "Expected average trend");
+    }
 }

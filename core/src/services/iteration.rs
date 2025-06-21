@@ -104,7 +104,7 @@ impl IterationService {
             _ => format!("rosbag play -s {} -u {} -r {} --clock /rustle/dataset/*.bag", self.config.rustle.dataset_start, self.config.rustle.dataset_duration, algorithm_run.bag_speed)
         };
 
-        let rustle_cmd = format!("roslaunch rustle rustle.launch --wait test_type:={} algo_topic:={}", &iter.test_type, &algorithm.odom_topics[0]);
+        let rustle_cmd = format!("roslaunch rustle-ros rustle.launch --wait test_type:={} algo_topic:={}", &iter.test_type, &algorithm.odom_topics[0]);
 
         //Vector of commands to run inside the container
         let commands: Vec<_> = vec![
