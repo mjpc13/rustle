@@ -1,6 +1,7 @@
 use std::fs::File;
 
 use chrono::Utc;
+use log::warn;
 
 use crate::{db::TestDefinitionRepo, models::{test_definitions::{test_definition::TestDefinitionsConfig, CutParams, DropParams}, SpeedTestParams, TestDefinition, TestExecution, TestType}};
 use super::{error::ValidationError, DbError, TestDefinitionError};
@@ -70,9 +71,15 @@ impl TestDefinitionService {
     }
 
     fn validate_speed(&self, params: &SpeedTestParams) -> Result<(), ValidationError> {
+
         if params.speed_factors.is_empty() {
             return Err(ValidationError("Speed factors cannot be empty".into()));
         }
+
+        if params.speed_range<= params.speed_step{
+            return Err(ValidationError("Speed step cannot be greater than range".into()));
+        }
+
         Ok(())
     }
 

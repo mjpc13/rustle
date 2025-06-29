@@ -61,7 +61,6 @@ impl AlgorithmRunService {
         for metric in aggregate_metrics{
             let _ = self.repo.update_aggregate_metric(run, metric).await;
         }
-
     }
 
     pub async fn get_iterations(&self, run: &AlgorithmRun) -> Result<Vec<Iteration>, DbError> {

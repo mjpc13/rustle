@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use surrealdb::{engine::local::Db, Surreal};
+use surrealdb::{engine::local::Db, RecordId, Surreal};
 use tokio::sync::Mutex;
 use crate::{models::{test_execution::TestExecution, Algorithm, AlgorithmRun, Dataset, Iteration, TestDefinition}, services::error::DbError};
 use surrealdb::sql::Thing;
@@ -242,4 +242,18 @@ impl TestExecutionRepo {
         Ok(())
     }
 
+    pub async fn update_execution(&self, exec: &TestExecution) -> Result<(), DbError> {
+
+        let exec_id = exec.id.clone()
+        .ok_or(DbError::MissingField("Test Execution ID"))?;
+
+        let updated: TestExecution = self.conn.lock().await
+            .update((&exec_id.tb, &exec_id.id.to_string()))
+            .content(exec.clone())
+            .await?.unwrap();
+
+
+        Ok(())
+
+    }
 }

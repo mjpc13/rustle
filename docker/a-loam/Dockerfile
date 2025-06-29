@@ -53,7 +53,7 @@ RUN sed -i 's/^project(aloam_velodyne)$/project(aloam_velodyne_speed)/' src/A-LO
 RUN sed -i 's/<name>aloam_velodyne<\/name>/<name>aloam_velodyne_speed<\/name>/g' src/A-LOAM_speed/package.xml
 
 # Build ros package source
-RUN catkin config --extend /opt/ros/$ROS_DISTRO && catkin create pkg -p src/ rustle
+RUN catkin config --extend /opt/ros/$ROS_DISTRO
 
 RUN git clone --depth 1 --recurse-submodules https://github.com/mjpc13/rustle-ros.git  src/rustle-ros
 

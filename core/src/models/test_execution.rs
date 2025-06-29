@@ -1,6 +1,10 @@
+use std::collections::HashMap;
+
 use chrono::{DateTime, Utc};
 use serde::{Serialize, Deserialize};
 use surrealdb::sql::Thing;
+
+use crate::models::{metric::Metric, Algorithm};
 
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -19,31 +23,9 @@ pub struct TestExecution {
     pub status: TestExecutionStatus,
     pub start_time: Option<DateTime<Utc>>,
     pub end_time: Option<DateTime<Utc>>,
-    //pub environment: Environment,
-    //pub parameters: serde_json::Value,// Test-specific parameters
-    pub results: Option<TestResults>, 
+    pub metrics: HashMap<String, Metric>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Environment {
-    pub os: String,
-    pub ros_version: String,
-    pub hardware_id: Option<String>,  // Optional hardware identifier
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TestResults {
-    pub metrics: Vec<TestMetric>,
-    pub log_uri: String,              // Path/URI to full logs
-    pub artifacts: Vec<String>,       // URIs to output files
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TestMetric {
-    pub name: String,
-    pub value: f64,
-    pub unit: Option<String>,
-}
 
 impl TestExecution {
     pub fn new(num_iterations: u8) -> Self {
@@ -53,7 +35,7 @@ impl TestExecution {
             num_iterations,
             start_time: Some(Utc::now()),
             end_time: None,
-            results: None,
+            metrics: HashMap::new(),
         }
     }
 }

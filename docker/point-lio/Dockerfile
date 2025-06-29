@@ -53,7 +53,7 @@ RUN sed -i 's/<name>point_lio<\/name>/<name>point_lio_speed<\/name>/g' src/Point
 
 
 # Build ros package source (compiles every package in the workspace, don't change this!)
-RUN catkin config --extend /opt/ros/$ROS_DISTRO && catkin create pkg -p src/ rustle
+RUN catkin config --extend /opt/ros/$ROS_DISTRO
 
 RUN git clone --depth 1 --recurse-submodules https://github.com/mjpc13/rustle-ros.git  src/rustle-ros
 

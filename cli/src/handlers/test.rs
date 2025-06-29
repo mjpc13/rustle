@@ -1,8 +1,9 @@
 use comfy_table::{presets::{ASCII_MARKDOWN, }, ContentArrangement, Table};
 use log::{error, info, warn};
 use rustle_core::{ models::{
+        TestType::{Simple, Speed, Cut, Drop},
         algorithm_run::AlgorithmRun, metric::MetricType::{
-            Cpu, Frequency, Memory, PoseError
+            Cpu, Frequency, Memory, PoseError, TemporalEfficiency
         }, test_definitions::TestDefinitionsConfig, ProgressMessage, TestExecution, TestExecutionStatus
     }, services::{TestDefinitionService, TestExecutionService}, utils::config::Config
 };
@@ -124,7 +125,7 @@ pub async fn handle_test(
                                     num_iterations: test.iterations,
                                     start_time: None,
                                     end_time: None,
-                                    results: None,
+                                    metrics: HashMap::new(),
                                 };
 
                                 let _ = test_exec_service.start_execution(execution, &test, Some(msg_tx.clone())).await;
@@ -143,7 +144,7 @@ pub async fn handle_test(
                                     num_iterations: test.iterations,
                                     start_time: None,
                                     end_time: None,
-                                    results: None,
+                                    metrics: HashMap::new(),
                                 };
 
                                 let _ = test_exec_service.start_execution(execution, &test, Some(msg_tx)).await;
@@ -291,9 +292,9 @@ async fn handle_show_cmd(show_test: ShowTest, service: &TestDefinitionService, t
     };
 
     // Get the corresponding test execution;
-    let exec: TestExecution = service.get_executions(test).await?;
+    let exec: TestExecution = service.get_executions(test.clone()).await?;
 
-    let exec_id = match exec.id{
+    let exec_id = match &exec.id{
         Some(id) => id,
         None => return Ok(())
     };
@@ -301,13 +302,129 @@ async fn handle_show_cmd(show_test: ShowTest, service: &TestDefinitionService, t
     let algo_runs = test_exec_service.get_algo_runs(&exec_id).await?;
 
     if show_test.detailed{
-        show_detail(&algo_runs, &test_exec_service, &show_test.name).await;
+        match test.test_type {
+            Simple => show_detail(&algo_runs, &test_exec_service, &show_test.name).await,
+            Speed(_) => {
+                println!("--- Overall Results for Speed Metric ---");
+                show_speed(&exec);
+                println!("--- Specific Results for Each Algorithm Run and Speed ---");
+                show_detail(&algo_runs, &test_exec_service, &show_test.name).await;
+            },
+            Drop(_) => todo!(),
+            Cut(_) => todo!(),
+        }
+        
     } else {
-        show_simple(&algo_runs);
+        
+        match test.test_type {
+            Speed(_) => show_speed(&exec),
+            _ => show_simple(&algo_runs),
+        }
     }
 
     //Logic to write in a file! Depends on the output location and on the format!
     Ok(())
+}
+
+fn show_simple(algo_runs: &Vec<AlgorithmRun>){
+
+    let mut table = Table::new();
+    table.load_preset(ASCII_MARKDOWN);
+    table.set_content_arrangement(ContentArrangement::Dynamic);
+    table.set_header(vec!["Name", "Bag Speed", "APE" , "RPE" , "CPU (%)" , "Mem (MB)" , "Freq  (Hz)"]);
+    
+
+    for ar in algo_runs{
+
+        //Get list of iterations and metrics!!!!
+
+        let mut ape: String = String::from("NaN");
+        let bag_speed = ar.bag_speed;
+        let mut rpe = String::from("NaN");
+        let mut cpu = String::from("NaN");
+        let mut mem = String::from("NaN");
+        let mut freq = String::from("NaN");
+
+        for metric in ar.metrics.clone(){
+
+            match metric.metric_type {
+                Cpu(cpu_metrics) => {
+                                cpu = format!("{:.3}", cpu_metrics.load.mean);
+                            },
+                Memory(memory_metrics) => {
+                                mem = format!("{:.3}", memory_metrics.usage.max);
+                            },
+                PoseError(pose_error_metrics) => {
+                                ape = format!("{:.3}", pose_error_metrics.ape.rmse.ok_or(0.0).unwrap());
+                                rpe = format!("{:.3}", pose_error_metrics.rpe.rmse.ok_or(0.0).unwrap());
+                            },
+                Frequency(statistical_metrics) => {
+                                freq =  format!("{:.3}", statistical_metrics.mean);
+                            },
+                TemporalEfficiency(_) => (),
+            }
+        }
+        
+
+        table.add_row(vec![
+            ar.algo.name.clone(),
+            bag_speed.to_string(),
+            ape,
+            rpe,
+            cpu,
+            mem,
+            freq
+        ]);
+    }
+
+    println!("{table}");
+}
+
+
+fn show_speed(exec: &TestExecution){
+
+    let mut table = Table::new();
+    table.load_preset(ASCII_MARKDOWN);
+    table.set_content_arrangement(ContentArrangement::Dynamic);
+    table.set_header(vec!["Name", "FPT (ms)", "TES",  "ATAS" , "RTAS"]);
+
+    let metrics_hash = &exec.metrics;
+
+    let mut tes: String = String::from("NaN");
+    let mut fpt = String::from("NaN");
+    let mut atas = String::from("NaN");
+    let mut rtas = String::from("NaN");
+
+    metrics_hash.iter().for_each(|(name, metric)|{
+
+        match &metric.metric_type {
+            TemporalEfficiency(m) => {
+
+                tes = format!("{:.3}", m.tes);
+
+                let fpt = match m.fpt{
+                    -1.0 => format!("{}*", m.fpt),
+                    _ => format!("{:.3}", m.fpt * 1000.0)
+                };
+
+                atas = format!("{:.3}", m.atas);
+                rtas = format!("{:.3}", m.rtas);
+
+                table.add_row(vec![
+                    name,
+                    &fpt,
+                    &tes,
+                    &atas,
+                    &rtas,
+                ]);
+            },
+            _ => (),
+        }
+
+    });
+
+    println!("{table}");
+    println!("* - Estimation frequency did not drop by 10% for the given set.");
 }
 
 async fn show_detail(algo_runs: &Vec<AlgorithmRun>, test_exec_service: &TestExecutionService, test_name: &String){
@@ -339,18 +456,19 @@ async fn show_detail(algo_runs: &Vec<AlgorithmRun>, test_exec_service: &TestExec
 
             match metric.metric_type {
                 Cpu(cpu_metrics) => {
-                    cpu = format!("- CPU Load: Mean= {:.3}%, Max= {:.3}%, Std= {:.3}\n", cpu_metrics.load.mean, cpu_metrics.load.max, cpu_metrics.load.std);
-                },
+                                cpu = format!("- CPU Load: Mean= {:.3}%, Max= {:.3}%, Std= {:.3}\n", cpu_metrics.load.mean, cpu_metrics.load.max, cpu_metrics.load.std);
+                            },
                 Memory(memory_metrics) => {
-                    mem = format!("- Memory Usage: Max= {:.3}Mb, Trend= {:.3}Mb/s\n", memory_metrics.usage.max, memory_metrics.usage_trend_mb_sec);
-                },
+                                mem = format!("- Memory Usage: Max= {:.3}Mb, Trend= {:.3}Mb/s\n", memory_metrics.usage.max, memory_metrics.usage_trend_mb_sec);
+                            },
                 PoseError(pose_error_metrics) => {
-                    ape = format!("- APE: RMSE= {:.3}, Mean= {:.3}, Max= {:.3}, Std= {:.3}\n", pose_error_metrics.ape.rmse.ok_or(0.0).unwrap(), pose_error_metrics.ape.mean, pose_error_metrics.ape.max, pose_error_metrics.ape.std);
-                    rpe = format!("- RPE: RMSE= {:.3}, Mean= {:.3}, Max= {:.3}, Std= {:.3}\n", pose_error_metrics.rpe.rmse.ok_or(0.0).unwrap(), pose_error_metrics.rpe.mean, pose_error_metrics.rpe.max, pose_error_metrics.rpe.std);
-                },
+                                ape = format!("- APE: RMSE= {:.3}, Mean= {:.3}, Max= {:.3}, Std= {:.3}\n", pose_error_metrics.ape.rmse.ok_or(0.0).unwrap(), pose_error_metrics.ape.mean, pose_error_metrics.ape.max, pose_error_metrics.ape.std);
+                                rpe = format!("- RPE: RMSE= {:.3}, Mean= {:.3}, Max= {:.3}, Std= {:.3}\n", pose_error_metrics.rpe.rmse.ok_or(0.0).unwrap(), pose_error_metrics.rpe.mean, pose_error_metrics.rpe.max, pose_error_metrics.rpe.std);
+                            },
                 Frequency(statistical_metrics) => {
-                    freq =  format!("- Frequency (Hz): Mean: {:.3}, Min: {:.3}, Max: {:.3}, Std: {:.3}\n", statistical_metrics.mean, statistical_metrics.min, statistical_metrics.max, statistical_metrics.std);
-                },
+                                freq =  format!("- Frequency (Hz): Mean: {:.3}, Min: {:.3}, Max: {:.3}, Std: {:.3}\n", statistical_metrics.mean, statistical_metrics.min, statistical_metrics.max, statistical_metrics.std);
+                            },
+                TemporalEfficiency(_) => (),
             }
         }
         println!("{ape}{rpe}{freq}{cpu}{mem}\n\n Iterations:");
@@ -373,22 +491,23 @@ async fn show_detail(algo_runs: &Vec<AlgorithmRun>, test_exec_service: &TestExec
     
                 match metric.metric_type {
                     Cpu(cpu_metrics) => {
-                        cpu = format!("{:.3}", cpu_metrics.load.mean);
-                    },
+                                        cpu = format!("{:.3}", cpu_metrics.load.mean);
+                                    },
                     Memory(memory_metrics) => {
-                        mem = format!("{:.3}", memory_metrics.usage.max);
-                    },
+                                        mem = format!("{:.3}", memory_metrics.usage.max);
+                                    },
                     PoseError(pose_error_metrics) => {
-                        rmse_ape = format!("{:.3}", pose_error_metrics.ape.rmse.ok_or(0.0).unwrap());
-                        max_ape = format!("{:.3}", pose_error_metrics.ape.max);
-                        std_ape = format!("{:.3}", pose_error_metrics.ape.std);
-                        rmse_rpe = format!("{:.3}", pose_error_metrics.rpe.rmse.ok_or(0.0).unwrap());
-                        max_rpe = format!("{:.3}", pose_error_metrics.rpe.max);
-                        std_rpe = format!("{:.3}", pose_error_metrics.rpe.std);
-                    },
+                                        rmse_ape = format!("{:.3}", pose_error_metrics.ape.rmse.ok_or(0.0).unwrap());
+                                        max_ape = format!("{:.3}", pose_error_metrics.ape.max);
+                                        std_ape = format!("{:.3}", pose_error_metrics.ape.std);
+                                        rmse_rpe = format!("{:.3}", pose_error_metrics.rpe.rmse.ok_or(0.0).unwrap());
+                                        max_rpe = format!("{:.3}", pose_error_metrics.rpe.max);
+                                        std_rpe = format!("{:.3}", pose_error_metrics.rpe.std);
+                                    },
                     Frequency(statistical_metrics) => {
-                        freq =  format!("{:.3}", statistical_metrics.mean);
-                    },
+                                        freq =  format!("{:.3}", statistical_metrics.mean);
+                                    },
+                    TemporalEfficiency(_) => (),
                 }
             }
             table.add_row(vec![
@@ -409,57 +528,4 @@ async fn show_detail(algo_runs: &Vec<AlgorithmRun>, test_exec_service: &TestExec
 
     }
 
-}
-
-fn show_simple(algo_runs: &Vec<AlgorithmRun>){
-
-    let mut table = Table::new();
-    table.load_preset(ASCII_MARKDOWN);
-    table.set_content_arrangement(ContentArrangement::Dynamic);
-    table.set_header(vec!["Name", "Bag Speed", "APE" , "RPE" , "CPU (%)" , "Mem (MB)" , "Freq  (Hz)"]);
-    
-
-    for ar in algo_runs{
-
-        //Get list of iterations and metrics!!!!
-
-        let mut ape: String = String::from("NaN");
-        let bag_speed = ar.bag_speed;
-        let mut rpe = String::from("NaN");
-        let mut cpu = String::from("NaN");
-        let mut mem = String::from("NaN");
-        let mut freq = String::from("NaN");
-
-        for metric in ar.metrics.clone(){
-
-            match metric.metric_type {
-                Cpu(cpu_metrics) => {
-                    cpu = format!("{:.3}", cpu_metrics.load.mean);
-                },
-                Memory(memory_metrics) => {
-                    mem = format!("{:.3}", memory_metrics.usage.max);
-                },
-                PoseError(pose_error_metrics) => {
-                    ape = format!("{:.3}", pose_error_metrics.ape.rmse.ok_or(0.0).unwrap());
-                    rpe = format!("{:.3}", pose_error_metrics.rpe.rmse.ok_or(0.0).unwrap());
-                },
-                Frequency(statistical_metrics) => {
-                    freq =  format!("{:.3}", statistical_metrics.mean);
-                },
-            }
-        }
-        
-
-        table.add_row(vec![
-            ar.algo.name.clone(),
-            bag_speed.to_string(),
-            ape,
-            rpe,
-            cpu,
-            mem,
-            freq
-        ]);
-    }
-
-    println!("{table}");
 }

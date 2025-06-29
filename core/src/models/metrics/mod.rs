@@ -3,6 +3,7 @@ pub mod metric;
 pub mod pose_error;
 pub mod stat;
 pub mod memory;
+pub mod tes;
 
 
 pub use self::{

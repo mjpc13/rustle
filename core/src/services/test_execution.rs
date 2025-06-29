@@ -4,17 +4,19 @@ use std::{collections::HashMap, fs, sync::Arc};
 use charming::Chart;
 use charming::{theme::Theme, ImageRenderer};
 use chrono::Utc;
-use log::warn;
+use log::{warn};
 use tokio::sync::mpsc::Sender;
 use tokio::sync::Mutex;
 
-use crate::models::metric::Metric;
+use crate::models::metric::{Metric, StatisticalMetrics};
 use crate::models::metrics::pose_error::{APE, RPE};
+use crate::models::metrics::tes::TemporalEfficiencyMetric;
+use crate::models::metrics::PoseErrorMetrics;
 use crate::models::{AlgorithmRun, ProgressMessage};
 use crate::utils::config::Config;
 
 use crate::utils::plots::{test_ape_line_chart, test_memory_usage_line_chart, test_rpe_line_chart};
-use crate::{db::{TestDefinitionRepo, TestExecutionRepo}, models::{metrics::ContainerStats, test_definitions::{test_definition::{TestDefinition, TestType}, CutParams, DropParams}, test_execution::{TestExecution, TestExecutionStatus}, Algorithm, Iteration, SpeedTestParams, TestResults}, services::error::ProcessingError, utils::plots::test_cpu_load_line_chart
+use crate::{db::{TestDefinitionRepo, TestExecutionRepo}, models::{metrics::ContainerStats, test_definitions::{test_definition::{TestDefinition, TestType}, CutParams, DropParams}, test_execution::{TestExecution, TestExecutionStatus}, Algorithm, Iteration, SpeedTestParams}, services::error::ProcessingError, utils::plots::test_cpu_load_line_chart
 };
 
 use super::{error::PlotError, AlgorithmRunService, IterationService};
@@ -32,7 +34,6 @@ impl TestExecutionService {
         Self { execution_repo, definition_repo, algorithm_run_service, iteration_service}
     }
 
-    //THIS IS MY TASK BATCH!!!
     pub async fn start_execution(
         &self,
         mut execution: TestExecution,
@@ -86,10 +87,24 @@ impl TestExecutionService {
         }
 
 
-        //get all algorithm runs
+        //get all algorithm runs and compute the metrics
         let algo_run_list = self.execution_repo.get_algorithm_runs(&execution_id).await?;
-        for algo_run in algo_run_list{
+        for algo_run in &algo_run_list{
             self.algorithm_run_service.set_aggregate_metrics(&algo_run).await;
+        }
+        let algo_run_list = self.execution_repo.get_algorithm_runs(&execution_id).await?;
+
+        // Compute metrics for speed test
+        match &def.test_type {
+            TestType::Simple => todo!(),
+            TestType::Speed(_) => {
+                let hash_algo_run = Self::group_by_algo(algo_run_list);
+                let metrics: HashMap<Algorithm, Metric> = Self::compute_metrics_speed(hash_algo_run);
+
+                let _ = self.complete_execution(execution.clone(), metrics).await;
+            },
+            TestType::Drop(_) => todo!(),
+            TestType::Cut(_) => todo!(),
         }
 
         Ok(execution)
@@ -259,13 +274,21 @@ impl TestExecutionService {
     pub async fn complete_execution(
         &self,
         mut execution: TestExecution,
-        results: TestResults
+        metrics: HashMap<Algorithm, Metric>
     ) -> Result<(), ProcessingError> {
         execution.status = TestExecutionStatus::Completed;
         execution.end_time = Some(Utc::now());
-        execution.results = Some(results);
+
+        let mut hash_metric:HashMap<String, Metric> = HashMap::new();
+
+        warn!("My metrics: {:?}", metrics);
+        metrics.into_iter().for_each(|(al, v)|{
+            hash_metric.insert(al.name, v.clone());
+        });
+
+        execution.metrics = hash_metric;
         
-        //self.execution_repo.save(&execution).await?;
+        let _ = self.execution_repo.update_execution(&execution).await.unwrap();
         Ok(())
     }
 
@@ -277,7 +300,7 @@ impl TestExecutionService {
 
         let exec_thing: Thing = exec.id.unwrap();
         let te_str = exec_thing.to_raw().replace(|c: char| !c.is_alphanumeric(), "_").to_lowercase();
-        let full_path = format!("{path}/{te_str}"); //add the Thing of TestExecution here!!!!
+        let full_path = format!("{path}/{te_str}");
 
         //Create the directories if they dont exist
         fs::create_dir_all(&full_path).unwrap();
@@ -306,8 +329,6 @@ impl TestExecutionService {
         
         Ok(hash)
     }
-
-
 
     pub async fn plot_cpu_load(&self, algo_run_list: &Vec<AlgorithmRun>, config: &Config) -> Result<Chart, PlotError>{
 
@@ -411,6 +432,66 @@ impl TestExecutionService {
         let results = self.execution_repo.get_algorithm_runs(test_execution_id).await?;
         Ok(results)
     }
+
+
+    fn compute_metrics_speed(list: HashMap<Algorithm, Vec<AlgorithmRun>>) -> HashMap<Algorithm, Metric>{
+
+        let mut algo_metric: HashMap<Algorithm, Metric> = HashMap::new();
+
+        let _ = list.into_iter()
+            .for_each(|(k,v)|{
+
+                let mut speed_freq: HashMap<String, StatisticalMetrics> = HashMap::new();
+                let mut speed_pose: HashMap<String, PoseErrorMetrics>   = HashMap::new();
+
+                for algo_run in v {
+
+                    for metric in algo_run.metrics{
+                        match metric.metric_type {
+                            crate::models::metric::MetricType::Cpu(_) => (),
+                            crate::models::metric::MetricType::Memory(_) => (),
+                            crate::models::metric::MetricType::PoseError(pose_error_metrics) => {
+                                                        speed_pose.insert(algo_run.bag_speed.to_string(), pose_error_metrics);
+                                                    },
+                            crate::models::metric::MetricType::Frequency(statistical_metrics) => {
+                                                        speed_freq.insert(algo_run.bag_speed.to_string(), statistical_metrics);
+                                                    },
+                            crate::models::metric::MetricType::TemporalEfficiency(_) => (),
+                        }
+                    }
+                }
+
+                //Create a new metric
+                let metric = Metric { 
+                    id: None, 
+                    metric_type: crate::models::metric::MetricType::TemporalEfficiency(
+                        TemporalEfficiencyMetric::new(speed_freq, speed_pose).unwrap()
+                    )
+                };
+
+                algo_metric.insert(k, metric);
+
+            }
+        );
+
+        algo_metric
+
+    }
+
+    fn group_by_algo(runs: Vec<AlgorithmRun>) -> HashMap<Algorithm, Vec<AlgorithmRun>> {
+        let mut grouped: HashMap<Algorithm, Vec<AlgorithmRun>> = HashMap::new();
+    
+        for run in runs {
+            grouped.entry(run.algo.clone()) // clone the key if necessary
+                .or_insert_with(Vec::new)
+                .push(run);
+        }
+    
+        grouped
+    }
+
+
+
 
 
 }

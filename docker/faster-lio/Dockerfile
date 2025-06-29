@@ -78,7 +78,9 @@ RUN sed -i 's/faster_lio/faster_lio_speed/g' src/faster-lio_speed/include/ivox3d
 RUN sed -i 's/faster_lio/faster_lio_speed/g' src/faster-lio_speed/include/ivox3d/ivox3d_node.hpp
 
 # Build ros package source (compiles every package in the workspace, don't change this!)
-RUN catkin config --extend /opt/ros/$ROS_DISTRO && catkin create pkg -p src/ rustle
+RUN catkin config --extend /opt/ros/$ROS_DISTRO
+
+RUN git clone --depth 1 --recurse-submodules https://github.com/mjpc13/rustle-ros.git  src/rustle-ros
 
 #Copy custom launch file into our package
 COPY ./rustle.launch /rustle/catkin_ws/src/rustle-ros/launch/rustle.launch

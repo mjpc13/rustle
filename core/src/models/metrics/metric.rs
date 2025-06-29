@@ -3,7 +3,7 @@ use std::{collections::HashMap, str::FromStr};
 use serde::{Deserialize, Serialize};
 use itertools::Itertools;
 
-use crate::services::{self};
+use crate::{models::metrics::tes::TemporalEfficiencyMetric, services::{self}};
 use surrealdb::sql::Thing;
 use super::{cpu::CpuMetrics, memory::MemoryMetrics, pose_error::PoseErrorMetrics};
 
@@ -34,6 +34,7 @@ impl Metric {
                 MetricType::Memory(m) => memory_metrics.push(m),
                 MetricType::PoseError(p) => pose_metrics.push(p),
                 MetricType::Frequency(f) => freq_metrics.push(f),
+                MetricType::TemporalEfficiency(_) => (),
             }
         }
 
@@ -90,7 +91,8 @@ pub enum MetricType{
     Cpu(CpuMetrics),
     Memory(MemoryMetrics),
     PoseError(PoseErrorMetrics),
-    Frequency(StatisticalMetrics)
+    Frequency(StatisticalMetrics),
+    TemporalEfficiency(TemporalEfficiencyMetric)
 }
 
 impl MetricType {
@@ -99,7 +101,8 @@ impl MetricType {
             MetricType::Cpu(_) => "cpu",
             MetricType::PoseError(_) => "pose_error",
             MetricType::Frequency(_) => "frequency",
-            MetricType::Memory(_) => "memory"
+            MetricType::Memory(_) => "memory",
+            MetricType::TemporalEfficiency(_) => "temporal_efficiency",
         }
     }
     
@@ -108,7 +111,8 @@ impl MetricType {
             MetricType::Cpu(m) => m,
             MetricType::PoseError(m) => m,
             MetricType::Frequency(m) => m,
-            MetricType::Memory(m) => m
+            MetricType::Memory(m) => m,
+            MetricType::TemporalEfficiency(m) => m,
         }
     }
 }

@@ -20,7 +20,7 @@ pub use self::{
     container::Container,
     ros::{Odometry, Header, Pose, Twist},
     algorithm_run::{AlgorithmRun},
-    test_execution::{TestExecution, TestExecutionStatus, Environment, TestResults},
+    test_execution::{TestExecution, TestExecutionStatus},
     iteration::Iteration,
     messages::ProgressMessage,
 };

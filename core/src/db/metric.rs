@@ -66,7 +66,6 @@ impl MetricRepo {
         Ok(())
     }
 
-
     pub async fn save_rpe(&self, rpe: &mut RPE, iteration_id: &Thing) -> Result<(), DbError> {
         
         // Create metric record
