@@ -4,6 +4,8 @@ use chrono::Utc;
 use serde::{Serialize, Deserialize};
 use surrealdb::sql::Thing;
 
+use crate::models::test_definitions::{Cut, Drop};
+
 use super::{speed::SpeedTestParams, CutParams, DropParams};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -16,6 +18,12 @@ pub enum TestType {
     #[serde(rename = "cut")]
     Cut(CutParams)
 }
+
+pub enum RobustnessType {
+    Cut(Vec<Cut>),
+    Drop(Vec<Drop>),
+}
+
 
 #[derive(Debug, Deserialize)]
 pub struct TestDefinitionsConfig {

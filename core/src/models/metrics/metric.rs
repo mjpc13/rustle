@@ -12,7 +12,7 @@ use super::{cpu::CpuMetrics, memory::MemoryMetrics, pose_error::PoseErrorMetrics
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Metric {
     pub id: Option<Thing>,
-    #[serde(rename = "metric_type")] // Matches SurrealDB's field name
+    #[serde(rename = "metric_type")]
     pub metric_type: MetricType
 }
 
