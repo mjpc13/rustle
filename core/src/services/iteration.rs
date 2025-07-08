@@ -306,11 +306,9 @@ impl IterationService {
         });
 
         let _ = tokio::join!(rosplay_task);
-        debug!("Stopped rosbag play, send cancel signal to the other tasks");
         token.cancel(); // the end of the rosbag will be the first point where the other tasks need
         // to stop
         let _ = tokio::join!(roslaunch_task);
-        debug!("Stopped roslaunch");
 
         let ten_sec = time::Duration::from_secs(1);
         thread::sleep(ten_sec);
@@ -322,6 +320,8 @@ impl IterationService {
         //CLEAN RESIDUAL CONTAINERS
         let _ = self.remove_container(&iter.container.container_name).await;
 
+        //If the dataset duration was not set before set it now
+        let _ = self.dataset_service.set_duration(&dataset).await;
 
         //Compute the frequency
         let freq = self.repo.get_odom_frequency(&iter).await.map_err(|_e| RunError::Evo("Unable to find odometries".to_owned()))?;

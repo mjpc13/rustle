@@ -79,4 +79,17 @@ impl DatasetRepo {
     
         Ok(())
     }
+
+    pub async fn set_duration(&self, dataset_id: &Thing, duration: Option<f32>) -> Result<(), DbError>{
+
+        self.conn.lock().await
+            .query("
+                UPDATE $dataset_id SET duration = $duration
+            ")
+            .bind(("dataset_id", dataset_id.clone()))
+            .bind(("duration", duration))
+            .await?;
+        Ok(())
+    }
+
 }
