@@ -34,6 +34,7 @@ pub async fn handle_dataset(
                             dataset_path: add.dataset_path.expect("Missing: --dataset-path"),
                             ground_truth: None,
                             created_at: Utc::now(),
+                            duration: None
                         }
                     ]
                 }

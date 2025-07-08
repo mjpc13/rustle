@@ -58,7 +58,6 @@ impl TestDefinitionService {
                 TestType::Cut(params) => self.validate_cut(params)?
             }
         }
-        
         Ok(definitions)
     }
 

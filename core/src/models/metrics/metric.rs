@@ -3,7 +3,7 @@ use std::{collections::HashMap, str::FromStr};
 use serde::{Deserialize, Serialize};
 use itertools::Itertools;
 
-use crate::{models::metrics::tes::TemporalEfficiencyMetric, services::{self}};
+use crate::{models::metrics::{rob::RobustnessMetric, tes::TemporalEfficiencyMetric}, services::{self}};
 use surrealdb::sql::Thing;
 use super::{cpu::CpuMetrics, memory::MemoryMetrics, pose_error::PoseErrorMetrics};
 
@@ -35,6 +35,7 @@ impl Metric {
                 MetricType::PoseError(p) => pose_metrics.push(p),
                 MetricType::Frequency(f) => freq_metrics.push(f),
                 MetricType::TemporalEfficiency(_) => (),
+                MetricType::Robustness(_) => (),
             }
         }
 
@@ -92,7 +93,8 @@ pub enum MetricType{
     Memory(MemoryMetrics),
     PoseError(PoseErrorMetrics),
     Frequency(StatisticalMetrics),
-    TemporalEfficiency(TemporalEfficiencyMetric)
+    TemporalEfficiency(TemporalEfficiencyMetric),
+    Robustness(RobustnessMetric)
 }
 
 impl MetricType {
@@ -103,6 +105,7 @@ impl MetricType {
             MetricType::Frequency(_) => "frequency",
             MetricType::Memory(_) => "memory",
             MetricType::TemporalEfficiency(_) => "temporal_efficiency",
+            MetricType::Robustness(_) => "robustness",
         }
     }
     
@@ -113,6 +116,7 @@ impl MetricType {
             MetricType::Frequency(m) => m,
             MetricType::Memory(m) => m,
             MetricType::TemporalEfficiency(m) => m,
+            MetricType::Robustness(m) => m,
         }
     }
 }
@@ -122,8 +126,28 @@ pub trait MetricTypeInfo {
 }
 
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Copy)]
+pub struct StatisticalMetricsStamped{
+    pub stat: StatisticalMetrics,
+    pub timestamp: f32,
+}
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+impl Eq for StatisticalMetricsStamped {}
+
+impl PartialOrd for StatisticalMetricsStamped {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.timestamp.partial_cmp(&other.timestamp)
+    }
+}
+
+impl Ord for StatisticalMetricsStamped {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        // Use partial_cmp and unwrap. Assumes no NaN timestamps.
+        self.partial_cmp(other).unwrap()
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Copy)]
 pub struct StatisticalMetrics {
     pub mean: f32,
     pub median: f32,

@@ -17,18 +17,18 @@ pub enum TestExecutionStatus {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TestExecution {
-    pub id: Option<Thing>,                   // Format: "test_execution:<ulid>"
-    //pub test_definition_id: String,   // Reference to TestDefinition
-    pub num_iterations: u8,           // Reference to Dataset
+    pub id: Option<Thing>,
+    pub dataset_name: String,
+    pub num_iterations: u8,
     pub status: TestExecutionStatus,
     pub start_time: Option<DateTime<Utc>>,
     pub end_time: Option<DateTime<Utc>>,
-    pub metrics: HashMap<String, Metric>,
+    pub metrics: HashMap<String, Metric>
 }
 
 
 impl TestExecution {
-    pub fn new(num_iterations: u8) -> Self {
+    pub fn new(num_iterations: u8, dataset_name: String) -> Self {
         Self {
             id: None,
             status: TestExecutionStatus::Scheduled,
@@ -36,6 +36,7 @@ impl TestExecution {
             start_time: Some(Utc::now()),
             end_time: None,
             metrics: HashMap::new(),
+            dataset_name,
         }
     }
 }

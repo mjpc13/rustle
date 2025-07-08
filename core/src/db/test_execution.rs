@@ -38,7 +38,7 @@ impl TestExecutionRepo {
 
 
             // Create Dataset relationship
-            let dataset = self.get_dataset_by_name(def.dataset_name.clone()).await.unwrap();
+            let dataset = self.get_dataset_by_name(&def.dataset_name.clone()).await.unwrap();
             // Create Dataset relationship
             self.conn.lock().await
                 .query("RELATE $test_execution -> tested_in -> $dataset")
@@ -76,7 +76,7 @@ impl TestExecutionRepo {
             .map_err(|e| DbError::Operation(e))
     }
 
-    pub async fn get_dataset_by_name(&self, db_name: String) -> Result<Dataset, DbError> {
+    pub async fn get_dataset_by_name(&self, db_name: &String) -> Result<Dataset, DbError> {
         let mut response = self.conn.lock().await
             .query("SELECT * FROM dataset WHERE name = $name LIMIT 1")
             .bind(("name", db_name.clone()))
@@ -247,7 +247,7 @@ impl TestExecutionRepo {
         let exec_id = exec.id.clone()
         .ok_or(DbError::MissingField("Test Execution ID"))?;
 
-        let updated: TestExecution = self.conn.lock().await
+        let _updated: TestExecution = self.conn.lock().await
             .update((&exec_id.tb, &exec_id.id.to_string()))
             .content(exec.clone())
             .await?.unwrap();

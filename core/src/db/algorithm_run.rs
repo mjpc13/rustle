@@ -3,7 +3,7 @@ use std::sync::Arc;
 use surrealdb::{engine::local::Db, sql::Thing, Surreal};
 use tokio::sync::Mutex;
 
-use crate::{models::{metric::Metric, Algorithm, AlgorithmRun, Iteration, TestDefinition, TestExecution}, services::DbError};
+use crate::{models::{metric::{Metric, StatisticalMetricsStamped}, Algorithm, AlgorithmRun, Iteration, TestDefinition, TestExecution}, services::DbError};
 
 pub struct AlgorithmRunRepo {
     conn: Arc<Mutex<Surreal<Db>>>,
@@ -215,6 +215,78 @@ impl AlgorithmRunRepo {
             ")
             .bind(("run_id", run_id.clone()))
             .bind(("metric", metric))
+            .await?;
+
+
+        Ok(())
+
+    }
+
+    pub async fn update_cpu_load_list(&self, run: &AlgorithmRun, cpu_load_list: Vec<StatisticalMetricsStamped>) -> Result<(), DbError> {
+
+        let run_id = run.id.clone()
+        .ok_or(DbError::MissingField("AlgorithmRun ID"))?;
+
+        self.conn.lock().await
+            .query("
+                UPDATE $run_id SET cpu_load_list += $cpu_load_list
+            ")
+            .bind(("run_id", run_id.clone()))
+            .bind(("cpu_load_list", cpu_load_list))
+            .await?;
+
+
+        Ok(())
+
+    }
+
+    pub async fn update_mem_usage_list(&self, run: &AlgorithmRun, mem_usage_list: Vec<StatisticalMetricsStamped>) -> Result<(), DbError> {
+
+        let run_id = run.id.clone()
+        .ok_or(DbError::MissingField("AlgorithmRun ID"))?;
+
+        self.conn.lock().await
+            .query("
+                UPDATE $run_id SET mem_usage_list += $mem_usage_list
+            ")
+            .bind(("run_id", run_id.clone()))
+            .bind(("mem_usage_list", mem_usage_list))
+            .await?;
+
+
+        Ok(())
+
+    }
+
+    pub async fn update_ape_list(&self, run: &AlgorithmRun, ape_list: Vec<StatisticalMetricsStamped>) -> Result<(), DbError> {
+
+        let run_id = run.id.clone()
+        .ok_or(DbError::MissingField("AlgorithmRun ID"))?;
+
+        self.conn.lock().await
+            .query("
+                UPDATE $run_id SET ape_list += $ape_list
+            ")
+            .bind(("run_id", run_id.clone()))
+            .bind(("ape_list", ape_list))
+            .await?;
+
+
+        Ok(())
+
+    }
+
+    pub async fn update_rpe_list(&self, run: &AlgorithmRun, rpe_list: Vec<StatisticalMetricsStamped>) -> Result<(), DbError> {
+
+        let run_id = run.id.clone()
+        .ok_or(DbError::MissingField("AlgorithmRun ID"))?;
+
+        self.conn.lock().await
+            .query("
+                UPDATE $run_id SET rpe_list += $rpe_list
+            ")
+            .bind(("run_id", run_id.clone()))
+            .bind(("rpe_list", rpe_list))
             .await?;
 
 

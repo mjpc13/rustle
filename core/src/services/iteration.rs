@@ -25,7 +25,7 @@ use crate::models::metrics::metric::StatisticalMetrics;
 
 use crate::models::metrics::pose_error::{PoseErrorMetrics, Position, APE, RPE};
 use crate::models::metrics::{ContainerStats, CpuMetrics};
-use crate::models::{ProgressMessage, TestDefinition};
+use crate::models::{ProgressMessage, TestDefinition, TestType};
 use crate::utils::config::Config;
 use crate::utils::evo_wrapper::{run_metrics_py, EvoApeArg, EvoRpeArg, PlotArg};
 use crate::utils::plots::{ape_line_chart, cpu_load_line_chart, memory_usage_line_chart, rpe_line_chart};
@@ -510,6 +510,25 @@ impl IterationService {
         // get test definition, if it matches the Drop test need to mount an 
         // additional file to /rustle/config/drop_config.yaml!
         let test_def = self.repo.get_test_def(iteration).await?;
+
+
+
+
+
+
+
+
+
+
+        >>SAVE THE TEST DEFINITION AS AN ENTRY TO ALGORITHM RUN/TEST EXECUTION!!!!<<
+
+
+
+
+
+
+
+
 
 
         //Set up the binds config to mount these volumes inside our container

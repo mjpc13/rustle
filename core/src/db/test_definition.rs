@@ -1,5 +1,7 @@
 use std::sync::{Arc};
 
+use log::warn;
+use rand::seq::IndexedRandom;
 use surrealdb::{engine::local::Db, sql::Thing, Surreal};
 use tokio::sync::Mutex;
 use crate::{models::{TestDefinition, TestExecution}, services::DbError};
@@ -241,6 +243,24 @@ impl TestDefinitionRepo {
 
         Ok(())
     
+    }
+
+    pub async fn get_by_algo_dataset_type(&self, algo_name: &str, dataset_name: &str, test_type: &str) -> Result<Vec<TestDefinition>, DbError>{
+
+        let mut resp = self.conn.lock().await
+            .query("SELECT * FROM test_definition WHERE $algo_name IN algo_list AND dataset_name = $dataset_name AND test_type.type = $test_type;")
+            .bind(("algo_name", algo_name.to_string()))
+            .bind(("dataset_name", dataset_name.to_string()))
+            .bind(("test_type", test_type.to_string()))
+            .await?;
+
+        let vec: Vec<TestDefinition> = resp.take(0)?;
+
+        if vec.is_empty(){
+            return Err(DbError::Empty("There is no Test Definitions with those parameters.".into()));
+        }
+
+        Ok(vec)
     }
 
 }

@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 use surrealdb::sql::Thing;
 use std::{fmt, hash::{DefaultHasher, Hash, Hasher}};
 
+use crate::models::{metric::StatisticalMetricsStamped, TestDefinition};
+
 use super::{metric::Metric, Algorithm};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -12,12 +14,17 @@ pub struct AlgorithmRun {
     pub bag_speed: f32,
     pub num_iterations: u8,
     pub metrics: Vec<Metric>, 
+    pub cpu_load_list: Vec<StatisticalMetricsStamped>,
+    pub mem_usage_list: Vec<StatisticalMetricsStamped>,
+    pub ape_list: Vec<StatisticalMetricsStamped>,
+    pub rpe_list: Vec<StatisticalMetricsStamped>,
     pub created_at: DateTime<Utc>,
     pub duration_secs: f64,
+    pub test_type: String
 }
 
 impl AlgorithmRun {
-    pub fn new(bag_speed: f32, num_iterations: u8, algo: Algorithm) -> Self {
+    pub fn new(bag_speed: f32, num_iterations: u8, algo: Algorithm, test_type: String) -> Self {
 
         Self{
             id: None,
@@ -27,6 +34,11 @@ impl AlgorithmRun {
             duration_secs: 0.0,
             metrics: Vec::new(),
             algo: algo,
+            cpu_load_list: vec![],
+            mem_usage_list: vec![],
+            ape_list: vec![],
+            rpe_list: vec![],
+            test_type,
         }
     }
 

@@ -10,6 +10,7 @@ pub mod rob;
 pub use self::{
     cpu::CpuMetrics,
     pose_error::PoseErrorMetrics,
-    metric::{StatisticalMetrics, Metric},
+    metric::{StatisticalMetrics, StatisticalMetricsStamped, Metric},
+    rob::RobustnessMetric,
     stat::ContainerStats
 };

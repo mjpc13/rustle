@@ -3,7 +3,7 @@ use log::{error, info, warn};
 use rustle_core::{ models::{
         TestType::{Simple, Speed, Cut, Drop},
         algorithm_run::AlgorithmRun, metric::MetricType::{
-            Cpu, Frequency, Memory, PoseError, TemporalEfficiency
+            Cpu, Frequency, Memory, PoseError, TemporalEfficiency, Robustness
         }, test_definitions::TestDefinitionsConfig, ProgressMessage, TestExecution, TestExecutionStatus
     }, services::{TestDefinitionService, TestExecutionService}, utils::config::Config
 };
@@ -126,6 +126,7 @@ pub async fn handle_test(
                                     start_time: None,
                                     end_time: None,
                                     metrics: HashMap::new(),
+                                    dataset_name: test.dataset_name.clone(),
                                 };
 
                                 let _ = test_exec_service.start_execution(execution, &test, Some(msg_tx.clone())).await;
@@ -145,6 +146,7 @@ pub async fn handle_test(
                                     start_time: None,
                                     end_time: None,
                                     metrics: HashMap::new(),
+                                    dataset_name: test.dataset_name.clone(),
                                 };
 
                                 let _ = test_exec_service.start_execution(execution, &test, Some(msg_tx)).await;
@@ -361,7 +363,7 @@ fn show_simple(algo_runs: &Vec<AlgorithmRun>){
                 Frequency(statistical_metrics) => {
                                 freq =  format!("{:.3}", statistical_metrics.mean);
                             },
-                TemporalEfficiency(_) => (),
+                _ => (),
             }
         }
         
@@ -379,7 +381,6 @@ fn show_simple(algo_runs: &Vec<AlgorithmRun>){
 
     println!("{table}");
 }
-
 
 fn show_speed(exec: &TestExecution){
 
@@ -456,19 +457,20 @@ async fn show_detail(algo_runs: &Vec<AlgorithmRun>, test_exec_service: &TestExec
 
             match metric.metric_type {
                 Cpu(cpu_metrics) => {
-                                cpu = format!("- CPU Load: Mean= {:.3}%, Max= {:.3}%, Std= {:.3}\n", cpu_metrics.load.mean, cpu_metrics.load.max, cpu_metrics.load.std);
-                            },
+                                            cpu = format!("- CPU Load: Mean= {:.3}%, Max= {:.3}%, Std= {:.3}\n", cpu_metrics.load.mean, cpu_metrics.load.max, cpu_metrics.load.std);
+                                        },
                 Memory(memory_metrics) => {
-                                mem = format!("- Memory Usage: Max= {:.3}Mb, Trend= {:.3}Mb/s\n", memory_metrics.usage.max, memory_metrics.usage_trend_mb_sec);
-                            },
+                                            mem = format!("- Memory Usage: Max= {:.3}Mb, Trend= {:.3}Mb/s\n", memory_metrics.usage.max, memory_metrics.usage_trend_mb_sec);
+                                        },
                 PoseError(pose_error_metrics) => {
-                                ape = format!("- APE: RMSE= {:.3}, Mean= {:.3}, Max= {:.3}, Std= {:.3}\n", pose_error_metrics.ape.rmse.ok_or(0.0).unwrap(), pose_error_metrics.ape.mean, pose_error_metrics.ape.max, pose_error_metrics.ape.std);
-                                rpe = format!("- RPE: RMSE= {:.3}, Mean= {:.3}, Max= {:.3}, Std= {:.3}\n", pose_error_metrics.rpe.rmse.ok_or(0.0).unwrap(), pose_error_metrics.rpe.mean, pose_error_metrics.rpe.max, pose_error_metrics.rpe.std);
-                            },
+                                            ape = format!("- APE: RMSE= {:.3}, Mean= {:.3}, Max= {:.3}, Std= {:.3}\n", pose_error_metrics.ape.rmse.ok_or(0.0).unwrap(), pose_error_metrics.ape.mean, pose_error_metrics.ape.max, pose_error_metrics.ape.std);
+                                            rpe = format!("- RPE: RMSE= {:.3}, Mean= {:.3}, Max= {:.3}, Std= {:.3}\n", pose_error_metrics.rpe.rmse.ok_or(0.0).unwrap(), pose_error_metrics.rpe.mean, pose_error_metrics.rpe.max, pose_error_metrics.rpe.std);
+                                        },
                 Frequency(statistical_metrics) => {
-                                freq =  format!("- Frequency (Hz): Mean: {:.3}, Min: {:.3}, Max: {:.3}, Std: {:.3}\n", statistical_metrics.mean, statistical_metrics.min, statistical_metrics.max, statistical_metrics.std);
-                            },
+                                            freq =  format!("- Frequency (Hz): Mean: {:.3}, Min: {:.3}, Max: {:.3}, Std: {:.3}\n", statistical_metrics.mean, statistical_metrics.min, statistical_metrics.max, statistical_metrics.std);
+                                        },
                 TemporalEfficiency(_) => (),
+                Robustness(_) => (),
             }
         }
         println!("{ape}{rpe}{freq}{cpu}{mem}\n\n Iterations:");
@@ -491,23 +493,24 @@ async fn show_detail(algo_runs: &Vec<AlgorithmRun>, test_exec_service: &TestExec
     
                 match metric.metric_type {
                     Cpu(cpu_metrics) => {
-                                        cpu = format!("{:.3}", cpu_metrics.load.mean);
-                                    },
+                                                        cpu = format!("{:.3}", cpu_metrics.load.mean);
+                                                    },
                     Memory(memory_metrics) => {
-                                        mem = format!("{:.3}", memory_metrics.usage.max);
-                                    },
+                                                        mem = format!("{:.3}", memory_metrics.usage.max);
+                                                    },
                     PoseError(pose_error_metrics) => {
-                                        rmse_ape = format!("{:.3}", pose_error_metrics.ape.rmse.ok_or(0.0).unwrap());
-                                        max_ape = format!("{:.3}", pose_error_metrics.ape.max);
-                                        std_ape = format!("{:.3}", pose_error_metrics.ape.std);
-                                        rmse_rpe = format!("{:.3}", pose_error_metrics.rpe.rmse.ok_or(0.0).unwrap());
-                                        max_rpe = format!("{:.3}", pose_error_metrics.rpe.max);
-                                        std_rpe = format!("{:.3}", pose_error_metrics.rpe.std);
-                                    },
+                                                        rmse_ape = format!("{:.3}", pose_error_metrics.ape.rmse.ok_or(0.0).unwrap());
+                                                        max_ape = format!("{:.3}", pose_error_metrics.ape.max);
+                                                        std_ape = format!("{:.3}", pose_error_metrics.ape.std);
+                                                        rmse_rpe = format!("{:.3}", pose_error_metrics.rpe.rmse.ok_or(0.0).unwrap());
+                                                        max_rpe = format!("{:.3}", pose_error_metrics.rpe.max);
+                                                        std_rpe = format!("{:.3}", pose_error_metrics.rpe.std);
+                                                    },
                     Frequency(statistical_metrics) => {
-                                        freq =  format!("{:.3}", statistical_metrics.mean);
-                                    },
+                                                        freq =  format!("{:.3}", statistical_metrics.mean);
+                                                    },
                     TemporalEfficiency(_) => (),
+                    Robustness(robustness_metric) => todo!(),
                 }
             }
             table.add_row(vec![

@@ -4,14 +4,18 @@ use std::{collections::HashMap, fs, sync::Arc};
 use charming::Chart;
 use charming::{theme::Theme, ImageRenderer};
 use chrono::Utc;
+use itertools::Itertools;
 use log::{warn};
 use tokio::sync::mpsc::Sender;
 use tokio::sync::Mutex;
+use yaml_rust2::yaml::Hash;
 
-use crate::models::metric::{Metric, StatisticalMetrics};
+use crate::models::metric::{Metric, StatisticalMetrics, MetricType};
 use crate::models::metrics::pose_error::{APE, RPE};
 use crate::models::metrics::tes::TemporalEfficiencyMetric;
-use crate::models::metrics::PoseErrorMetrics;
+use crate::models::metrics::{PoseErrorMetrics, RobustnessMetric};
+use crate::models::test_definitions::{simple, Cut};
+use crate::models::test_definitions::test_definition::RobustnessType;
 use crate::models::{AlgorithmRun, ProgressMessage};
 use crate::utils::config::Config;
 
@@ -52,7 +56,7 @@ impl TestExecutionService {
         // Create algorithm runs and their iterations and based on test type
         match &def.test_type {
             TestType::Simple => self.create_simple_runs(&execution, &list_algos).await?,
-            TestType::Speed(params) => self.create_speedbag_runs(&execution, &list_algos, params).await?,
+            TestType::Speed(params) => self.create_speed_runs(&execution, &list_algos, params).await?,
             TestType::Drop(params) => self.create_drop_runs(&execution, &list_algos, params).await?,
             TestType::Cut(params) => self.create_cut_runs(&execution, &list_algos, params).await?
         }
@@ -96,14 +100,43 @@ impl TestExecutionService {
 
         // Compute metrics for speed test
         match &def.test_type {
-            TestType::Simple => todo!(),
+            TestType::Simple => (),
             TestType::Speed(_) => {
                 let hash_algo_run = Self::group_by_algo(algo_run_list);
                 let metrics: HashMap<Algorithm, Metric> = Self::compute_metrics_speed(hash_algo_run);
 
                 let _ = self.complete_execution(execution.clone(), metrics).await;
             },
-            TestType::Drop(_) => todo!(),
+            TestType::Drop(drop_params) => {
+                let mut simple_algo_run_list: Vec<AlgorithmRun> = vec![];
+                let dataset = self.execution_repo.get_dataset_by_name(&execution.dataset_name).await?;
+
+                for algo in list_algos{
+                    let simple_tests = self.definition_repo.get_by_algo_dataset_type(&algo.name, &execution.dataset_name, "simple").await?;
+
+                    //get the test definition with the highest amount of iterations
+                    let simple_exec = simple_tests.iter().max_by_key(|td| td.iterations).unwrap();
+                    let algo_run_list = self.execution_repo.get_algorithm_runs(&simple_exec.id.clone().unwrap()).await?;
+
+                    let simple_algo_run: AlgorithmRun = algo_run_list
+                        .into_iter()
+                        .filter(|run| run.algo.name == algo.name)
+                        .last().unwrap();
+
+                    simple_algo_run_list.push(simple_algo_run);
+                }
+
+
+                let metrics = Self::compute_metrics_drop(
+                    algo_run_list, 
+                    simple_algo_run_list, 
+                    drop_params, 
+                    dataset.duration
+                );
+
+                let _ = self.complete_execution(execution.clone(), metrics).await;
+
+            },
             TestType::Cut(_) => todo!(),
         }
 
@@ -202,7 +235,7 @@ impl TestExecutionService {
         Ok(())
     }
 
-    async fn create_speedbag_runs(
+    async fn create_speed_runs(
         &self,
         execution: &TestExecution,
         algo_list: &Vec<Algorithm>,
@@ -233,8 +266,36 @@ impl TestExecutionService {
         _params: &DropParams,
     ) -> Result<(), ProcessingError> {
         
-        //Migh be better if I pass the Degradations params in here
         for algorithm in algo_list {
+
+            //Check if there is any Simple run with the algorithm in the same dataset. If not Create a new Simple Run, with the 
+            // same parameters...
+
+            self.algorithm_run_service.create_run(
+                1.0, 
+                execution.num_iterations, 
+                &execution.id.as_ref().unwrap(), 
+                &algorithm.id.clone().unwrap(), 
+                "simple"
+            ).await?;
+
+            
+            //TODO, Now I ran a simple test at the same time as the cut/drop. 
+            //But if a simple test is already available I should just use it. Need to fix the matching timestamps problem
+            //let simple_tests = self.definition_repo.get_by_algo_dataset_type(&algorithm.name, &execution.dataset_name, "simple").await;
+            //match simple_tests{
+            //    Ok(_) => (),
+            //    Err(_) => {
+            //        //If does not exist create a "simple" algorithm run for performance comparison!
+            //        self.algorithm_run_service.create_run(
+            //            1.0, 
+            //            execution.num_iterations, 
+            //            &execution.id.as_ref().unwrap(), 
+            //            &algorithm.id.clone().unwrap(), 
+            //            "simple"
+            //        ).await?;
+            //    },
+            //};
 
             self.algorithm_run_service.create_run(
                 1.0,
@@ -259,6 +320,30 @@ impl TestExecutionService {
         for algorithm in algo_list {
 
             self.algorithm_run_service.create_run(
+                1.0, 
+                execution.num_iterations, 
+                &execution.id.as_ref().unwrap(), 
+                &algorithm.id.clone().unwrap(), 
+                "simple"
+            ).await?;
+
+            //TODO, Now I ran a simple test at the same time as the cut/drop. 
+            //But if a simple test is already available I should just use it. Need to fix the matching timestamps problem
+            //let simple_tests = self.definition_repo.get_by_algo_dataset_type(&algorithm.name, &execution.dataset_name, "simple").await;
+            //match simple_tests{
+            //    Ok(_) => (),
+            //    Err(_) => {
+            //        //If does not exist create a "simple" algorithm run for performance comparison!
+            //        self.algorithm_run_service.create_run(
+            //            1.0, 
+            //            execution.num_iterations, 
+            //            &execution.id.as_ref().unwrap(), 
+            //            &algorithm.id.clone().unwrap(), 
+            //            "simple"
+            //        ).await?;
+            //    },
+            //};
+            self.algorithm_run_service.create_run(
                 1.0,
                 execution.num_iterations,
                 &execution.id.as_ref().unwrap(),
@@ -281,7 +366,6 @@ impl TestExecutionService {
 
         let mut hash_metric:HashMap<String, Metric> = HashMap::new();
 
-        warn!("My metrics: {:?}", metrics);
         metrics.into_iter().for_each(|(al, v)|{
             hash_metric.insert(al.name, v.clone());
         });
@@ -291,7 +375,6 @@ impl TestExecutionService {
         let _ = self.execution_repo.update_execution(&execution).await.unwrap();
         Ok(())
     }
-
 
 
     pub async fn plot(&self, exec: TestExecution, algo_run_list: &Vec<AlgorithmRun>, path: &str, overwrite: bool, format:  &str, config: &Config) -> Result<HashMap<String, Chart>, PlotError>{
@@ -448,15 +531,13 @@ impl TestExecutionService {
 
                     for metric in algo_run.metrics{
                         match metric.metric_type {
-                            crate::models::metric::MetricType::Cpu(_) => (),
-                            crate::models::metric::MetricType::Memory(_) => (),
                             crate::models::metric::MetricType::PoseError(pose_error_metrics) => {
                                                         speed_pose.insert(algo_run.bag_speed.to_string(), pose_error_metrics);
                                                     },
                             crate::models::metric::MetricType::Frequency(statistical_metrics) => {
                                                         speed_freq.insert(algo_run.bag_speed.to_string(), statistical_metrics);
                                                     },
-                            crate::models::metric::MetricType::TemporalEfficiency(_) => (),
+                            _ => (),
                         }
                     }
                 }
@@ -478,6 +559,46 @@ impl TestExecutionService {
 
     }
 
+    fn compute_metrics_drop(
+        drop_vec: Vec<AlgorithmRun>,
+        simple_vec: Vec<AlgorithmRun>,
+        drop_params: &DropParams,
+        duration: Option<f32>
+    ) -> HashMap<Algorithm, Metric> {
+
+        let mut algo_metric: HashMap<Algorithm, Metric> = HashMap::new();
+
+        let duration = duration.unwrap();
+
+        let simple_map: HashMap<Algorithm, &AlgorithmRun> = simple_vec
+            .iter()
+            .map(|run| (run.algo.clone(), run))
+            .collect();
+
+        for drop_run in drop_vec {
+            if let Some(simple_run) = simple_map.get(&drop_run.algo) {
+
+                let metric = Metric { 
+                    id: None, 
+                    metric_type: MetricType::Robustness(
+                        RobustnessMetric::new(
+                            RobustnessType::Drop(drop_params.drop_list.clone()),
+                            duration,
+                            &drop_run,
+                            &simple_run
+                        ).unwrap()
+                    )
+                };
+
+                algo_metric.insert(drop_run.algo.clone(), metric);
+            }
+        }
+
+        algo_metric
+    }
+
+
+
     fn group_by_algo(runs: Vec<AlgorithmRun>) -> HashMap<Algorithm, Vec<AlgorithmRun>> {
         let mut grouped: HashMap<Algorithm, Vec<AlgorithmRun>> = HashMap::new();
     
@@ -489,9 +610,6 @@ impl TestExecutionService {
     
         grouped
     }
-
-
-
 
 
 }
