@@ -1,7 +1,7 @@
 use std::{collections::{BTreeMap, HashMap}, fs, path::Path};
 
 use crate::{
-    db::AlgorithmRunRepo, models::{algorithm_run::AlgorithmRun, metric::{Metric, StatisticalMetrics, StatisticalMetricsStamped}, metrics::{pose_error::{APE, RPE}, ContainerStats, CpuMetrics}, Algorithm, Iteration, TestDefinition}, services::error::ProcessingError, utils::{config::Config, plots::{algorithm_ape_line_chart, algorithm_cpu_load_chart, algorithm_memory_usage_chart, algorithm_rpe_line_chart}}
+    db::AlgorithmRunRepo, models::{algorithm_run::AlgorithmRun, metric::{Metric, StatisticalMetrics, StatisticalMetricsStamped}, metrics::{pose_error::{APE, RPE}, ContainerStats, CpuMetrics}, Algorithm, Iteration, TestDefinition, TestType}, services::error::ProcessingError, utils::{config::Config, plots::{algorithm_ape_line_chart, algorithm_cpu_load_chart, algorithm_memory_usage_chart, algorithm_rpe_line_chart}}
 };
 
 use charming::Chart;
@@ -28,12 +28,12 @@ impl AlgorithmRunService {
         num_iterations: u8,
         test_execution_id: &Thing,
         algorithm_id: &Thing, 
-        test_type: &str
+        test_type: TestType
     ) -> Result<AlgorithmRun, ProcessingError> {
 
         let algo = self.repo.get_algorithm(algorithm_id).await?;
 
-        let mut run = AlgorithmRun::new(bag_speed, num_iterations, algo, test_type.to_owned());
+        let mut run = AlgorithmRun::new(bag_speed, num_iterations, algo, test_type.clone(), test_execution_id.clone());
         self.repo.save(&mut run, test_execution_id, algorithm_id).await?;
 
         
@@ -44,12 +44,14 @@ impl AlgorithmRunService {
             let algo = self.repo.get_algorithm_by_run(&run).await?;
 
             match run.id.clone(){
-                Some(thing) => self.iter_service.create(i, algo, &thing, test_type.to_string()).await?,
+                Some(thing) => {
+
+                    self.iter_service.create(i, algo, &thing, test_execution_id, test_type.clone()).await?
+                },
                 None => warn!("ID of algorithm_run was empty")
             };
-
         }
-
+        
         Ok(run)
     }
 
@@ -59,7 +61,7 @@ impl AlgorithmRunService {
 
         let aggregate_metrics = Metric::mean(metric_list);  //Compute the "mean for buckets of space" for CPU/Memory/APE/RPE;
 
-        let _ = self.compute_buckets(run);
+        let _ = self.compute_buckets(run).await;
 
         for metric in aggregate_metrics{
             let _ = self.repo.update_aggregate_metric(run, metric).await;
@@ -76,7 +78,6 @@ impl AlgorithmRunService {
 
         let mut hash: HashMap<String, Chart> = HashMap::new();
         let iterations = self.repo.get_iterations(run).await.unwrap();
-        let test_def: TestDefinition = self.repo.get_test_definition(&run).await.unwrap();
 
         let iter_path = self.get_parents_string(run).await.unwrap();
         let full_path = format!("{path}/{iter_path}");
@@ -98,8 +99,8 @@ impl AlgorithmRunService {
                 let chart = match f {
                     "aggregated_cpu_load" => self.plot_cpu_load(&iterations, config).await,
                     "aggregated_memory_usage" => self.plot_memory_usage(&iterations, config).await,
-                    "aggregated_ape" => self.plot_ape(&iterations, &test_def, config).await,
-                    "aggregated_rpe" => self.plot_rpe(&iterations, &test_def, config).await,
+                    "aggregated_ape" => self.plot_ape(&iterations, &run.test_type, config).await,
+                    "aggregated_rpe" => self.plot_rpe(&iterations, &run.test_type, config).await,
                     &_ => todo!("This should be fine")
                 };
 
@@ -114,7 +115,7 @@ impl AlgorithmRunService {
         Ok(hash)
     }
 
-    async fn plot_ape(&self, iterations: &Vec<Iteration>, test_def: &TestDefinition, config: &Config) -> Result<Chart, PlotError>{
+    async fn plot_ape(&self, iterations: &Vec<Iteration>, test_def: &TestType, config: &Config) -> Result<Chart, PlotError>{
 
         let mut algo_ape: Vec<Vec<APE>> = Vec::new();
 
@@ -129,7 +130,7 @@ impl AlgorithmRunService {
         algorithm_ape_line_chart(algo_ape, test_def, config)
     }
 
-    async fn plot_rpe(&self, iterations: &Vec<Iteration>, test_def: &TestDefinition, config: &Config) -> Result<Chart, PlotError>{
+    async fn plot_rpe(&self, iterations: &Vec<Iteration>, test_def: &TestType, config: &Config) -> Result<Chart, PlotError>{
 
         let mut algo_rpe: Vec<Vec<RPE>> = Vec::new();
 

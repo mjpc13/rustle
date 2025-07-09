@@ -59,7 +59,7 @@ impl IterationService {
         Self { repo, docker, ros_service, dataset_service, stat_service, metric_service, config }
     }
 
-    pub async fn create(&self, iter_number: u8, algo:Algorithm, algorithm_run_id: &Thing, test_type: String) -> Result<(), DbError> {
+    pub async fn create(&self, iter_number: u8, algo:Algorithm, algorithm_run_id: &Thing, exec_id: &Thing, test_type: TestType) -> Result<(), DbError> {
         
         let sanitized = algo.name.replace(|c: char| !c.is_alphanumeric(), "_")
         .to_lowercase();
@@ -83,6 +83,7 @@ impl IterationService {
             container: docker_container,
             created_at: Utc::now(),
             test_type,
+            exec_id: exec_id.clone()
         };
 
         let _ = self.repo.save(&mut iteration, algorithm_run_id).await;
@@ -92,7 +93,7 @@ impl IterationService {
     pub async fn run(&self, iter: Iteration, msg_tx: Option<Sender<ProgressMessage>>) -> Result<(), RunError> {
 
         let algorithm = self.repo.get_algorithm(&iter).await.unwrap(); //Maybe wrap in an Arc<>, Also, maybe wrap iter in an Arc
-    
+
         // -- CREATE THE CONTAINER ---
         let _ = self.start_container(&iter).await;
 
@@ -104,7 +105,7 @@ impl IterationService {
             _ => format!("rosbag play -s {} -u {} -r {} --clock /rustle/dataset/*.bag", self.config.rustle.dataset_start, self.config.rustle.dataset_duration, algorithm_run.bag_speed)
         };
 
-        let rustle_cmd = format!("roslaunch rustle-ros rustle.launch --wait test_type:={} algo_topic:={}", &iter.test_type, &algorithm.odom_topics[0]);
+        let rustle_cmd = format!("roslaunch rustle-ros rustle.launch --wait test_type:={} algo_topic:={}", &iter.test_type.as_str(), &algorithm.odom_topics[0]);
 
         //Vector of commands to run inside the container
         let commands: Vec<_> = vec![
@@ -409,7 +410,7 @@ impl IterationService {
     }
 
     //Probably create a plot that receives a iteration ID? then gets whatever it needs...
-    pub async fn plot(&self, iter: Iteration, def: &TestDefinition, path: &str, overwrite: bool, format:  &str) -> Result<HashMap<String, Chart>, PlotError>{
+    pub async fn plot(&self, iter: Iteration, test_type: &TestType, path: &str, overwrite: bool, format:  &str) -> Result<HashMap<String, Chart>, PlotError>{
 
         let mut hash_chart: HashMap<String, Chart> = HashMap::new();
 
@@ -438,8 +439,8 @@ impl IterationService {
                 let chart = match f {
                     "cpu_load" => cpu_load_line_chart(&stats, &self.config),
                     "memory_usage" => memory_usage_line_chart(&stats, &self.config),
-                    "ape" => ape_line_chart(&ape_data, def, &self.config),
-                    "rpe" => rpe_line_chart(&rpe_data, def, &self.config),
+                    "ape" => ape_line_chart(&ape_data, test_type, &self.config),
+                    "rpe" => rpe_line_chart(&rpe_data, test_type, &self.config),
                     &_ => todo!("This should be fine")
                 };
                 hash_chart.insert(filepath, chart?);
@@ -509,27 +510,6 @@ impl IterationService {
 
         // get test definition, if it matches the Drop test need to mount an 
         // additional file to /rustle/config/drop_config.yaml!
-        let test_def = self.repo.get_test_def(iteration).await?;
-
-
-
-
-
-
-
-
-
-
-        >>SAVE THE TEST DEFINITION AS AN ENTRY TO ALGORITHM RUN/TEST EXECUTION!!!!<<
-
-
-
-
-
-
-
-
-
 
         //Set up the binds config to mount these volumes inside our container
         let mut hm: HashMap<&str, &String> = HashMap::from([
@@ -540,7 +520,7 @@ impl IterationService {
         let mut cut_file = String::new();
 
         //Add an extra YAML file for the Drop configurations.
-        match test_def.test_type{
+        match &iteration.test_type{
             crate::models::TestType::Simple => {
                 hm.insert("/rustle/config/params.yaml", &algorithm.parameters);
             },

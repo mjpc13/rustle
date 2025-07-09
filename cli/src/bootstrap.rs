@@ -12,7 +12,6 @@ use rustle_core::{
 pub struct AppContext {
     pub algo_service: AlgorithmService,
     pub dataset_service: DatasetService,
-    pub test_def_service: TestDefinitionService,
     pub test_exec_service: TestExecutionService,
 }
 
@@ -30,7 +29,6 @@ pub async fn build_app() -> Result<AppContext, Box<dyn std::error::Error>> {
     // Repositories
     let algo_repo = AlgorithmRepo::new(conn_m.clone());
     let dataset_repo = DatasetRepo::new(conn_m.clone());
-    let test_def_repo = TestDefinitionRepo::new(conn_m.clone());
     let test_exec_repo = TestExecutionRepo::new(conn_m.clone());
     let odom_repo = OdometryRepo::new(conn_m.clone());
     let algo_run_repo = AlgorithmRunRepo::new(conn_m.clone());
@@ -41,7 +39,6 @@ pub async fn build_app() -> Result<AppContext, Box<dyn std::error::Error>> {
     // Services
     let algo_service = AlgorithmService::new(algo_repo, docker.clone());
     let dataset_service = DatasetService::new(dataset_repo);
-    let test_def_service = TestDefinitionService::new(test_def_repo.clone());
     let ros_service = RosService::new(odom_repo);
     let stat_service = StatService::new(stat_repo);
     let metric_service = MetricService::new(metric_repo);
@@ -56,7 +53,6 @@ pub async fn build_app() -> Result<AppContext, Box<dyn std::error::Error>> {
     let algo_run_service = AlgorithmRunService::new(algo_run_repo, iteration_service.clone());
     let test_exec_service = TestExecutionService::new(
         test_exec_repo,
-        test_def_repo,
         algo_run_service,
         iteration_service,
     );
@@ -64,7 +60,6 @@ pub async fn build_app() -> Result<AppContext, Box<dyn std::error::Error>> {
     Ok(AppContext {
         algo_service,
         dataset_service,
-        test_def_service,
         test_exec_service,
     })
 }

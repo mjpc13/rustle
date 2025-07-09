@@ -17,7 +17,7 @@ pub enum AlgorithmError {
 }
 
 #[derive(Debug, Error)]
-pub enum TestDefinitionError {
+pub enum TestExecutionError {
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
     
@@ -34,9 +34,9 @@ pub enum TestDefinitionError {
 #[derive(Debug)]
 pub struct ValidationError(pub String);
 
-impl From<ValidationError> for TestDefinitionError {
+impl From<ValidationError> for TestExecutionError {
     fn from(err: ValidationError) -> Self {
-        TestDefinitionError::Validation(err.0)
+        TestExecutionError::Validation(err.0)
     }
 }
 
@@ -46,16 +46,6 @@ impl std::fmt::Display for ValidationError {
     }
 }
 impl std::error::Error for ValidationError {}
-
-//Metric Errors
-//#[derive(Debug, thiserror::Error)]
-//pub enum MetricError {
-//    #[error("Validation error: {0}")]
-//    Validation(String),
-//    
-//    #[error("Database error: {0}")]
-//    Database(#[from] surrealdb::Error),
-//}
 
 //ROS errors
 #[derive(Debug, thiserror::Error)]

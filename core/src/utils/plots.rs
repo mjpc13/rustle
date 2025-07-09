@@ -4,7 +4,7 @@ use core::f32;
 use std::collections::{BTreeMap, HashMap};
 
 use chrono::{DateTime, Utc};
-use crate::{models::{metrics::{pose_error::{APE, RPE}, ContainerStats}, AlgorithmRun, TestDefinition, TestType}, services::error::PlotError};
+use crate::{models::{metrics::{pose_error::{APE, RPE}, ContainerStats}, AlgorithmRun, TestType}, services::error::PlotError};
 
 use charming::{
     component::{Axis, Legend}, element::{AreaStyle, AxisLabel, AxisType, ItemStyle, Label, LabelPosition, LineStyle, LineStyleType, MarkArea, MarkAreaData, MarkLine, MarkLineData, MarkLineVariant, Orient, Symbol, TextStyle}, series::Line, Chart
@@ -198,7 +198,7 @@ pub fn memory_usage_line_chart(data: &Vec<ContainerStats>, config: &Config) -> R
     Ok(chart)
 }
 
-pub fn ape_line_chart(data: &Vec<APE>, test_definition: &TestDefinition, config: &Config) -> Result<Chart, PlotError> {
+pub fn ape_line_chart(data: &Vec<APE>, test_type: &TestType, config: &Config) -> Result<Chart, PlotError> {
     let time: Vec<f32> = data.iter().map(|ape| ape.time_from_start).collect();
     let ape_values: Vec<f32> = data.iter().map(|ape| ape.value).collect();
 
@@ -208,7 +208,7 @@ pub fn ape_line_chart(data: &Vec<APE>, test_definition: &TestDefinition, config:
         0.0
     };
 
-    let area_data = get_area_from_def(test_definition);
+    let area_data = get_area_from_def(test_type);
 
     let xy_data: Vec<Vec<f32>> = time
         .iter()
@@ -276,7 +276,7 @@ pub fn ape_line_chart(data: &Vec<APE>, test_definition: &TestDefinition, config:
 
 }
 
-pub fn rpe_line_chart(data: &Vec<RPE>, test_definition: &TestDefinition, config: &Config) -> Result<Chart, PlotError> {
+pub fn rpe_line_chart(data: &Vec<RPE>, test_type: &TestType, config: &Config) -> Result<Chart, PlotError> {
     let time: Vec<f32> = data.iter().map(|rpe| rpe.time_from_start).collect();
     let rpe_values: Vec<f32> = data.iter().map(|rpe| rpe.value).collect();
 
@@ -286,7 +286,7 @@ pub fn rpe_line_chart(data: &Vec<RPE>, test_definition: &TestDefinition, config:
         0.0
     };
 
-    let area_data = get_area_from_def(&test_definition);
+    let area_data = get_area_from_def(&test_type);
 
     let xy_data: Vec<Vec<f32>> = time
         .iter()
@@ -579,7 +579,7 @@ pub fn algorithm_cpu_load_chart(iterations: Vec<Vec<ContainerStats>>, config: &C
 
 }
 
-pub fn algorithm_ape_line_chart(iterations: Vec<Vec<APE>>, test_definition: &TestDefinition, config: &Config) -> Result<Chart, PlotError> {
+pub fn algorithm_ape_line_chart(iterations: Vec<Vec<APE>>, test_type: &TestType, config: &Config) -> Result<Chart, PlotError> {
 
     // Process each iteration to get Memory load percentages
     let mut time_buckets: BTreeMap<i64, Vec<f32>> = BTreeMap::new(); // To put multiple memory usages in the approx the same time;
@@ -607,7 +607,7 @@ pub fn algorithm_ape_line_chart(iterations: Vec<Vec<APE>>, test_definition: &Tes
         }
     }
 
-    let area_data = get_area_from_def(test_definition);
+    let area_data = get_area_from_def(test_type);
 
     // Convert to Vec<DataItem> with statistics
     let data_items: Vec<DataItem> = time_buckets
@@ -688,7 +688,7 @@ pub fn algorithm_ape_line_chart(iterations: Vec<Vec<APE>>, test_definition: &Tes
     Ok(chart)
 }
 
-pub fn algorithm_rpe_line_chart(iterations: Vec<Vec<RPE>>, test_definition: &TestDefinition, config: &Config) -> Result<Chart, PlotError> {
+pub fn algorithm_rpe_line_chart(iterations: Vec<Vec<RPE>>, test_type: &TestType, config: &Config) -> Result<Chart, PlotError> {
 
     // Process each iteration to get Memory load percentages
     let mut time_buckets: BTreeMap<i64, Vec<f32>> = BTreeMap::new(); // To put multiple memory usages in the approx the same time;
@@ -717,7 +717,7 @@ pub fn algorithm_rpe_line_chart(iterations: Vec<Vec<RPE>>, test_definition: &Tes
         }
     }
 
-    let area_data = get_area_from_def(test_definition);
+    let area_data = get_area_from_def(test_type);
 
     // Convert to Vec<DataItem> with statistics
     let data_items: Vec<DataItem> = time_buckets
@@ -1269,9 +1269,9 @@ pub fn test_rpe_line_chart(data: &HashMap<AlgorithmRun, Vec<Vec<RPE>>>, config: 
 
 //Helper functions
 
-fn get_area_from_def(test_def: &TestDefinition) -> Vec<MarkArea>{  
+fn get_area_from_def(test_type: &TestType) -> Vec<MarkArea>{  
 
-    match &test_def.test_type{
+    match &test_type{
         TestType::Simple => vec![],
         TestType::Speed(_speed_test_params) => vec![],
         TestType::Drop(drop_params) => {

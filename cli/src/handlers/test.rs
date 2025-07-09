@@ -5,13 +5,13 @@ use rustle_core::{ models::{
         algorithm_run::AlgorithmRun, metric::MetricType::{
             Cpu, Frequency, Memory, PoseError, TemporalEfficiency, Robustness
         }, test_definitions::TestDefinitionsConfig, ProgressMessage, TestExecution, TestExecutionStatus
-    }, services::{TestDefinitionService, TestExecutionService}, utils::config::Config
+    }, services::{TestExecutionService}, utils::config::Config
 };
 use tokio::sync::mpsc;
 
 
 
-use crate::args::{CleanTest, ShowTest, TestCommand, TestSubCommand};
+use crate::args::{AddTest, CleanTest, RunTest, ShowTest, TestCommand, TestSubCommand};
 use std::{error::Error, fs::{create_dir_all, File}, path::Path};
 use serde_yaml::from_reader;
 
@@ -22,21 +22,14 @@ use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 
 pub async fn handle_test(
     cmd: TestCommand,
-    service: &TestDefinitionService,
-    test_exec_service: &TestExecutionService,
+    service: &TestExecutionService,
 ) -> Result<(), Box<dyn Error>> {
     match cmd.command {
         TestSubCommand::Add(add) => {
-                                if let Some(file_path) = add.file {
-                                    let _config: TestDefinitionsConfig = load_yaml_config(&file_path)?;
-                                    let defs = service.create_from_yaml(&file_path).await?;
-                                    println!("Added {} test definitions from '{}'", defs.len(), file_path);
-                                } else {
-                                    println!("YAML file required for adding test definitions (use --file)");
-                                }
+                                handle_add_cmd(add, service).await;
                     }
         TestSubCommand::List => {
-                        let tests = service.get_all().await;
+                        let tests = service.get_all().await.unwrap();
 
                         if tests.is_empty() {
                             println!("No test definitions found.");
@@ -50,11 +43,11 @@ pub async fn handle_test(
 
                         for test in tests {
                             table.add_row(vec![
-                                test.name,
-                                format!("{:?}", test.test_type),
-                                test.iterations.to_string(),
-                                format!("{:?}", test.dataset_name),
-                                format!("{:?}", test.algo_list),
+                                test.def.name,
+                                format!("{:?}", test.def.test_type),
+                                test.def.iterations.to_string(),
+                                format!("{:?}", test.def.dataset_name),
+                                format!("{:?}", test.def.algo_list),
                             ]);
                         }
 
@@ -65,94 +58,7 @@ pub async fn handle_test(
                         println!("Deleted test definition '{}'", del.name);
                     }
         TestSubCommand::Run(run) => {
-                        
-                        let (msg_tx, mut msg_rx) = mpsc::channel::<ProgressMessage>(100);
-
-
-                        let multi = Arc::new(MultiProgress::new());
-                        let bars = Arc::new(Mutex::new(HashMap::new()));
-
-                        tokio::spawn({
-                            let multi = multi.clone();
-                            let bars = bars.clone();
-                            async move {
-                                while let Some(msg) = msg_rx.recv().await {
-                                    let mut bars = bars.lock().unwrap();
-                                
-                                    let bar = bars.entry(msg.iteration_num).or_insert_with(|| {
-                                        let pb = multi.add(ProgressBar::new((msg.total_duration * 1000.0) as u64));
-                                        pb.set_style(
-                                            ProgressStyle::with_template(
-                                                "{elapsed_precise} | {prefix} |> {bar:40.cyan/blue} {percent}% | {pos:.2}/{len:.2} sec"
-                                            )
-                                            .unwrap()
-                                            .progress_chars("█▇▅▃▁  "),
-                                        );
-                                        pb.set_prefix(format!(
-                                            "\x1b[93m{} | Iter {}\x1b[0m",
-                                            msg.algo, msg.iteration_num
-                                        ));
-                                        pb
-                                    });
-                                
-                                    bar.set_position((msg.duration * 1000.0) as u64);
-                                }
-                            
-                                // Finish remaining bars
-                                for bar in bars.lock().unwrap().values() {
-                                    bar.finish();
-                                }
-                            }
-                        });
-
-
-                        // If --all flag is present, run all test definitions
-                        if run.all {
-                            let tests = service.get_all().await;
-                            if tests.is_empty() {
-                                println!("No test definitions available to run.");
-                                return Ok(());
-                            }
-
-                            // Loop through all tests and start execution
-                            for test in tests {
-                                info!("Running test: {}", test.name);
-
-                                // Create initial execution object
-                                let execution = TestExecution {
-                                    id: None,
-                                    status: TestExecutionStatus::Scheduled,
-                                    num_iterations: test.iterations,
-                                    start_time: None,
-                                    end_time: None,
-                                    metrics: HashMap::new(),
-                                    dataset_name: test.dataset_name.clone(),
-                                };
-
-                                let _ = test_exec_service.start_execution(execution, &test, Some(msg_tx.clone())).await;
-                            }
-
-                            println!("Started execution for all tests.");
-                        } else {
-                            // If --all isn't present, execute a specific test (by name)
-                            if let Some(name) = run.name {
-                                let test = service.get_by_name(&name).await?.unwrap();
-                                info!("Running test: {}", test.name);
-
-                                let execution = TestExecution {
-                                    id: None,
-                                    status: TestExecutionStatus::Scheduled,
-                                    num_iterations: test.iterations,
-                                    start_time: None,
-                                    end_time: None,
-                                    metrics: HashMap::new(),
-                                    dataset_name: test.dataset_name.clone(),
-                                };
-
-                                let _ = test_exec_service.start_execution(execution, &test, Some(msg_tx)).await;
-                                //println!("Started execution for test: {}", test.name);
-                            }
-                        }
+                        let _ = handle_run_cmd(run, service).await;
                     }
         TestSubCommand::Plot(plot_test) => {
             
@@ -176,7 +82,7 @@ pub async fn handle_test(
                     }
 
                     if plot_test.all {
-                        let tests = service.get_all().await;
+                        let tests = service.get_all().await?;
                         if tests.is_empty() {
                             warn!("No test definitions available to plot.");
                             return Ok(());
@@ -191,10 +97,10 @@ pub async fn handle_test(
 
                             //plot for every tests, but some tests may not have the necessary data, 
                             // this will throw an error for sure. DEAL WITH IT
-                            if let Err(e) = test_exec_service
+                            if let Err(e) = service
                                 .plot_execution(&test, &output_path, plot_test.overwrite, &plot_test.format)
                                 .await {
-                                    warn!("Failed to plot test '{}': {}", test.name, e);
+                                    warn!("Failed to plot test '{}': {}", test.def.name, e);
                             }
 
                         }
@@ -212,19 +118,18 @@ pub async fn handle_test(
                                 }
                             };
 
-                            if let Err(e) = test_exec_service
+                            if let Err(e) = service
                                 .plot_execution(&test, &output_path, plot_test.overwrite, &plot_test.format)
                                 .await {
-                                    warn!("Failed to plot test '{}': {}", test.name, e);
+                                    warn!("Failed to plot test '{}': {}", test.def.name, e);
                             }
 
-                            // CALL THE PLOT THING FOR A SINGLE TEST DEF. BE CAREFULL THEY MIGHT NOT HAVE DATA YET!
                         }
                     }
 
                 },
         TestSubCommand::Show(show_test) => {
-                    let _ = handle_show_cmd(show_test, service, test_exec_service).await;
+                    let _ = handle_show_cmd(show_test, service).await;
                 },
         TestSubCommand::Clean(clean_test) => {
                     let _ = handle_clean_cmd(clean_test, service).await;
@@ -240,12 +145,11 @@ fn load_yaml_config<T: serde::de::DeserializeOwned>(path: &str) -> Result<T, Box
 }
 
 
-
-async fn handle_clean_cmd(clean_test: CleanTest, service: &TestDefinitionService)  -> Result<(), Box<dyn Error>>{
+async fn handle_clean_cmd(clean_test: CleanTest, service: &TestExecutionService)  -> Result<(), Box<dyn Error>>{
 
     // If --all flag is present, clean all test definitions
     if clean_test.all {
-        let tests = service.get_all().await;
+        let tests = service.get_all().await?;
         if tests.is_empty() {
             println!("No test definitions available to clean.");
             return Ok(());
@@ -253,7 +157,7 @@ async fn handle_clean_cmd(clean_test: CleanTest, service: &TestDefinitionService
 
         // Loop through all tests and start cleaning
         for test in tests {
-            service.clean_by_name(test).await?;
+            service.clean_exec(test).await?;
         }
         info!("All tests clean!");
 
@@ -263,7 +167,7 @@ async fn handle_clean_cmd(clean_test: CleanTest, service: &TestDefinitionService
 
             // If --all isn't present, execute a specific test (by name)
             let test = service.get_by_name(&name).await?.unwrap();
-            service.clean_by_name(test).await?;
+            service.clean_exec(test).await?;
             info!("Test {} clean!", &name);
         }
 
@@ -273,8 +177,98 @@ async fn handle_clean_cmd(clean_test: CleanTest, service: &TestDefinitionService
     Ok(())
 }
 
+async fn handle_add_cmd(add_test: AddTest, service: &TestExecutionService) -> Result<(), Box<dyn Error>>{
 
-async fn handle_show_cmd(show_test: ShowTest, service: &TestDefinitionService, test_exec_service: &TestExecutionService) -> Result<(), Box<dyn Error>>{
+    if let Some(file_path) = add_test.file {
+        let config: TestDefinitionsConfig = load_yaml_config(&file_path)?;
+
+        let mut exec_list = TestExecution::create_from_yaml(&file_path).await?;
+
+        //save the test executions in the database!
+
+        for mut exec in exec_list{
+            let _ = service.save_test_execution(&mut exec).await;
+        }
+
+    } else {
+        println!("YAML file required for adding test definitions (use --file)");
+    }
+
+
+
+    //Logic to write in a file! Depends on the output location and on the format!
+    Ok(())
+}
+
+
+async fn handle_run_cmd(run_test: RunTest, service: &TestExecutionService) -> Result<(), Box<dyn Error>>{
+         
+    let (msg_tx, mut msg_rx) = mpsc::channel::<ProgressMessage>(100);
+    let multi = Arc::new(MultiProgress::new());
+    let bars = Arc::new(Mutex::new(HashMap::new()));
+
+    tokio::spawn({
+        let multi = multi.clone();
+        let bars = bars.clone();
+        async move {
+            while let Some(msg) = msg_rx.recv().await {
+                let mut bars = bars.lock().unwrap();
+                                
+                let bar = bars.entry(msg.iteration_num).or_insert_with(|| {
+                    let pb = multi.add(ProgressBar::new((msg.total_duration * 1000.0) as u64));
+                    pb.set_style(
+                        ProgressStyle::with_template(
+                            "{elapsed_precise} | {prefix} |> {bar:40.cyan/blue} {percent}% | {pos:.2}/{len:.2} sec"
+                        )
+                        .unwrap()
+                        .progress_chars("█▇▅▃▁  "),
+                    );
+                    pb.set_prefix(format!(
+                        "\x1b[93m{} | Iter {}\x1b[0m",
+                        msg.algo, msg.iteration_num
+                    ));
+                    pb
+                });
+                                
+                bar.set_position((msg.duration * 1000.0) as u64);
+            }
+                            
+            // Finish remaining bars
+            for bar in bars.lock().unwrap().values() {
+                bar.finish();
+            }
+        }
+    });
+
+    // If --all flag is present, run all test definitions
+    if run_test.all {
+        let tests = service.get_all().await?;
+        if tests.is_empty() {
+            println!("No test definitions available to run.");
+            return Ok(());
+        }
+        // Loop through all tests and start execution
+        for test in tests {
+            let _ = service.start_execution(test, Some(msg_tx.clone())).await;
+        }
+        println!("Started execution for all tests.");
+    } else {
+        // If --all isn't present, execute a specific test (by name)
+        if let Some(name) = run_test.name {
+            let test = service.get_by_name(&name).await?.unwrap();
+            info!("Running test: {}", test.def.name);
+
+            let _ = service.start_execution(test, Some(msg_tx)).await;
+            //println!("Started execution for test: {}", test.name);
+        }
+    };
+
+    Ok(())
+
+}
+
+
+async fn handle_show_cmd(show_test: ShowTest, service: &TestExecutionService) -> Result<(), Box<dyn Error>>{
 
     //Check if an allowed format was passed
     let allowed_formats = ["csv", "table", "json"];
@@ -284,7 +278,7 @@ async fn handle_show_cmd(show_test: ShowTest, service: &TestDefinitionService, t
     }
 
     //Get the Test Definition By Name
-    let test = match service.get_by_name(&show_test.name).await? {
+    let exec = match service.get_by_name(&show_test.name).await? {
         Some(t) => t,
         None => {
             error!("Test definition '{}' not found", show_test.name);
@@ -293,24 +287,21 @@ async fn handle_show_cmd(show_test: ShowTest, service: &TestDefinitionService, t
         }
     };
 
-    // Get the corresponding test execution;
-    let exec: TestExecution = service.get_executions(test.clone()).await?;
-
     let exec_id = match &exec.id{
         Some(id) => id,
         None => return Ok(())
     };
 
-    let algo_runs = test_exec_service.get_algo_runs(&exec_id).await?;
+    let algo_runs = service.get_algo_runs(&exec_id).await?;
 
     if show_test.detailed{
-        match test.test_type {
-            Simple => show_detail(&algo_runs, &test_exec_service, &show_test.name).await,
+        match exec.def.test_type {
+            Simple => show_detail(&algo_runs, &service, &show_test.name).await,
             Speed(_) => {
                 println!("--- Overall Results for Speed Metric ---");
                 show_speed(&exec);
                 println!("--- Specific Results for Each Algorithm Run and Speed ---");
-                show_detail(&algo_runs, &test_exec_service, &show_test.name).await;
+                show_detail(&algo_runs, &service, &show_test.name).await;
             },
             Drop(_) => todo!(),
             Cut(_) => todo!(),
@@ -318,7 +309,7 @@ async fn handle_show_cmd(show_test: ShowTest, service: &TestDefinitionService, t
         
     } else {
         
-        match test.test_type {
+        match exec.def.test_type {
             Speed(_) => show_speed(&exec),
             _ => show_simple(&algo_runs),
         }
@@ -428,14 +419,14 @@ fn show_speed(exec: &TestExecution){
     println!("* - Estimation frequency did not drop by 10% for the given set.");
 }
 
-async fn show_detail(algo_runs: &Vec<AlgorithmRun>, test_exec_service: &TestExecutionService, test_name: &String){
+async fn show_detail(algo_runs: &Vec<AlgorithmRun>, service: &TestExecutionService, test_name: &String){
 
     println!("Test: {test_name}\n==================\n");
     
     for ar in algo_runs{
 
         //Get list of iterations and metrics!
-        let iterations = test_exec_service.get_iterations_by_algo_run(ar.clone()).await.unwrap();
+        let iterations = service.get_iterations_by_algo_run(ar.clone()).await.unwrap();
         let mut table = Table::new();
         table.load_preset(ASCII_MARKDOWN);
         table.set_content_arrangement(ContentArrangement::Dynamic);
@@ -487,7 +478,7 @@ async fn show_detail(algo_runs: &Vec<AlgorithmRun>, test_exec_service: &TestExec
             let mut mem = String::from("NaN");
             let mut freq = String::from("NaN");
 
-            let metrics = test_exec_service.get_metrics_by_iteration(it.clone()).await.unwrap();
+            let metrics = service.get_metrics_by_iteration(it.clone()).await.unwrap();
 
             for metric in metrics{
     

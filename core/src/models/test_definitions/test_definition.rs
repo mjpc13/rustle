@@ -19,6 +19,17 @@ pub enum TestType {
     Cut(CutParams)
 }
 
+impl TestType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            TestType::Simple => "simple",
+            TestType::Speed(_) => "speed",
+            TestType::Drop(_) => "drop",
+            TestType::Cut(_) => "cut",
+        }
+    }
+}
+
 pub enum RobustnessType {
     Cut(Vec<Cut>),
     Drop(Vec<Drop>),

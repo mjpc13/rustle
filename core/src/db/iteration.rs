@@ -287,37 +287,21 @@ impl IterationRepo {
     }
 
 
-
-    pub async fn get_test_def(&self, iteration: &Iteration) -> Result<TestDefinition, DbError>{
-
-        let iteration_id = iteration.id.clone()
-            .ok_or(DbError::MissingField("Iteration ID"))?;
+    pub async fn get_exec(&self, exec_id: &Thing) -> Result<TestExecution, DbError>{
 
         let mut result = self.conn.lock().await
             .query("
-                SELECT <-has_iteration<-algorithm_run<-has_run<-test_execution<-defines<-test_definition.* AS test_definition
-                FROM $iteration_id
+                SELECT * FROM $exec_id
             ")
-            .bind(("iteration_id", iteration_id.clone()))
+            .bind(("exec_id", exec_id.clone()))
             .await?;
 
-        
+        let test_exec: Vec<TestExecution> = result.take(0)?;
 
-        let algorithm_run: Option<Vec<TestDefinition>> = result.take("test_definition")?;
-
-        match algorithm_run{
-            Some(a) => {
-                a.into_iter().next()
+        test_exec.into_iter().next()
                 .ok_or_else(|| DbError::NotFound(
-                    format!("Dataset for iteration {} not found", iteration_id)
+                    format!("Test {} not found", exec_id)
                 ))
-            },
-            None => Err(DbError::NotFound(
-                format!("Dataset for iteration {} not found", iteration_id)
-            ))
-        }
-
-
     }
 
     pub async fn get_odometries(&self, iter: &Iteration) -> Result<Vec<Odometry>, DbError>{
@@ -425,7 +409,6 @@ impl IterationRepo {
             count.ok_or(DbError::NotFound("Unable to get number of odometries".to_owned()))
 
     }
-
 
     pub async fn get_metrics(&self, iter: &Iteration) -> Result<Vec<Metric>, DbError>{
 

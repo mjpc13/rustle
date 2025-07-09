@@ -17,10 +17,11 @@ use crate::models::metrics::{PoseErrorMetrics, RobustnessMetric};
 use crate::models::test_definitions::{simple, Cut};
 use crate::models::test_definitions::test_definition::RobustnessType;
 use crate::models::{AlgorithmRun, ProgressMessage};
+use crate::services::DbError;
 use crate::utils::config::Config;
 
 use crate::utils::plots::{test_ape_line_chart, test_memory_usage_line_chart, test_rpe_line_chart};
-use crate::{db::{TestDefinitionRepo, TestExecutionRepo}, models::{metrics::ContainerStats, test_definitions::{test_definition::{TestDefinition, TestType}, CutParams, DropParams}, test_execution::{TestExecution, TestExecutionStatus}, Algorithm, Iteration, SpeedTestParams}, services::error::ProcessingError, utils::plots::test_cpu_load_line_chart
+use crate::{db::{TestExecutionRepo}, models::{metrics::ContainerStats, test_definitions::{test_definition::{TestDefinition, TestType}, CutParams, DropParams}, test_execution::{TestExecution, TestExecutionStatus}, Algorithm, Iteration, SpeedTestParams}, services::error::ProcessingError, utils::plots::test_cpu_load_line_chart
 };
 
 use super::{error::PlotError, AlgorithmRunService, IterationService};
@@ -28,25 +29,47 @@ use surrealdb::sql::Thing;
 
 pub struct TestExecutionService {
     execution_repo: TestExecutionRepo,
-    definition_repo: TestDefinitionRepo,
     algorithm_run_service: AlgorithmRunService,
     iteration_service: IterationService,
 }
 
 impl TestExecutionService {
-    pub fn new(execution_repo: TestExecutionRepo, definition_repo: TestDefinitionRepo, algorithm_run_service: AlgorithmRunService, iteration_service: IterationService) -> Self {
-        Self { execution_repo, definition_repo, algorithm_run_service, iteration_service}
+    pub fn new(execution_repo: TestExecutionRepo, algorithm_run_service: AlgorithmRunService, iteration_service: IterationService) -> Self {
+        Self { execution_repo, algorithm_run_service, iteration_service}
     }
+
+    pub async fn save_test_execution(&self, exec: &mut TestExecution) -> Result<(), DbError> {
+
+        let _ = self.execution_repo.save(exec).await;
+
+        Ok(())
+    }
+
+    pub async fn get_by_name(&self, name: &String) -> Result<Option<TestExecution>, DbError>{
+        self.execution_repo.get_by_name(name.to_string()).await
+    }
+
+    pub async fn delete_test_by_name(&self, name: &String){
+        let _ = self.execution_repo.delete_by_name(name.to_string()).await;
+    }
+
+    pub async fn clean_exec(&self, exec: TestExecution)  -> Result<(), DbError>{
+        let _ = self.execution_repo.clean_exec(exec).await;
+        Ok(())
+    }
+
 
     pub async fn start_execution(
         &self,
         mut execution: TestExecution,
-        def: &TestDefinition,
         msg_tx: Option<Sender<ProgressMessage>>
-    ) -> Result<TestExecution, ProcessingError> {
+    ) -> Result<(), ProcessingError> {
 
 
-        let _ = &self.execution_repo.save(&mut execution, def).await;
+        //Update the execution stating that it is starting!
+        execution.start_time = Some(Utc::now());
+        execution.status = TestExecutionStatus::Running;
+        let _ = &self.execution_repo.update_execution(&execution);
 
         let list_algos = self.execution_repo.get_algos(&execution).await?;
 
@@ -54,7 +77,7 @@ impl TestExecutionService {
             .ok_or(ProcessingError::General("TestExecution ID".into()))?;
 
         // Create algorithm runs and their iterations and based on test type
-        match &def.test_type {
+        match &execution.def.test_type {
             TestType::Simple => self.create_simple_runs(&execution, &list_algos).await?,
             TestType::Speed(params) => self.create_speed_runs(&execution, &list_algos, params).await?,
             TestType::Drop(params) => self.create_drop_runs(&execution, &list_algos, params).await?,
@@ -70,7 +93,7 @@ impl TestExecutionService {
         let jobs: Arc<Mutex<Vec<Iteration>>> = Arc::new(Mutex::new(list_iterations)); //List of jobs that need to run
 
         while jobs.lock().await.len() != 0 {
-            let results = (0..def.workers).map(|_| async {
+            let results = (0..execution.def.workers).map(|_| async {
 
                 let iteration: Option<Iteration> = jobs.lock().await.pop();
                 if let Some(iter) = iteration{
@@ -99,7 +122,7 @@ impl TestExecutionService {
         let algo_run_list = self.execution_repo.get_algorithm_runs(&execution_id).await?;
 
         // Compute metrics for speed test
-        match &def.test_type {
+        match &execution.def.test_type {
             TestType::Simple => (),
             TestType::Speed(_) => {
                 let hash_algo_run = Self::group_by_algo(algo_run_list);
@@ -109,13 +132,13 @@ impl TestExecutionService {
             },
             TestType::Drop(drop_params) => {
                 let mut simple_algo_run_list: Vec<AlgorithmRun> = vec![];
-                let dataset = self.execution_repo.get_dataset_by_name(&execution.dataset_name).await?;
+                let dataset = self.execution_repo.get_dataset_by_name(&execution.def.dataset_name).await?;
 
                 for algo in list_algos{
-                    let simple_tests = self.definition_repo.get_by_algo_dataset_type(&algo.name, &execution.dataset_name, "simple").await?;
+                    let simple_tests = self.execution_repo.get_by_algo_dataset_type(&algo.name, &execution.def.dataset_name, "simple").await?;
 
                     //get the test definition with the highest amount of iterations
-                    let simple_exec = simple_tests.iter().max_by_key(|td| td.iterations).unwrap();
+                    let simple_exec = simple_tests.iter().max_by_key(|td| td.def.iterations).unwrap();
                     let algo_run_list = self.execution_repo.get_algorithm_runs(&simple_exec.id.clone().unwrap()).await?;
 
                     let simple_algo_run: AlgorithmRun = algo_run_list
@@ -140,27 +163,26 @@ impl TestExecutionService {
             TestType::Cut(_) => todo!(),
         }
 
-        Ok(execution)
+        Ok(())
     }
 
 
     pub async fn plot_execution(
         &self,
-        def: &TestDefinition,
+        execution: &TestExecution,
         path: &str,
         overwrite: bool,
         format:  &str
     ) -> Result<(), PlotError> {
 
-        let execution: TestExecution = self.definition_repo.get_test_executions(def).await.map_err(|_err| PlotError::MissingData("Test run was not found".to_owned()))?;
         let execution_id = execution.clone().id.ok_or(PlotError::MissingData("Test run ID is missing, probably was never run".to_owned()))?;
         let config = Config::load().expect("Unable to load configuration.");
-        let iterations = self.execution_repo.get_iterations(&execution_id).await.map_err(|_e| PlotError::MissingData(format!("No iterations found for test {}. Did you run the test?", def.name)))?;
+        let iterations = self.execution_repo.get_iterations(&execution_id).await.map_err(|_e| PlotError::MissingData(format!("No iterations found for test {}. Did you run the test?", execution.def.name)))?;
         
         // Plot for each iteration!
         for iter in iterations{
 
-            match self.iteration_service.plot(iter, def, path, overwrite, format).await{
+            match self.iteration_service.plot(iter, &execution.def.test_type, path, overwrite, format).await{
                 Ok(hash_plots) => {
                     for (p, ch) in hash_plots{
 
@@ -193,7 +215,7 @@ impl TestExecutionService {
             }
         }
 
-        let charts = self.plot(execution, &algo_run_list, path, overwrite, format, &config).await?;
+        let charts = self.plot(execution.clone(), &algo_run_list, path, overwrite, format, &config).await?;
         for (p, ch) in charts{
             let mut renderer = ImageRenderer::new(config.plotting.width, config.plotting.height).theme(Theme::Infographic);
             let _ = renderer.save(&ch, p);
@@ -221,14 +243,15 @@ impl TestExecutionService {
         algo_list: &Vec<Algorithm>,
     ) -> Result<(), ProcessingError> {
 
+
         for algorithm in algo_list {
 
             self.algorithm_run_service.create_run(
                 1.0,
-                execution.num_iterations,
+                execution.def.iterations,
                 &execution.id.as_ref().unwrap(),
                 &algorithm.id.clone().unwrap(),
-                "simple"
+                execution.def.test_type.clone()
             ).await?;
 
         }
@@ -249,10 +272,10 @@ impl TestExecutionService {
 
                 self.algorithm_run_service.create_run(
                     *speed_setting,
-                    execution.num_iterations,
+                    execution.def.iterations,
                     &execution.id.as_ref().unwrap(),
                     &algorithm.id.clone().unwrap(),
-                    "speed"
+                    execution.def.test_type.clone()
                 ).await?;
             }
         }
@@ -273,10 +296,10 @@ impl TestExecutionService {
 
             self.algorithm_run_service.create_run(
                 1.0, 
-                execution.num_iterations, 
+                execution.def.iterations, 
                 &execution.id.as_ref().unwrap(), 
                 &algorithm.id.clone().unwrap(), 
-                "simple"
+                TestType::Simple
             ).await?;
 
             
@@ -289,7 +312,7 @@ impl TestExecutionService {
             //        //If does not exist create a "simple" algorithm run for performance comparison!
             //        self.algorithm_run_service.create_run(
             //            1.0, 
-            //            execution.num_iterations, 
+            //            execution.def.iterations, 
             //            &execution.id.as_ref().unwrap(), 
             //            &algorithm.id.clone().unwrap(), 
             //            "simple"
@@ -299,10 +322,10 @@ impl TestExecutionService {
 
             self.algorithm_run_service.create_run(
                 1.0,
-                execution.num_iterations,
+                execution.def.iterations,
                 &execution.id.as_ref().unwrap(),
                 &algorithm.id.clone().unwrap(),
-                "drop"
+                execution.def.test_type.clone()
             ).await?;
 
         }
@@ -321,10 +344,10 @@ impl TestExecutionService {
 
             self.algorithm_run_service.create_run(
                 1.0, 
-                execution.num_iterations, 
+                execution.def.iterations, 
                 &execution.id.as_ref().unwrap(), 
                 &algorithm.id.clone().unwrap(), 
-                "simple"
+                TestType::Simple
             ).await?;
 
             //TODO, Now I ran a simple test at the same time as the cut/drop. 
@@ -336,7 +359,7 @@ impl TestExecutionService {
             //        //If does not exist create a "simple" algorithm run for performance comparison!
             //        self.algorithm_run_service.create_run(
             //            1.0, 
-            //            execution.num_iterations, 
+            //            execution.def.iterations, 
             //            &execution.id.as_ref().unwrap(), 
             //            &algorithm.id.clone().unwrap(), 
             //            "simple"
@@ -345,10 +368,10 @@ impl TestExecutionService {
             //};
             self.algorithm_run_service.create_run(
                 1.0,
-                execution.num_iterations,
+                execution.def.iterations,
                 &execution.id.as_ref().unwrap(),
                 &algorithm.id.clone().unwrap(),
-                "cut"
+                execution.def.test_type.clone()
             ).await?;
 
         }
@@ -505,10 +528,6 @@ impl TestExecutionService {
     pub async fn get_all(&self) -> Result<Vec<TestExecution>, ProcessingError> {
         let results = self.execution_repo.list_all().await?;
         Ok(results)
-    }
-
-    pub async fn delete_test_by_name(&self, name: &String){
-        self.execution_repo.delete_by_name(name.to_string()).await;
     }
 
     pub async fn get_algo_runs(&self, test_execution_id: &Thing) -> Result<Vec<AlgorithmRun>, ProcessingError>{
