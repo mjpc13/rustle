@@ -14,6 +14,18 @@ pub enum TestExecutionStatus {
     Completed,
     Failed(String), // Error message for failure
 }
+impl ToString for TestExecutionStatus {
+    fn to_string(&self) -> String {
+        match self {
+            TestExecutionStatus::Scheduled => "Scheduled".to_string(),
+            TestExecutionStatus::Running => "Running".to_string(),
+            TestExecutionStatus::Completed => "Completed".to_string(),
+            TestExecutionStatus::Failed(msg) => format!("Failed: {}", msg),
+        }
+    }
+}
+
+
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TestExecution {
@@ -22,7 +34,7 @@ pub struct TestExecution {
     pub created_at: DateTime<Utc>,
     pub start_time: Option<DateTime<Utc>>,
     pub end_time: Option<DateTime<Utc>>,
-    pub metrics: HashMap<String, Metric>,
+    pub metrics: HashMap<String, Vec<Metric>>,
     pub def: TestDefinition
 }
 

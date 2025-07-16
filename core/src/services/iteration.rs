@@ -370,6 +370,11 @@ impl IterationService {
                     path: full_path.clone(),
                     ..Default::default()
                 }),
+                t_max_diff: Some(self.config.evo.t_max_diff as f32),
+                t_offset: Some(self.config.evo.t_offset as f32),
+                align: self.config.evo.align,
+                scale: self.config.evo.scale,
+                n_to_align: Some(self.config.evo.n_to_align as f32),
                 ..Default::default()
             };
 
@@ -378,8 +383,14 @@ impl IterationService {
                     path: full_path.clone(),
                     ..Default::default()
                 }),
+                t_max_diff: Some(self.config.evo.t_max_diff as f32),
+                t_offset: Some(self.config.evo.t_offset as f32),
+                align: self.config.evo.align,
+                scale: self.config.evo.scale,
+                n_to_align: Some(self.config.evo.n_to_align as f32),
                 ..Default::default()
             };
+
 
             let _ape = self.compute_metrics(&iter, &ape_args, &full_path, &full_dataset_path).await.map_err(|_e| RunError::Evo("Failed to compute APE".to_owned()))?;
             let _rpe = self.compute_metrics(&iter, &rpe_args, &full_path, &full_dataset_path).await.map_err(|_e| RunError::Evo("Failed to compute RPE".to_owned()))?;
@@ -765,7 +776,6 @@ impl IterationService {
 
         return ros.from_yaml(yaml[0].clone());
     }
-
 
     async fn remove_container(&self, container_name:&str){
         //Remove the containers

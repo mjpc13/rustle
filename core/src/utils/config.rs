@@ -139,6 +139,7 @@ pub struct RustleConfig {
     pub start_offset: f32, //The offset to start playing the bag
     pub dataset_duration: f32, // Duration to play the dataset, default is maximum duration (None)
     pub dataset_start: f32, // Start the dataset from N seconds
+    pub time_precision: f32, // Time precision to have the results matched in seconds, default 0.01s
 }
 
 
@@ -197,7 +198,8 @@ impl Default for Config {
             rustle: RustleConfig { 
                 start_offset: 5.0, //awaits 1s delay between start of algorithm and dataset play
                 dataset_duration: -1.0, // Dataset duration, default is -1 to play the whole dataset
-                dataset_start: 0.0 // Dataset start at N, default is None to start at the begining.
+                dataset_start: 0.0,
+                time_precision: 0.01, // Dataset start at N, default is None to start at the begining.
             },
         }
     }

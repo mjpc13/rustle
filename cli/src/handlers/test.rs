@@ -1,11 +1,10 @@
 use comfy_table::{presets::{ASCII_MARKDOWN, }, ContentArrangement, Table};
 use log::{error, info, warn};
 use rustle_core::{ models::{
-        TestType::{Simple, Speed, Cut, Drop},
         algorithm_run::AlgorithmRun, metric::MetricType::{
-            Cpu, Frequency, Memory, PoseError, TemporalEfficiency, Robustness
-        }, test_definitions::TestDefinitionsConfig, ProgressMessage, TestExecution, TestExecutionStatus
-    }, services::{TestExecutionService}, utils::config::Config
+            Cpu, Frequency, Memory, PoseError, Robustness, TemporalEfficiency
+        }, metrics::RobustnessMetric, test_definitions::TestDefinitionsConfig, ProgressMessage, TestExecution, TestExecutionStatus, TestType::{Cut, Drop, Simple, Speed}
+    }, services::TestExecutionService, utils::config::Config
 };
 use tokio::sync::mpsc;
 
@@ -39,7 +38,7 @@ pub async fn handle_test(
                         let mut table = Table::new();
                         table.load_preset(ASCII_MARKDOWN);
                         table.set_content_arrangement(ContentArrangement::Dynamic);
-                        table.set_header(vec!["Name", "Type", "Iterations", "Datasets", "Algorithms"]);
+                        table.set_header(vec!["Name", "Type", "Iterations", "Datasets", "Algorithms", "Status"]);
 
                         for test in tests {
                             table.add_row(vec![
@@ -48,6 +47,7 @@ pub async fn handle_test(
                                 test.def.iterations.to_string(),
                                 format!("{:?}", test.def.dataset_name),
                                 format!("{:?}", test.def.algo_list),
+                                format!("{:?}", test.status),
                             ]);
                         }
 
@@ -58,7 +58,7 @@ pub async fn handle_test(
                         println!("Deleted test definition '{}'", del.name);
                     }
         TestSubCommand::Run(run) => {
-                        let _ = handle_run_cmd(run, service).await;
+                        let _ = handle_run_cmd(run, service).await.unwrap();
                     }
         TestSubCommand::Plot(plot_test) => {
             
@@ -200,7 +200,6 @@ async fn handle_add_cmd(add_test: AddTest, service: &TestExecutionService) -> Re
     Ok(())
 }
 
-
 async fn handle_run_cmd(run_test: RunTest, service: &TestExecutionService) -> Result<(), Box<dyn Error>>{
          
     let (msg_tx, mut msg_rx) = mpsc::channel::<ProgressMessage>(100);
@@ -267,7 +266,6 @@ async fn handle_run_cmd(run_test: RunTest, service: &TestExecutionService) -> Re
 
 }
 
-
 async fn handle_show_cmd(show_test: ShowTest, service: &TestExecutionService) -> Result<(), Box<dyn Error>>{
 
     //Check if an allowed format was passed
@@ -303,15 +301,23 @@ async fn handle_show_cmd(show_test: ShowTest, service: &TestExecutionService) ->
                 println!("--- Specific Results for Each Algorithm Run and Speed ---");
                 show_detail(&algo_runs, &service, &show_test.name).await;
             },
-            Drop(_) => todo!(),
-            Cut(_) => todo!(),
+            _ => {
+                println!("--- Overall Results for Robustness Metric ---\n");
+                show_drop_crop(&exec);
+                println!("\n--- Results for each Sensor Type and Period ---\n");
+                show_drop_crop_detail(&exec);
+                println!("\n--- Specific Results for Each Algorithm Run ---\n");
+                show_detail(&algo_runs, &service, &show_test.name).await;
+            }
         }
         
     } else {
         
         match exec.def.test_type {
+            Simple => show_simple(&algo_runs),
             Speed(_) => show_speed(&exec),
-            _ => show_simple(&algo_runs),
+            Drop(_) => show_drop_crop(&exec),
+            Cut(_) => show_drop_crop(&exec),
         }
     }
 
@@ -389,7 +395,7 @@ fn show_speed(exec: &TestExecution){
 
     metrics_hash.iter().for_each(|(name, metric)|{
 
-        match &metric.metric_type {
+        match &metric[0].metric_type {
             TemporalEfficiency(m) => {
 
                 tes = format!("{:.3}", m.tes);
@@ -417,6 +423,109 @@ fn show_speed(exec: &TestExecution){
 
     println!("{table}");
     println!("* - Estimation frequency did not drop by 10% for the given set.");
+}
+
+fn show_drop_crop(exec: &TestExecution){
+
+    let mut table = Table::new();
+    table.load_preset(ASCII_MARKDOWN);
+    table.set_content_arrangement(ContentArrangement::Dynamic);
+    table.set_header(vec!["Name", "ADP", "RDP", "ART (ms)", "RRT (ms)"]);
+
+    let metrics_hash = &exec.metrics;
+
+    let mut adp: String = String::from("NaN");
+    let mut rdp = String::from("NaN");
+    let mut art = String::from("NaN");
+    let mut rrt = String::from("NaN");
+
+    metrics_hash.iter().for_each(|(name, metric)|{
+
+        match &metric[0].metric_type {
+            Robustness(r) => {
+
+                adp = format!("{:.3}", r.adp.metric.mean);
+
+                rdp = format!("{:.3}", r.rdp.metric.mean);
+
+                art = match r.art.rt {
+                    Some(st) => format!("{:.3}", st.mean),
+                    None => "-".to_owned(),
+                };
+                rrt = match r.rrt.rt {
+                    Some(st) => format!("{:.3}", st.mean),
+                    None => "-".to_owned(),
+                };
+
+                table.add_row(vec![
+                    name,
+                    &adp,
+                    &rdp,
+                    &art,
+                    &rrt,
+                ]);
+            },
+            _ => (),
+        }
+
+    });
+
+    println!("{table}");
+
+}
+
+
+
+fn show_drop_crop_detail(exec: &TestExecution){
+
+    let mut table = Table::new();
+    table.load_preset(ASCII_MARKDOWN);
+    table.set_content_arrangement(ContentArrangement::Dynamic);
+    table.set_header(vec![
+        "Name",
+        "Sensor",
+        "Period Index",
+        "ART (ms)",
+        "RRT (ms)",
+    ]);
+
+    for (name, metric) in &exec.metrics {
+        match &metric[0].metric_type {
+            Robustness(r) => {
+                // ART per sensor-period
+
+                let _ = r.art.hash_list_period.iter()
+                    .zip(r.rrt.hash_list_period.iter())
+                    .for_each(|((sa, va),(sr, vr))|{
+
+                        for (idx, (va, vr)) in va.iter().zip(vr.iter()).enumerate(){
+                            
+                            let art = match va {
+                                Some(v) => format!("{:.3}", v),
+                                None => "-".to_owned(),
+                            };
+                            let rrt = match vr {
+                                Some(v) => format!("{:.3}", v),
+                                None =>  "-".to_owned(),
+                            };
+
+                            table.add_row(vec![
+                                name,
+                                sa,
+                                &idx.to_string(),
+                                &art,
+                                &rrt, // RRT printed below
+                            ]);
+                        }
+
+                    });
+
+            },
+            _ => (),
+        }
+    }
+
+    println!("{table}");
 }
 
 async fn show_detail(algo_runs: &Vec<AlgorithmRun>, service: &TestExecutionService, test_name: &String){

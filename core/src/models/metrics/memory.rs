@@ -151,8 +151,6 @@ fn linear_regression_slope(x: &[i64], y: &[f32]) -> f32 {
     assert_eq!(x.len(), y.len(), "x and y must be the same length");
     let n = x.len();
 
-    println!("{:?}", x);
-
     // Normalize x to prevent floating point precision issues
     let x0 = x[0];
     let norm_x: Vec<i64> = x.iter().map(|xi| xi - x0).collect();

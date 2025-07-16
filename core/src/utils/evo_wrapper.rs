@@ -128,6 +128,7 @@ pub struct EvoApeArg{
     pub t_end: Option<f32>,
     pub pose_relation: Option<PoseRelation>,// full,trans_part,rot_part,angle_deg,angle_rad,point_distance
     pub align: bool,
+    pub align_origin: bool,
     pub scale: bool,
     pub n_to_align: Option<f32>,
     pub plot: Option<PlotArg>
@@ -150,7 +151,11 @@ impl EvoApeArg {
                     let val = o.downcast_ref::<bool>().unwrap();
                     if *val{
                         match s{
-                            "align" => commands.push("-a".to_string()),
+                            "align" => {
+                                if !self.align_origin{
+                                    commands.push("-a".to_string())
+                                }
+                            },
                             "scale" => commands.push("-s".to_string()),
                             "align_origin" => commands.push("--align_origin".to_string()),
                             _ => (),
@@ -198,6 +203,7 @@ impl Default for EvoApeArg {
             t_end: None,
             pose_relation: None,// full,trans_part,rot_part,angle_deg,angle_rad,point_distance
             align: true,
+            align_origin: true,
             scale: true,
             n_to_align: None,
             plot: None
@@ -224,7 +230,11 @@ impl fmt::Display for EvoApeArg {
                     let val = o.downcast_ref::<bool>().unwrap();
                     if *val{
                         match s{
-                            "align" => string.push_str(" -a"),
+                            "align" =>{
+                                if !self.align_origin{
+                                    string.push_str("-a")
+                                }
+                            },
                             "scale" => string.push_str(" -s"),
                             "align_origin" => string.push_str(" --align_origin"),
                             _ => (),
@@ -363,6 +373,7 @@ pub struct EvoRpeArg{
     pub t_start: Option<f32>,
     pub t_end: Option<f32>,
     pub pose_relation: Option<PoseRelation>,// full,trans_part,rot_part,angle_deg,angle_rad,point_distance
+    pub align_origin: bool,
     pub align: bool,
     pub scale: bool,
     pub n_to_align: Option<f32>,
@@ -389,7 +400,11 @@ impl EvoRpeArg {
                     let val = o.downcast_ref::<bool>().unwrap();
                     if *val{
                         match s{
-                            "align" => commands.push("-a".to_string()),
+                            "align" => {
+                                if !self.align_origin{
+                                    commands.push("-a".to_string())
+                                }
+                            },
                             "scale" => commands.push("-s".to_string()),
                             "align_origin" => commands.push("--align_origin".to_string()),
                             _ => (),
@@ -434,6 +449,7 @@ impl Default for EvoRpeArg {
             t_start: None,
             t_end: None,
             pose_relation: None,// full,trans_part,rot_part,angle_deg,angle_rad,point_distance
+            align_origin: true,
             align: true,
             scale: true,
             n_to_align: None,

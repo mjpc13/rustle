@@ -5,7 +5,7 @@ use charming::Chart;
 use charming::{theme::Theme, ImageRenderer};
 use chrono::Utc;
 use itertools::Itertools;
-use log::{warn};
+use log::{info, warn};
 use tokio::sync::mpsc::Sender;
 use tokio::sync::Mutex;
 use yaml_rust2::yaml::Hash;
@@ -65,7 +65,6 @@ impl TestExecutionService {
         msg_tx: Option<Sender<ProgressMessage>>
     ) -> Result<(), ProcessingError> {
 
-
         //Update the execution stating that it is starting!
         execution.start_time = Some(Utc::now());
         execution.status = TestExecutionStatus::Running;
@@ -113,59 +112,113 @@ impl TestExecutionService {
             futures_util::future::join_all(results).await;
         }
 
-
         //get all algorithm runs and compute the metrics
         let algo_run_list = self.execution_repo.get_algorithm_runs(&execution_id).await?;
         for algo_run in &algo_run_list{
             self.algorithm_run_service.set_aggregate_metrics(&algo_run).await;
         }
+
         let algo_run_list = self.execution_repo.get_algorithm_runs(&execution_id).await?;
 
-        // Compute metrics for speed test
+        let config = Config::load().expect("Unable to Open config");
+
+        // Compute metrics each test
         match &execution.def.test_type {
-            TestType::Simple => (),
+            TestType::Simple => {
+                let hash_algo_run = Self::group_by_algo(algo_run_list);
+                let metrics = Self::compute_metrics_simple(hash_algo_run);
+                let _ = self.complete_execution(execution.clone(), metrics).await;
+            },
             TestType::Speed(_) => {
                 let hash_algo_run = Self::group_by_algo(algo_run_list);
-                let metrics: HashMap<Algorithm, Metric> = Self::compute_metrics_speed(hash_algo_run);
+                let metrics: HashMap<Algorithm, Vec<Metric>> = Self::compute_metrics_speed(hash_algo_run);
 
                 let _ = self.complete_execution(execution.clone(), metrics).await;
             },
             TestType::Drop(drop_params) => {
                 let mut simple_algo_run_list: Vec<AlgorithmRun> = vec![];
-                let dataset = self.execution_repo.get_dataset_by_name(&execution.def.dataset_name).await?;
+
+                let dataset = self.execution_repo.get_dataset_by_name(&execution.def.dataset_name).await.unwrap();
 
                 for algo in list_algos{
-                    let simple_tests = self.execution_repo.get_by_algo_dataset_type(&algo.name, &execution.def.dataset_name, "simple").await?;
+                    let simple_tests = self.execution_repo.get_by_algo_dataset_type(&algo.name, &execution.def.dataset_name, "simple").await;
+                    let simple_exec = match simple_tests {
+                        Ok(s) =>{
+                            s.into_iter().max_by_key(|td| td.def.iterations).unwrap()
+                        },
+                        Err(_) => {
+                            execution.clone()
+                        },
+                    };
 
-                    //get the test definition with the highest amount of iterations
-                    let simple_exec = simple_tests.iter().max_by_key(|td| td.def.iterations).unwrap();
-                    let algo_run_list = self.execution_repo.get_algorithm_runs(&simple_exec.id.clone().unwrap()).await?;
+                    let simple_algo_run_vec = self.execution_repo.get_algorithm_runs(&simple_exec.id.clone().unwrap()).await.unwrap();
 
-                    let simple_algo_run: AlgorithmRun = algo_run_list
+                    let simple_algo_run: AlgorithmRun = simple_algo_run_vec
                         .into_iter()
                         .filter(|run| run.algo.name == algo.name)
+                        .filter(|run| run.test_type.as_str() == "simple")
                         .last().unwrap();
 
                     simple_algo_run_list.push(simple_algo_run);
                 }
 
-
                 let metrics = Self::compute_metrics_drop(
                     algo_run_list, 
                     simple_algo_run_list, 
                     drop_params, 
-                    dataset.duration
+                    dataset.duration,
+                    config.rustle.time_precision
                 );
 
                 let _ = self.complete_execution(execution.clone(), metrics).await;
 
             },
-            TestType::Cut(_) => todo!(),
+            TestType::Cut(cut_params) => {
+
+                let mut simple_algo_run_list: Vec<AlgorithmRun> = vec![];
+
+                let dataset = self.execution_repo.get_dataset_by_name(&execution.def.dataset_name).await.unwrap();
+
+                for algo in list_algos{
+                    let simple_tests = self.execution_repo.get_by_algo_dataset_type(&algo.name, &execution.def.dataset_name, "simple").await;
+                    let simple_exec = match simple_tests {
+                        Ok(s) =>{
+                            s.into_iter().max_by_key(|td| td.def.iterations).unwrap()
+                        },
+                        Err(_) => {
+                            execution.clone()
+                        },
+                    };
+
+                    //get the test definition with the highest amount of iterations
+                    let algo_run_list = self.execution_repo.get_algorithm_runs(&simple_exec.id.clone().unwrap()).await.unwrap();
+
+                    let simple_algo_run: AlgorithmRun = algo_run_list
+                        .into_iter()
+                        .filter(|run| run.algo.name == algo.name)
+                        .filter(|run| run.test_type.as_str() == "simple")
+                        .last().unwrap();
+
+                    simple_algo_run_list.push(simple_algo_run);
+                }
+
+                let algo_run_list = self.execution_repo.get_algorithm_runs(&execution_id).await.unwrap();
+
+                let metrics = Self::compute_metrics_cut(
+                    algo_run_list, 
+                    simple_algo_run_list, 
+                    cut_params, 
+                    dataset.duration,
+                    config.rustle.time_precision
+                );
+
+                let _ = self.complete_execution(execution.clone(), metrics).await;
+
+            },
         }
 
         Ok(())
     }
-
 
     pub async fn plot_execution(
         &self,
@@ -301,7 +354,6 @@ impl TestExecutionService {
                 &algorithm.id.clone().unwrap(), 
                 TestType::Simple
             ).await?;
-
             
             //TODO, Now I ran a simple test at the same time as the cut/drop. 
             //But if a simple test is already available I should just use it. Need to fix the matching timestamps problem
@@ -382,12 +434,12 @@ impl TestExecutionService {
     pub async fn complete_execution(
         &self,
         mut execution: TestExecution,
-        metrics: HashMap<Algorithm, Metric>
+        metrics: HashMap<Algorithm, Vec<Metric>>
     ) -> Result<(), ProcessingError> {
         execution.status = TestExecutionStatus::Completed;
         execution.end_time = Some(Utc::now());
 
-        let mut hash_metric:HashMap<String, Metric> = HashMap::new();
+        let mut hash_metric:HashMap<String, Vec<Metric>> = HashMap::new();
 
         metrics.into_iter().for_each(|(al, v)|{
             hash_metric.insert(al.name, v.clone());
@@ -536,9 +588,24 @@ impl TestExecutionService {
     }
 
 
-    fn compute_metrics_speed(list: HashMap<Algorithm, Vec<AlgorithmRun>>) -> HashMap<Algorithm, Metric>{
+    fn compute_metrics_simple(list: HashMap<Algorithm, Vec<AlgorithmRun>>) -> HashMap<Algorithm, Vec<Metric>>{
 
-        let mut algo_metric: HashMap<Algorithm, Metric> = HashMap::new();
+        let mut algo_metric: HashMap<Algorithm, Vec<Metric>> = HashMap::new();
+
+        let _ = list.into_iter()
+            .for_each(|(k, v)|{
+
+                algo_metric.insert(k, v[0].metrics.clone());
+
+            });
+
+        algo_metric
+    }
+
+
+    fn compute_metrics_speed(list: HashMap<Algorithm, Vec<AlgorithmRun>>) -> HashMap<Algorithm, Vec<Metric>>{
+
+        let mut algo_metric: HashMap<Algorithm, Vec<Metric>> = HashMap::new();
 
         let _ = list.into_iter()
             .for_each(|(k,v)|{
@@ -569,7 +636,7 @@ impl TestExecutionService {
                     )
                 };
 
-                algo_metric.insert(k, metric);
+                algo_metric.insert(k, vec![metric]);
 
             }
         );
@@ -582,16 +649,24 @@ impl TestExecutionService {
         drop_vec: Vec<AlgorithmRun>,
         simple_vec: Vec<AlgorithmRun>,
         drop_params: &DropParams,
-        duration: Option<f32>
-    ) -> HashMap<Algorithm, Metric> {
+        duration: Option<f32>,
+        precision: f32
+    ) -> HashMap<Algorithm, Vec<Metric>> {
 
-        let mut algo_metric: HashMap<Algorithm, Metric> = HashMap::new();
+        let mut algo_metric: HashMap<Algorithm, Vec<Metric>> = HashMap::new();
 
         let duration = duration.unwrap();
 
         let simple_map: HashMap<Algorithm, &AlgorithmRun> = simple_vec
             .iter()
             .map(|run| (run.algo.clone(), run))
+            .collect();
+
+        let drop_vec: Vec<AlgorithmRun> = drop_vec.into_iter()
+            .filter(|ar| match ar.test_type {
+                TestType::Drop(_) => true,
+                _ => false
+            })
             .collect();
 
         for drop_run in drop_vec {
@@ -604,18 +679,65 @@ impl TestExecutionService {
                             RobustnessType::Drop(drop_params.drop_list.clone()),
                             duration,
                             &drop_run,
-                            &simple_run
+                            &simple_run,
+                            precision
                         ).unwrap()
                     )
                 };
 
-                algo_metric.insert(drop_run.algo.clone(), metric);
+                algo_metric.insert(drop_run.algo.clone(), vec![metric]);
             }
         }
 
         algo_metric
     }
 
+    fn compute_metrics_cut(
+        cut_vec: Vec<AlgorithmRun>,
+        simple_vec: Vec<AlgorithmRun>,
+        cut_params: &CutParams,
+        duration: Option<f32>,
+        precision: f32
+    ) -> HashMap<Algorithm, Vec<Metric>> {
+
+        let mut algo_metric: HashMap<Algorithm, Vec<Metric>> = HashMap::new();
+
+        let duration = duration.unwrap();
+
+        let simple_map: HashMap<Algorithm, &AlgorithmRun> = simple_vec
+            .iter()
+            .map(|run| (run.algo.clone(), run))
+            .collect();
+
+        let cut_vec: Vec<AlgorithmRun> = cut_vec.into_iter()
+            .filter(|ar| match ar.test_type {
+                TestType::Cut(_) => true,
+                _ => false
+            })
+            .collect();
+
+        for cut_run in cut_vec {
+            if let Some(simple_run) = simple_map.get(&cut_run.algo) {
+
+                let metric = Metric { 
+                    id: None, 
+                    metric_type: MetricType::Robustness(
+                        RobustnessMetric::new(
+                            RobustnessType::Cut(cut_params.cut_list.clone()),
+                            duration,
+                            &cut_run,
+                            &simple_run,
+                            precision
+                        ).unwrap()
+                    )
+                };
+
+                algo_metric.insert(cut_run.algo.clone(), vec![metric]);
+            }
+        }
+
+        algo_metric
+    }
 
 
     fn group_by_algo(runs: Vec<AlgorithmRun>) -> HashMap<Algorithm, Vec<AlgorithmRun>> {

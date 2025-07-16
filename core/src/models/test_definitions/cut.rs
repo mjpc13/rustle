@@ -1,5 +1,7 @@
 use serde::{Serialize, Deserialize};
 
+use crate::models::test_definitions::drop::ActivePeriod;
+
 use super::test_definition::Sensor;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -38,15 +40,4 @@ impl CutParams {
         modified_content
     }
 
-}
-
-
-
-//To implement in the future? Maybe???
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ActivePeriod {
-    #[serde(rename = "start_time")]
-    pub start_sec: u32,
-    #[serde(rename = "duration")]
-    pub duration_sec: u32,
 }
