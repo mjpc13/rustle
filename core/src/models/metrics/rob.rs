@@ -21,7 +21,7 @@ pub struct RobustnessMetric {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DegradationMetric{
     pub metric: StatisticalMetrics,
-    pub values_list: Vec<f32>,
+    pub values_list: Vec<(f32,f32)>, //(timestamp, degradation vs the baseline)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -98,14 +98,16 @@ impl RobustnessMetric{
 
 fn compute_dm(data: &Vec<(&StatisticalMetricsStamped, &StatisticalMetricsStamped)>, sev: &f32) -> Result<DegradationMetric, MetricError>{
     
-    let dm_list: Vec<f32> = data
+    let dm_list: Vec<(f32,f32)> = data
         .iter()
         .map(|(test, baseline)|{
-            ((test.stat.mean - baseline.stat.mean).abs()) / sev
+            (baseline.timestamp, ((test.stat.mean - baseline.stat.mean).abs()) / sev)
         }).collect();
 
+    let seconds: Vec<f32> = dm_list.iter().map(|&(_, second)| second).collect();
 
-    let metric = StatisticalMetrics::from_values(&dm_list, true).unwrap();
+
+    let metric = StatisticalMetrics::from_values(&seconds, true).unwrap();
 
     Ok(DegradationMetric{
         metric: metric,

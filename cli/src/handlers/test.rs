@@ -474,8 +474,6 @@ fn show_drop_crop(exec: &TestExecution){
 
 }
 
-
-
 fn show_drop_crop_detail(exec: &TestExecution){
 
     let mut table = Table::new();
@@ -485,8 +483,8 @@ fn show_drop_crop_detail(exec: &TestExecution){
         "Name",
         "Sensor",
         "Period Index",
-        "ART (ms)",
-        "RRT (ms)",
+        "ART (s)",
+        "RRT (s)",
     ]);
 
     for (name, metric) in &exec.metrics {
