@@ -3,6 +3,13 @@
     <param name="/use_sim_time" value="true"/>
     <arg name="project" default="lio_sam_6axis"/>
 
+    <arg name="test_type" default="simple"/>  <!-- or any default value -->
+    <arg name="algo_topic" default=""/>
+    <arg name="gt_topic" default=""/>
+    <param name="use_sim_time" value="true" />
+    <param name="algo_topic" value="$(arg algo_topic)" />
+    <param name="gt_topic" value="$(arg gt_topic)" />
+
     <!-- Parameters -->
     <rosparam file="/rustle/config/params.yaml" command="load" />
 

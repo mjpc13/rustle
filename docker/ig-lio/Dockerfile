@@ -56,8 +56,7 @@ RUN sed -i 's/<name>ig_lio<\/name>/<name>ig_lio_speed<\/name>/g' src/ig_lio_spee
 # Build ros package source (compiles every package in the workspace, don't change this!)
 RUN catkin config --extend /opt/ros/$ROS_DISTRO
 
-RUN git clone --depth 1 --recurse-submodules https://github.com/mjpc13/rustle-ros.git  src/rustle-ros
-
+RUN git clone --depth 1 --recurse-submodules https://github.com/mjpc13/rustle-ros.git  src/rustle-ros && echo
 
 #Copy custom launch file into our package
 COPY ./rustle.launch /rustle/catkin_ws/src/rustle-ros/launch/rustle.launch

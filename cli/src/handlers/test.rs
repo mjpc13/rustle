@@ -393,7 +393,7 @@ fn show_speed(exec: &TestExecution){
     let mut atas = String::from("NaN");
     let mut rtas = String::from("NaN");
 
-    metrics_hash.iter().for_each(|(name, metric)|{
+    metrics_hash.iter().for_each(|(algo, metric)|{
 
         match &metric[0].metric_type {
             TemporalEfficiency(m) => {
@@ -409,7 +409,7 @@ fn show_speed(exec: &TestExecution){
                 rtas = format!("{:.3}", m.rtas);
 
                 table.add_row(vec![
-                    name,
+                    &algo,
                     &fpt,
                     &tes,
                     &atas,
@@ -439,7 +439,7 @@ fn show_drop_crop(exec: &TestExecution){
     let mut art = String::from("NaN");
     let mut rrt = String::from("NaN");
 
-    metrics_hash.iter().for_each(|(name, metric)|{
+    metrics_hash.iter().for_each(|(algo, metric)|{
 
         match &metric[0].metric_type {
             Robustness(r) => {
@@ -458,7 +458,7 @@ fn show_drop_crop(exec: &TestExecution){
                 };
 
                 table.add_row(vec![
-                    name,
+                    &algo,
                     &adp,
                     &rdp,
                     &art,
@@ -487,7 +487,10 @@ fn show_drop_crop_detail(exec: &TestExecution){
         "RRT (s)",
     ]);
 
-    for (name, metric) in &exec.metrics {
+
+    let metrics_hash = &exec.metrics;
+
+    for (algo, metric) in metrics_hash {
         match &metric[0].metric_type {
             Robustness(r) => {
                 // ART per sensor-period
@@ -508,7 +511,7 @@ fn show_drop_crop_detail(exec: &TestExecution){
                             };
 
                             table.add_row(vec![
-                                name,
+                                &algo,
                                 sa,
                                 &idx.to_string(),
                                 &art,

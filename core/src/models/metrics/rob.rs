@@ -35,7 +35,7 @@ pub struct RecoveryTime{
 
 impl RobustnessMetric{
 
-    pub fn new(rob_type: RobustnessType, duration: f32, test: &AlgorithmRun, baseline: &AlgorithmRun, threshold: f32) -> Result<Self, RobustnessMetric>{
+    pub fn new(rob_type: RobustnessType, duration: f32, test: &AlgorithmRun, baseline: &AlgorithmRun, threshold: f32) -> Result<Self, MetricError>{
 
         let sev = match rob_type {
             RobustnessType::Cut(cut_vec) => {
@@ -69,19 +69,15 @@ impl RobustnessMetric{
             },
         };
 
-        warn!("This is my test type for baseline: {:?}", baseline.test_type);
-            warn!("This is my test type for test: {:?}", test.test_type);
-
-
 
         let matched_ape = match_by_timestamp(&test.ape_list, &baseline.ape_list, threshold);
         let matched_rpe = match_by_timestamp(&test.rpe_list, &baseline.rpe_list, threshold);
 
-        let adp = compute_dm(&matched_ape, &sev).unwrap();
-        let rdp = compute_dm(&matched_rpe, &sev).unwrap();
+        let adp = compute_dm(&matched_ape, &sev)?;
+        let rdp = compute_dm(&matched_rpe, &sev)?;
 
-        let art = compute_rt(matched_ape, &test.test_type).unwrap();
-        let rrt = compute_rt(matched_rpe, &test.test_type).unwrap();
+        let art = compute_rt(matched_ape, &test.test_type)?;
+        let rrt = compute_rt(matched_rpe, &test.test_type)?;
 
         Ok(RobustnessMetric{
             sev,
@@ -107,7 +103,7 @@ fn compute_dm(data: &Vec<(&StatisticalMetricsStamped, &StatisticalMetricsStamped
     let seconds: Vec<f32> = dm_list.iter().map(|&(_, second)| second).collect();
 
 
-    let metric = StatisticalMetrics::from_values(&seconds, true).unwrap();
+    let metric = StatisticalMetrics::from_values(&seconds, true).ok_or(MetricError::MissingError("Missing values to compute robustness".to_owned()))?;
 
     Ok(DegradationMetric{
         metric: metric,

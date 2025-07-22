@@ -10,6 +10,7 @@ use tokio::sync::mpsc::Sender;
 use tokio::sync::Mutex;
 use yaml_rust2::yaml::Hash;
 
+use crate::db::metric;
 use crate::models::metric::{Metric, StatisticalMetrics, MetricType};
 use crate::models::metrics::pose_error::{APE, RPE};
 use crate::models::metrics::tes::TemporalEfficiencyMetric;
@@ -20,7 +21,7 @@ use crate::models::{AlgorithmRun, ProgressMessage};
 use crate::services::DbError;
 use crate::utils::config::Config;
 
-use crate::utils::plots::{test_ape_line_chart, test_memory_usage_line_chart, test_rpe_line_chart};
+use crate::utils::plots::{test_adp_chart, test_ape_line_chart, test_memory_usage_line_chart, test_rdp_chart, test_rpe_line_chart};
 use crate::{db::{TestExecutionRepo}, models::{metrics::ContainerStats, test_definitions::{test_definition::{TestDefinition, TestType}, CutParams, DropParams}, test_execution::{TestExecution, TestExecutionStatus}, Algorithm, Iteration, SpeedTestParams}, services::error::ProcessingError, utils::plots::test_cpu_load_line_chart
 };
 
@@ -212,7 +213,7 @@ impl TestExecutionService {
                     config.rustle.time_precision
                 );
 
-                let _ = self.complete_execution(execution.clone(), metrics).await;
+                let _ = self.complete_execution(execution.clone(), metrics).await.unwrap();
 
             },
         }
@@ -251,7 +252,6 @@ impl TestExecutionService {
 
         }
 
-        
         //Plot for each Algorithm
         let algo_run_list = self.execution_repo.get_algorithm_runs(&execution_id).await.map_err(|_err| PlotError::MissingData("Test run was not found".to_owned()))?;
         for algo_run in &algo_run_list{
@@ -268,6 +268,7 @@ impl TestExecutionService {
             }
         }
 
+        //Plot for the Different Tests
         let charts = self.plot(execution.clone(), &algo_run_list, path, overwrite, format, &config).await?;
         for (p, ch) in charts{
             let mut renderer = ImageRenderer::new(config.plotting.width, config.plotting.height).theme(Theme::Infographic);
@@ -442,7 +443,10 @@ impl TestExecutionService {
         let mut hash_metric:HashMap<String, Vec<Metric>> = HashMap::new();
 
         metrics.into_iter().for_each(|(al, v)|{
-            hash_metric.insert(al.name, v.clone());
+            hash_metric.insert(
+                al.name,
+                 v.clone()
+                );
         });
 
         execution.metrics = hash_metric;
@@ -456,7 +460,7 @@ impl TestExecutionService {
 
         let mut hash: HashMap<String, Chart> = HashMap::new();
 
-        let exec_thing: Thing = exec.id.unwrap();
+        let exec_thing: &Thing = exec.id.as_ref().unwrap();
         let te_str = exec_thing.to_raw().replace(|c: char| !c.is_alphanumeric(), "_").to_lowercase();
         let full_path = format!("{path}/{te_str}");
 
@@ -464,7 +468,18 @@ impl TestExecutionService {
         fs::create_dir_all(&full_path).unwrap();
 
         // Call the other plots
-        let files = ["test_cpu_load", "test_memory_usage", "test_ape", "test_rpe"];
+        let mut files = vec!["test_cpu_load", "test_memory_usage", "test_ape", "test_rpe"];
+
+        match &exec.def.test_type{
+            TestType::Simple => (),
+            TestType::Speed(_) => (),
+            TestType::Drop(_) => {
+                files.push("test_drop")
+            },
+            TestType::Cut(_) => {
+                files.push("test_cut")
+            },
+        }
 
         for f in files{
 
@@ -475,13 +490,70 @@ impl TestExecutionService {
                 return Err(PlotError::FileExists(filepath));
             } else {
                 let chart = match f {
-                    "test_cpu_load" => self.plot_cpu_load(&algo_run_list, config).await,
-                    "test_memory_usage" => self.plot_memory_usage(&algo_run_list, config).await,
-                    "test_ape" => self.plot_ape(&algo_run_list, config).await,
-                    "test_rpe" => self.plot_rpe(&algo_run_list, config).await,
+                    "test_cpu_load" => {
+                        let chart = self.plot_cpu_load(&algo_run_list, config).await;
+                        hash.insert(filepath, chart?);
+                    },
+                    "test_memory_usage" => {
+                        let chart = self.plot_memory_usage(&algo_run_list, config).await;
+                        hash.insert(filepath, chart?);
+                    },
+                    "test_ape" => {
+                        let chart = self.plot_ape(&algo_run_list, config).await;
+                        hash.insert(filepath, chart?);
+                    },
+                    "test_rpe" => {
+                        let chart = self.plot_rpe(&algo_run_list, config).await;
+                        hash.insert(filepath, chart?);
+                    },
+                    "test_drop" => {
+                        let filepath_adp = format!("{}/{}_adp.{}", full_path, f, format);
+                        let filepath_rdp = format!("{}/{}_rdp.{}", full_path, f, format);
+
+                        let mut hash_algo_metric: HashMap<Algorithm, &Vec<Metric>> = HashMap::new();
+
+
+                        for (id, metrics) in &exec.metrics{
+                            let algo = self.execution_repo
+                                .get_algorithm_by_name(id).await
+                                .map_err(|e| PlotError::MissingData(format!("Missing algorithm {:#?}", e)))?;
+
+                            hash_algo_metric.insert(algo, metrics);
+                        }
+
+                        let adp_chart = test_adp_chart(&hash_algo_metric, &exec.def.test_type, config);
+                        let rdp_chart = test_rdp_chart(&hash_algo_metric, &exec.def.test_type, config);
+
+                        hash.insert(filepath_adp, adp_chart?);
+                        hash.insert(filepath_rdp, rdp_chart?);
+
+
+                    },
+                    "test_cut" => {
+                        let filepath_adp = format!("{}/{}_adp.{}", full_path, f, format);
+                        let filepath_rdp = format!("{}/{}_rdp.{}", full_path, f, format);
+
+                        let mut hash_algo_metric: HashMap<Algorithm, &Vec<Metric>> = HashMap::new();
+
+
+                        for (id, metrics) in &exec.metrics{
+                            let algo = self.execution_repo
+                                .get_algorithm_by_name(id).await
+                                .map_err(|e| PlotError::MissingData(format!("Missing algorithm {:#?}", e)))?;
+
+                            hash_algo_metric.insert(algo, metrics);
+                        }
+
+                        let adp_chart = test_adp_chart(&hash_algo_metric, &exec.def.test_type, config);
+                        let rdp_chart = test_rdp_chart(&hash_algo_metric, &exec.def.test_type, config);
+
+                        hash.insert(filepath_adp, adp_chart?);
+                        hash.insert(filepath_rdp, rdp_chart?);
+
+
+                    },
                     &_ => todo!()
                 };
-                hash.insert(filepath, chart?);
             }
         }
         
@@ -574,8 +646,6 @@ impl TestExecutionService {
 
         rpe_chart
     }
-
-
 
     pub async fn get_all(&self) -> Result<Vec<TestExecution>, ProcessingError> {
         let results = self.execution_repo.list_all().await?;

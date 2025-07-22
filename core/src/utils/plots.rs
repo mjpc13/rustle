@@ -4,7 +4,7 @@ use core::f32;
 use std::collections::{BTreeMap, HashMap};
 
 use chrono::{DateTime, Utc};
-use crate::{models::{metrics::{pose_error::{APE, RPE}, ContainerStats}, AlgorithmRun, TestType}, services::error::PlotError};
+use crate::{models::{metric::{self, Metric}, metrics::{pose_error::{APE, RPE}, ContainerStats, RobustnessMetric}, Algorithm, AlgorithmRun, TestType}, services::error::PlotError};
 
 use charming::{
     component::{Axis, Legend}, element::{AreaStyle, AxisLabel, AxisType, ItemStyle, Label, LabelPosition, LineStyle, LineStyleType, MarkArea, MarkAreaData, MarkLine, MarkLineData, MarkLineVariant, Orient, Symbol, TextStyle}, series::Line, Chart
@@ -797,8 +797,6 @@ pub fn algorithm_rpe_line_chart(iterations: Vec<Vec<RPE>>, test_type: &TestType,
 }
 
 
-
-
 //PLOTS COMPARING THE DIFFERENT METHODS
 pub fn test_cpu_load_line_chart(data: &HashMap<AlgorithmRun, Vec<Vec<ContainerStats>>>, config: &Config)  -> Result<Chart, PlotError> {
 
@@ -1157,7 +1155,6 @@ pub fn test_ape_line_chart(data: &HashMap<AlgorithmRun, Vec<Vec<APE>>>, config: 
 
 }
 
-
 pub fn test_rpe_line_chart(data: &HashMap<AlgorithmRun, Vec<Vec<RPE>>>, config: &Config)  -> Result<Chart, PlotError> {
 
     //For each algorithm//Stats in data I need to get a series!!!
@@ -1260,6 +1257,152 @@ pub fn test_rpe_line_chart(data: &HashMap<AlgorithmRun, Vec<Vec<RPE>>>, config: 
     
     chart = add_lines(chart, lines_vec, config);
 
+
+    Ok(chart)
+
+}
+
+pub fn test_adp_chart(data: &HashMap<Algorithm, &Vec<Metric>>, test_type: &TestType, config: &Config) -> Result<Chart, PlotError> {
+
+    //For each algorithm//Stats in data I need to get a series!!!
+    let mut lines_vec: Vec<Line> = Vec::new();
+
+    for (k, v) in data{
+
+        let metric: &Metric = v.iter()
+            .filter(|m| match m.metric_type {
+                metric::MetricType::Robustness(_) => true,
+                _ => false
+            })
+            .next().ok_or(PlotError::MissingData("Missing Robustness metric".to_owned()))?;
+
+        match &metric.metric_type{
+            metric::MetricType::Robustness(rob) => {
+
+            let xy_values = rob.adp.values_list.iter().map(|(x,y)| vec![*x, *y]).collect::<Vec<_>>();
+
+            let line = Line::new()
+                .name(format!("{}",&k.name))
+                .data(xy_values)
+                .symbol::<Symbol>(config.plotting.marker_type.into())
+                .symbol_size(config.plotting.marker_size)
+                .line_style(LineStyle::new()
+                    .width(3)
+                    .color(k.get_rgba(0.9))
+            );
+            lines_vec.push(line);
+            },
+            _ => ()
+        }
+
+    }
+
+    let area_data = get_area_from_def(&test_type);
+
+    let mut chart = Chart::new()
+        .x_axis(
+            Axis::new()
+                .type_(AxisType::Value)
+                .name("Time (s)")
+                .name_text_style(TextStyle::new().font_size(config.plotting.x_axis_title_size).font_weight("bold"))
+                .axis_label(AxisLabel::new().font_size(config.plotting.x_axis_label_size)),
+        )
+        .y_axis(
+            Axis::new()
+                .type_(AxisType::Value)
+                .name("ADP")
+                .name_text_style(TextStyle::new().font_size(config.plotting.y_axis_title_size).font_weight("bold"))
+                .axis_label(AxisLabel::new().font_size(config.plotting.y_axis_label_size)),
+        );
+
+    if config.plotting.show_legend{
+        chart = chart.legend(
+            Legend::new()
+                .show(true)
+                .top("top")
+                .left("left")
+                .orient(Orient::Horizontal)
+                .text_style(TextStyle::new().font_size(14))
+        )
+    }
+    chart = add_areas_markers(chart, area_data, config);
+
+    chart = lines_vec.into_iter().fold(chart, |acc_chart, l |{
+            acc_chart.series(l)
+    });
+
+    Ok(chart)
+
+}
+
+pub fn test_rdp_chart(data: &HashMap<Algorithm, &Vec<Metric>>, test_type: &TestType, config: &Config) -> Result<Chart, PlotError> {
+
+    //For each algorithm//Stats in data I need to get a series!!!
+    let mut lines_vec: Vec<Line> = Vec::new();
+
+    for (k, v) in data{
+
+        let metric: &Metric = v.iter()
+            .filter(|m| match m.metric_type {
+                metric::MetricType::Robustness(_) => true,
+                _ => false
+            })
+            .next().ok_or(PlotError::MissingData("Missing Robustness metric".to_owned()))?;
+
+        match &metric.metric_type{
+            metric::MetricType::Robustness(rob) => {
+
+            let xy_values = rob.rdp.values_list.iter().map(|(x,y)| vec![*x, *y]).collect::<Vec<_>>();
+
+            let line = Line::new()
+                .name(format!("{}",&k.name))
+                .data(xy_values)
+                .symbol::<Symbol>(config.plotting.marker_type.into())
+                .symbol_size(config.plotting.marker_size)
+                .line_style(LineStyle::new()
+                    .width(3)
+                    .color(k.get_rgba(0.9))
+            );
+            lines_vec.push(line);
+            },
+            _ => ()
+        }
+
+    }
+
+    let area_data = get_area_from_def(&test_type);
+
+    let mut chart = Chart::new()
+        .x_axis(
+            Axis::new()
+                .type_(AxisType::Value)
+                .name("Time (s)")
+                .name_text_style(TextStyle::new().font_size(config.plotting.x_axis_title_size).font_weight("bold"))
+                .axis_label(AxisLabel::new().font_size(config.plotting.x_axis_label_size)),
+        )
+        .y_axis(
+            Axis::new()
+                .type_(AxisType::Value)
+                .name("ADP")
+                .name_text_style(TextStyle::new().font_size(config.plotting.y_axis_title_size).font_weight("bold"))
+                .axis_label(AxisLabel::new().font_size(config.plotting.y_axis_label_size)),
+        );
+
+    if config.plotting.show_legend{
+        chart = chart.legend(
+            Legend::new()
+                .show(true)
+                .top("top")
+                .left("left")
+                .orient(Orient::Horizontal)
+                .text_style(TextStyle::new().font_size(14))
+        )
+    }
+    chart = add_areas_markers(chart, area_data, config);
+
+    chart = lines_vec.into_iter().fold(chart, |acc_chart, l |{
+            acc_chart.series(l)
+    });
 
     Ok(chart)
 

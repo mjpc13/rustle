@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use log::{info, warn};
 use surrealdb::{engine::local::Db, RecordId, Surreal};
 use tokio::sync::Mutex;
 use crate::{models::{test_execution::TestExecution, Algorithm, AlgorithmRun, Dataset, Iteration, TestDefinition}, services::error::DbError};
@@ -40,7 +41,7 @@ impl TestExecutionRepo {
 
             for algo in execution.def.algo_list.clone() {
                 // Create Dataset relationship
-                let algo = self.get_algorithm_by_name(algo).await.unwrap();
+                let algo = self.get_algorithm_by_name(&algo).await.unwrap();
 
                 // Create Dataset relationship
                 self.conn.lock().await
@@ -77,6 +78,20 @@ impl TestExecutionRepo {
             .map_err(|e| DbError::Operation(e))
     }
 
+    pub async fn get_algorithm(&self, db_id: &String) -> Result<Algorithm, DbError> {
+        let mut response = self.conn.lock().await
+            .query("SELECT * FROM id")
+            .bind(("id", db_id.clone()))
+            .await?;
+
+        let dataset_id: Option<Algorithm> = response.take(0)?;
+        
+        dataset_id.ok_or_else(|| DbError::NotFound(
+            format!("Dataset with name '{}' not found", db_id)
+        ))
+
+    }
+
     pub async fn get_dataset_by_name(&self, db_name: &String) -> Result<Dataset, DbError> {
         let mut response = self.conn.lock().await
             .query("SELECT * FROM dataset WHERE name = $name LIMIT 1")
@@ -90,7 +105,7 @@ impl TestExecutionRepo {
         ))
     }
     
-    pub async fn get_algorithm_by_name(&self, name: String) -> Result<Algorithm, DbError> {
+    pub async fn get_algorithm_by_name(&self, name: &String) -> Result<Algorithm, DbError> {
         let mut response = self.conn.lock().await
             .query("SELECT * FROM algorithm WHERE name = $name LIMIT 1")
             .bind(("name", name.clone()))
@@ -402,11 +417,13 @@ impl TestExecutionRepo {
         let exec_id = exec.id.clone()
         .ok_or(DbError::MissingField("Test Execution ID"))?;
 
-        let _updated: TestExecution = self.conn.lock().await
-            .update((&exec_id.tb, &exec_id.id.to_string()))
-            .content(exec.clone())
-            .await?.unwrap();
-
+        let r = self.conn.lock().await
+            .query("
+                UPDATE $exec_id CONTENT $new_object
+            ")
+            .bind(("exec_id", exec_id.clone()))
+            .bind(("new_object", exec.clone()))
+            .await.unwrap();
 
         Ok(())
 

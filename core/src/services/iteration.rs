@@ -100,12 +100,14 @@ impl IterationService {
         //get the corresponding algorithm run
         let algorithm_run = self.repo.get_algorithm_run(&iter).await.unwrap();
 
+        let dataset = self.repo.get_dataset(&iter).await.unwrap(); //get the dataset
+
         let cmd = match self.config.rustle.dataset_duration {
             -1.0 => format!("rosbag play -s {} -r {} --clock /rustle/dataset/*.bag", self.config.rustle.dataset_start, algorithm_run.bag_speed),
             _ => format!("rosbag play -s {} -u {} -r {} --clock /rustle/dataset/*.bag", self.config.rustle.dataset_start, self.config.rustle.dataset_duration, algorithm_run.bag_speed)
         };
 
-        let rustle_cmd = format!("roslaunch rustle-ros rustle.launch --wait test_type:={} algo_topic:={}", &iter.test_type.as_str(), &algorithm.odom_topics[0]);
+        let rustle_cmd = format!("roslaunch rustle-ros rustle.launch --wait test_type:={} algo_topic:={} gt_topic:={}", &iter.test_type.as_str(), &algorithm.odom_topics[0], &dataset.ground_truth_topic.clone().unwrap());
 
         //Vector of commands to run inside the container
         let commands: Vec<_> = vec![
@@ -173,8 +175,6 @@ impl IterationService {
         });
 
         //Only add the groundtruth if there is no GT in the Dataset Object
-        let dataset = self.repo.get_dataset(&iter).await.unwrap(); //get the dataset
-
         let is_gt_empty = match dataset.ground_truth{
             Some(_) => false,
             None => {
