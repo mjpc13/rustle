@@ -28,3 +28,9 @@ algorithms:
     image_name: "mjpc13/rustle:faster-lio"
     parameters: "/home/mjpc13/Documents/rustle/test/config/faster-lio/params.yaml"
     odom_topics: ["/Odometry"]
+
+  - name: "fast-livo2"
+    version: "7e88460"
+    image_name: "mjpc13/rustle:fast-livo2"
+    parameters: "/home/mjpc13/Documents/rustle/test/config/fast-livo2/params.yaml"
+    odom_topics: ["/aft_mapped_to_init"]

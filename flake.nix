@@ -23,8 +23,7 @@
     in {
       devShells.${system}.default = pkgs.mkShell {
         buildInputs = with pkgs; [
-          rustc
-          cargo
+          rustup
           rust-analyzer # LSP Server
           rustfmt       # Formatter
           clippy        # Linter
@@ -44,8 +43,8 @@
           (writeShellScriptBin "rustle_clean" ''
             #!/bin/sh
             echo "This will permanently remove:"
-            echo "   - All database files in: $RUSTLE_ROOT/test/db/*"
-            echo "   - All test results in: $RUSTLE_ROOT/test/results/*"
+            echo "   - All database files in: ~/.local/share/rustle/db/*"
+            echo "   - All data in: $~/.local/share/rustle/data"
             echo "   - All Docker containers currently running on your system"
             echo ""
             printf "Are you sure you want to continue? (y/N) "
@@ -55,8 +54,8 @@
                 [yY]|[yY][eE][sS])
                     echo "Starting cleanup..."
                     # Remove test directories
-                    echo "Removing database and results..."
-                    rm -rf "$RUSTLE_ROOT/test/db/*" "$RUSTLE_ROOT/test/results/*"
+                    echo "Removing RUSTLE Data"
+                    rm -rf ~/.local/share/rustle/*
                     
                     # Remove Docker containers
                     echo "Stopping Docker containers..."
@@ -74,14 +73,14 @@
           # Custom script to launch a database server
           (writeShellScriptBin "rustle_db" ''
             #!/bin/sh
-            surreal start --log debug --user root --pass root "rocksdb://$RUSTLE_ROOT/test/db/"
+            surreal start --log debug --user root --pass root "rocksdb:~/.local/share/rustle/db/"
           '')
 
         ];
 
         shellHook = ''
           # Set environment variable with absolute project path
-          export RUSTLE_ROOT="$(pwd)"
+          export RUSTLE_ROOT="~/.local/share/rustle/"
 
           export LIBCLANG_PATH="${pkgs.libclang.lib}/lib"
           export LD_LIBRARY_PATH="${pkgs.zlib}/lib:${pkgs.gcc.cc.lib}/lib:${pkgs.stdenv.cc.cc.lib}/lib:$LD_LIBRARY_PATH"
