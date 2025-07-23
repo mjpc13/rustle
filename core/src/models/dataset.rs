@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use crate::{db::dataset, models::ros::Odometry};  // Updated path
+use crate::{models::ros::Odometry};  // Updated path
 use surrealdb::sql::Thing;
 
 
@@ -11,6 +11,7 @@ pub struct Dataset {
     pub dataset_path: String,
     pub ground_truth_topic: Option<String>,
     pub ground_truth: Option<Vec<Odometry>>,
+    pub duration: Option<f32>,
     #[serde(default = "Utc::now")]
     pub created_at: DateTime<Utc>,
 }
@@ -25,6 +26,7 @@ impl Dataset {
             dataset_path,
             ground_truth: None,
             created_at: Utc::now(),
+            duration: None,
         }
     }
 }

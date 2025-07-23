@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
-use futures_util::future::ok;
-use log::{info, warn};
+use log::{warn};
 // db/iteration.rs
 use surrealdb::{Surreal, engine::local::Db, sql::Thing};
 use tokio::sync::Mutex;
@@ -32,7 +31,7 @@ impl IterationRepo {
         match iteration.id.clone(){
             Some(id) => {
                 // Create relationships
-                let t = self.conn.lock().await
+                self.conn.lock().await
                     .query("RELATE $algorithm_run -> has_iteration -> $iteration")
                     .bind(("algorithm_run", algorithm_run_id.clone()))
                     .bind(("iteration", id))
@@ -229,6 +228,10 @@ impl IterationRepo {
             .await?;
     
         let ape: Vec<APE> = result.take(0)?;
+
+        if ape.is_empty(){
+            return Err(DbError::Empty("List of APE is empty".to_owned()));
+        }
     
         Ok(ape)
     }
@@ -284,37 +287,21 @@ impl IterationRepo {
     }
 
 
-
-    pub async fn get_test_def(&self, iteration: &Iteration) -> Result<TestDefinition, DbError>{
-
-        let iteration_id = iteration.id.clone()
-            .ok_or(DbError::MissingField("Iteration ID"))?;
+    pub async fn get_exec(&self, exec_id: &Thing) -> Result<TestExecution, DbError>{
 
         let mut result = self.conn.lock().await
             .query("
-                SELECT <-has_iteration<-algorithm_run<-has_run<-test_execution<-defines<-test_definition.* AS test_definition
-                FROM $iteration_id
+                SELECT * FROM $exec_id
             ")
-            .bind(("iteration_id", iteration_id.clone()))
+            .bind(("exec_id", exec_id.clone()))
             .await?;
 
-        
+        let test_exec: Vec<TestExecution> = result.take(0)?;
 
-        let algorithm_run: Option<Vec<TestDefinition>> = result.take("test_definition")?;
-
-        match algorithm_run{
-            Some(a) => {
-                a.into_iter().next()
+        test_exec.into_iter().next()
                 .ok_or_else(|| DbError::NotFound(
-                    format!("Dataset for iteration {} not found", iteration_id)
+                    format!("Test {} not found", exec_id)
                 ))
-            },
-            None => Err(DbError::NotFound(
-                format!("Dataset for iteration {} not found", iteration_id)
-            ))
-        }
-
-
     }
 
     pub async fn get_odometries(&self, iter: &Iteration) -> Result<Vec<Odometry>, DbError>{
@@ -382,10 +369,7 @@ impl IterationRepo {
         let nested_odoms_min: Vec<Vec<Odometry>> = result_min.take("odometry").unwrap();
         let nested_odoms_max: Vec<Vec<Odometry>> = result_max.take("odometry").unwrap();
 
-        let count = self.get_count_odoms(iter).await.unwrap();
-
-        //warn!("My min odometry: {:?} \n My max odometry: {:?} \n My count: {count}", odoms_min, odoms_max);
-
+        let count = self.get_count_odoms(iter).await?;
     
         // Flatten the results
         let odom_min = nested_odoms_min
@@ -401,8 +385,6 @@ impl IterationRepo {
         let duration = odom_max.header.time - odom_min.header.time;
 
         let frequency = count as f64 / duration.num_seconds() as f64;
-
-        warn!("My frequency of messages is: {frequency}");
 
         Ok(frequency)
 
@@ -427,7 +409,6 @@ impl IterationRepo {
             count.ok_or(DbError::NotFound("Unable to get number of odometries".to_owned()))
 
     }
-
 
     pub async fn get_metrics(&self, iter: &Iteration) -> Result<Vec<Metric>, DbError>{
 

@@ -18,6 +18,7 @@ RUN apt-get update \
   && apt-get update \
   && apt-get install -y \
   libeigen3-dev \
+  libgoogle-glog-dev \
   ros-$ROS_DISTRO-pcl-ros \
   ros-$ROS_DISTRO-pcl-conversions \
   ros-$ROS_DISTRO-eigen-conversions \
@@ -42,12 +43,22 @@ RUN git clone --depth 1 --recurse-submodules https://github.com/hku-mars/Point-L
     && git clone --depth 1 --recurse-submodules https://github.com/Livox-SDK/livox_ros_driver src/livox_ros_driver
 ### CLONE SLAM ALGORITHM
 
+### CLONE ANOTHER VERSION TO REDUCE THE QUEUE SIZE TO 1 FOR THE SPEED TEST
+RUN git clone --depth 1 --recurse-submodules https://github.com/hku-mars/Point-LIO.git src/Point-LIO_speed
+
+#Replaces their subscriber queue to 1
+RUN sed -i '375s/200000/1/g;376s/200000/1/g;377s/200000/1/g' src/Point-LIO_speed/src/laserMapping.cpp
+RUN sed -i 's/^project(point_lio)$/project(point_lio_speed)/' src/Point-LIO_speed/CMakeLists.txt
+RUN sed -i 's/<name>point_lio<\/name>/<name>point_lio_speed<\/name>/g' src/Point-LIO_speed/package.xml
+
 
 # Build ros package source (compiles every package in the workspace, don't change this!)
-RUN catkin config --extend /opt/ros/$ROS_DISTRO && catkin create pkg -p src/ rustle
+RUN catkin config --extend /opt/ros/$ROS_DISTRO
+
+RUN git clone --depth 1 --recurse-submodules https://github.com/mjpc13/rustle-ros.git  src/rustle-ros
 
 #Copy custom launch file into our package
-COPY ./rustle.launch /rustle/catkin_ws/src/rustle/launch/rustle.launch
+COPY ./rustle.launch /rustle/catkin_ws/src/rustle-ros/launch/rustle.launch
 
 #Compile packages
 RUN catkin build -s

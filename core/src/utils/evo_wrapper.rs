@@ -1,14 +1,15 @@
-use core::f64;
 use std::process::Command;
 use std::fmt;
-use log::{debug, error, info, trace, warn};
+use log::{debug};
 use struct_iterable::Iterable;
 
-use crate::services::error::{EvoError, RosError};
+use crate::services::error::{EvoError};
 
 
-use pyo3::{prelude::*, types::PyDict};
+use pyo3::{prelude::*};
 use pyo3::types::IntoPyDict;
+
+use super::config::Config;
 
 const PY_CODE: &str = r#"
 import os
@@ -17,15 +18,23 @@ from evo.tools import file_interface
 from evo.core import sync, metrics
 import copy
 
-def compute_metrics(gt_path, data_path, max_diff, output_dir):
+def compute_metrics(gt_path, data_path, max_diff, align, n_to_align, t_offset, align_origin, scale, output_dir):
     # Trajectory processing
     traj_ref = file_interface.read_tum_trajectory_file(gt_path)
     traj_est = file_interface.read_tum_trajectory_file(data_path)
-    traj_ref, traj_est = sync.associate_trajectories(traj_ref, traj_est, max_diff)
+    traj_ref, traj_est = sync.associate_trajectories(traj_ref, traj_est, max_diff, offset_2=t_offset)
 
     # Alignment
     traj_est_aligned = copy.deepcopy(traj_est)
-    traj_est_aligned.align(traj_ref, correct_scale=True, correct_only_scale=False)
+
+    if align:
+        if n_to_align>0:
+            traj_est_aligned.align(traj_ref, correct_scale=scale, correct_only_scale=False, n=n_to_align)
+        else:
+            traj_est_aligned.align(traj_ref, correct_scale=scale, correct_only_scale=False)
+
+    if align_origin:
+        traj_est_aligned.align_origin(traj_ref)
 
     # Calculate time from start
     timestamps = traj_est.timestamps
@@ -59,18 +68,30 @@ def compute_metrics(gt_path, data_path, max_diff, output_dir):
 pub fn run_metrics_py(
     gt_path: &str,
     data_path: &str,
-    max_diff: f64,
+    evo_config: &Config,
     output_dir: &str
 ){
     Python::with_gil(|py| {
         // Create a Python module from the embedded code
         let embedded_module = PyModule::from_code(py, PY_CODE, "embedded_module", "embedded_module").unwrap();
         
+        let max_diff = evo_config.evo.t_max_diff;
+        let align = evo_config.evo.align;
+        let n_to_align = evo_config.evo.n_to_align;
+        let t_offset = evo_config.evo.t_offset;
+        let align_origin = evo_config.evo.align_origin;
+        let scale = evo_config.evo.scale;
+
         // Prepare arguments
         let kwargs = [
             ("gt_path", gt_path.to_object(py)),
             ("data_path", data_path.to_object(py)),
             ("max_diff", max_diff.to_object(py)),
+            ("align", align.to_object(py)),
+            ("n_to_align", n_to_align.to_object(py)),
+            ("t_offset", t_offset.to_object(py)),
+            ("align_origin", align_origin.to_object(py)),
+            ("scale", scale.to_object(py)),
             ("output_dir", output_dir.to_object(py)),
         ].into_py_dict(py);
 
@@ -81,23 +102,6 @@ pub fn run_metrics_py(
 
     })
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 pub trait EvoArg {
     fn compute<'a>(&self, groundtruth: &str, data: &str) -> Result<String, EvoError>;
@@ -124,6 +128,7 @@ pub struct EvoApeArg{
     pub t_end: Option<f32>,
     pub pose_relation: Option<PoseRelation>,// full,trans_part,rot_part,angle_deg,angle_rad,point_distance
     pub align: bool,
+    pub align_origin: bool,
     pub scale: bool,
     pub n_to_align: Option<f32>,
     pub plot: Option<PlotArg>
@@ -132,7 +137,7 @@ pub struct EvoApeArg{
 impl EvoApeArg {
     fn get_commands(&self) -> Vec<String>{
         let mut commands: Vec<String> = Vec::new();
-        let test: Vec<_> = self
+        let _: Vec<_> = self
             .iter()
             .map( | (s, o) | {
                 
@@ -146,7 +151,11 @@ impl EvoApeArg {
                     let val = o.downcast_ref::<bool>().unwrap();
                     if *val{
                         match s{
-                            "align" => commands.push("-a".to_string()),
+                            "align" => {
+                                if !self.align_origin{
+                                    commands.push("-a".to_string())
+                                }
+                            },
                             "scale" => commands.push("-s".to_string()),
                             "align_origin" => commands.push("--align_origin".to_string()),
                             _ => (),
@@ -194,6 +203,7 @@ impl Default for EvoApeArg {
             t_end: None,
             pose_relation: None,// full,trans_part,rot_part,angle_deg,angle_rad,point_distance
             align: true,
+            align_origin: true,
             scale: true,
             n_to_align: None,
             plot: None
@@ -206,7 +216,7 @@ impl fmt::Display for EvoApeArg {
 
         let mut string = String::new();
 
-        let test: Vec<_> = self
+        let _: Vec<_> = self
             .iter()
             .map( | (s, o) | {
                 
@@ -220,7 +230,11 @@ impl fmt::Display for EvoApeArg {
                     let val = o.downcast_ref::<bool>().unwrap();
                     if *val{
                         match s{
-                            "align" => string.push_str(" -a"),
+                            "align" =>{
+                                if !self.align_origin{
+                                    string.push_str("-a")
+                                }
+                            },
                             "scale" => string.push_str(" -s"),
                             "align_origin" => string.push_str(" --align_origin"),
                             _ => (),
@@ -234,10 +248,9 @@ impl fmt::Display for EvoApeArg {
                         PoseRelation::Angle(AngleUnit::Degree) => string.push_str(" -r angle_deg"),
                         PoseRelation::Angle(AngleUnit::Radian) => string.push_str(" -r angle_rad"),
                         PoseRelation::PointDistance => string.push_str(" -r point_distance"),
-                        _ => (),
                     }
                 } else{
-                    println!("{s:}")
+                    //println!("{s:}")
                 }
 
             }).collect();
@@ -280,7 +293,7 @@ impl PlotArg {
         //commands.push("-p".to_owned());
 
 
-        let test: Vec<_> = self
+        let _: Vec<_> = self
             .iter()
             .map( | (s, o) | {
                 
@@ -299,7 +312,6 @@ impl PlotArg {
                         PlotMode::ZX => commands.push("--plot_mode=zx".to_string()),
                         PlotMode::ZY => commands.push("--plot_mode=zy".to_string()),
                         PlotMode::XYZ => commands.push("--plot_mode=xyz".to_string()),
-                        _ => (),
                     }
                 } 
             }).collect();
@@ -361,6 +373,7 @@ pub struct EvoRpeArg{
     pub t_start: Option<f32>,
     pub t_end: Option<f32>,
     pub pose_relation: Option<PoseRelation>,// full,trans_part,rot_part,angle_deg,angle_rad,point_distance
+    pub align_origin: bool,
     pub align: bool,
     pub scale: bool,
     pub n_to_align: Option<f32>,
@@ -373,7 +386,7 @@ impl EvoRpeArg {
         
         let mut commands: Vec<String> = Vec::new();
 
-        let test: Vec<_> = self
+        let _: Vec<_> = self
             .iter()
             .map( | (s, o) | {
                 
@@ -387,7 +400,11 @@ impl EvoRpeArg {
                     let val = o.downcast_ref::<bool>().unwrap();
                     if *val{
                         match s{
-                            "align" => commands.push("-a".to_string()),
+                            "align" => {
+                                if !self.align_origin{
+                                    commands.push("-a".to_string())
+                                }
+                            },
                             "scale" => commands.push("-s".to_string()),
                             "align_origin" => commands.push("--align_origin".to_string()),
                             _ => (),
@@ -408,7 +425,7 @@ impl EvoRpeArg {
                     }
 
                 } else{
-                    println!("{s:}");
+                    //println!("{s:}");
                 }
             }).collect();
         
@@ -432,6 +449,7 @@ impl Default for EvoRpeArg {
             t_start: None,
             t_end: None,
             pose_relation: None,// full,trans_part,rot_part,angle_deg,angle_rad,point_distance
+            align_origin: true,
             align: true,
             scale: true,
             n_to_align: None,

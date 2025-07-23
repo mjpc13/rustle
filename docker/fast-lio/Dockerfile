@@ -42,15 +42,29 @@ RUN git clone --depth 1 --recurse-submodules https://github.com/hku-mars/FAST_LI
     && git clone --depth 1 --recurse-submodules https://github.com/Livox-SDK/livox_ros_driver src/livox_ros_driver
 ### CLONE SLAM ALGORITHM
 
+### CLONE ANOTHER VERSION TO REDUCE THE QUEUE SIZE TO 1 FOR THE SPEED TEST
+RUN git clone --depth 1 --recurse-submodules https://github.com/hku-mars/FAST_LIO.git src/FAST_LIO_speed
+
+#Replaces their subscriber queue to 1
+RUN sed -i '846s/200000/1/g;847s/200000/1/g;848s/200000/1/g' src/FAST_LIO_speed/src/laserMapping.cpp
+RUN sed -i 's/^project(fast_lio)$/project(fast_lio_speed)/' src/FAST_LIO_speed/CMakeLists.txt
+RUN sed -i 's/fast_lio/fast_lio_speed/g' src/FAST_LIO_speed/include/common_lib.h
+
+RUN sed -i 's/<name>fast_lio<\/name>/<name>fast_lio_speed<\/name>/g' src/FAST_LIO_speed/package.xml
+
 
 # Build ros package source (compiles every package in the workspace, don't change this!)
-RUN catkin config --extend /opt/ros/$ROS_DISTRO && catkin create pkg -p src/ rustle
+RUN catkin config --extend /opt/ros/$ROS_DISTRO
+
+RUN git clone --depth 1 --recurse-submodules https://github.com/mjpc13/rustle-ros.git  src/rustle-ros
 
 #Copy custom launch file into our package
-COPY ./rustle.launch /rustle/catkin_ws/src/rustle/launch/rustle.launch
+COPY ./rustle.launch /rustle/catkin_ws/src/rustle-ros/launch/rustle.launch
 
 #Compile packages
 RUN catkin build -s
+
+RUN chmod +x /rustle/catkin_ws/src/rustle-ros/scripts/cut_manager.py /rustle/catkin_ws/src/rustle-ros/scripts/drop_manager.py 
 
 # source catkin workspace
 RUN echo "source /rustle/catkin_ws/devel/setup.bash" >> /root/.profile

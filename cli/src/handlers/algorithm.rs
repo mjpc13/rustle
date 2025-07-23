@@ -1,8 +1,8 @@
 use comfy_table::{presets::UTF8_FULL, ContentArrangement, Table};
 use log::{error, info};
 use rustle_core::{models::Algorithm, services::AlgorithmService};
-use crate::args::{AddAlgorithm, AlgoCommand, AlgoSubCommand};
-use chrono::Utc;
+use crate::args::{AlgoCommand, AlgoSubCommand};
+
 use serde_yaml::from_reader;
 use std::{error::Error, fs::File};
 

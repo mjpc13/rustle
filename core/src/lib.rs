@@ -1,5 +1,3 @@
-#![allow(unused)]
-
 //! # RustLE - A Rust Unique Simple Testbench for Localization Experiments
 //! 
 //! Rustle is a simple API that allows to run and process automatically multiple SLAM/localization algorithms in Rust.

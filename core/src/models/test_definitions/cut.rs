@@ -1,8 +1,6 @@
-use std::collections::HashMap;
-
-use chrono::Utc;
-use log::{info, warn};
 use serde::{Serialize, Deserialize};
+
+use crate::models::test_definitions::drop::ActivePeriod;
 
 use super::test_definition::Sensor;
 
@@ -32,7 +30,6 @@ impl CutParams {
                 &format!("{}", cut.topic),
                 &format!("{}_cut", cut.topic)
             );
-
         }
 
         let cuts_yaml = serde_yaml::to_string(self).unwrap();
@@ -43,15 +40,4 @@ impl CutParams {
         modified_content
     }
 
-}
-
-
-
-//To implement in the future? Maybe???
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ActivePeriod {
-    #[serde(rename = "start_time")]
-    pub start_sec: u32,
-    #[serde(rename = "duration")]
-    pub duration_sec: u32,
 }

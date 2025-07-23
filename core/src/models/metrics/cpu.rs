@@ -1,5 +1,6 @@
 use std::cmp::Ordering;
 
+use bollard::container::MemoryStats;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
@@ -7,7 +8,7 @@ use crate::services::error::MetricError;
 
 use super::{metric::{MetricTypeInfo, StatisticalMetrics}, ContainerStats};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CpuMetrics {
     pub load: StatisticalMetrics,
     pub throttling: StatisticalMetrics,
@@ -42,7 +43,7 @@ impl CpuMetrics {
             let delta_system = current_system - prev_system;
             let delta_total = stat.cpu_stats.cpu_usage.total_usage
                 .checked_sub(stat.precpu_stats.cpu_usage.total_usage)
-                .unwrap_or(0) as f64;
+                .unwrap_or(0) as f32;
 
             if delta_system == 0 {
                 continue; // Skip invalid data points
@@ -53,7 +54,7 @@ impl CpuMetrics {
                 _ => continue,
             };
 
-            let cpu_percent = (delta_total as f64 / delta_system as f64) * 100.0 * num_cores as f64;
+            let cpu_percent = (delta_total as f32 / delta_system as f32) * 100.0 * num_cores as f32;
             cpu_percentages.push(cpu_percent);
 
             // Calculate throttling percentage
@@ -63,7 +64,7 @@ impl CpuMetrics {
                 - stat.precpu_stats.throttling_data.throttled_periods;
 
             if delta_periods > 0 {
-                let throttling_pct = (delta_throttled as f64 / delta_periods as f64) * 100.0 * num_cores as f64;
+                let throttling_pct = (delta_throttled as f32 / delta_periods as f32) * 100.0 * num_cores as f32;
                 throttling_percentages.push(throttling_pct);
             }
         }
@@ -84,7 +85,7 @@ impl CpuMetrics {
         })
     }
 
-    fn compute_statistical_metrics(data: &[f64]) -> StatisticalMetrics {
+    fn compute_statistical_metrics(data: &[f32]) -> StatisticalMetrics {
         if data.is_empty() {
             return StatisticalMetrics {
                 mean: 0.0,
@@ -97,7 +98,7 @@ impl CpuMetrics {
             };
         }
 
-        let mean = data.iter().sum::<f64>() / data.len() as f64;
+        let mean = data.iter().sum::<f32>() / data.len() as f32;
         
         let mut sorted = data.to_vec();
         sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(Ordering::Equal));
@@ -114,7 +115,7 @@ impl CpuMetrics {
 
         let variance = data.iter()
             .map(|x| (x - mean).powi(2))
-            .sum::<f64>() / data.len() as f64;
+            .sum::<f32>() / data.len() as f32;
         let std = variance.sqrt();
 
         StatisticalMetrics {
@@ -135,7 +136,6 @@ impl CpuMetrics {
             return None;
         }
 
-        let count = metrics.len() as f64;
         let created_at = metrics.iter()
             .map(|m| m.created_at)
             .max()
@@ -152,4 +152,134 @@ impl CpuMetrics {
         })
     }
 
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bollard::container::{CPUStats, CPUUsage, ThrottlingData};
+    use chrono::{DateTime, Utc};
+
+    fn make_cpu_stats(
+        total_usage: u64,
+        system_cpu_usage: u64,
+        throttling_periods: u64,
+        throttled_periods: u64,
+        created_at: DateTime<Utc>,
+    ) -> ContainerStats {
+        ContainerStats {
+            id: None,
+            memory_stats: MemoryStats {
+                stats: None,
+                max_usage: None,
+                usage: None,
+                failcnt: None,
+                limit: None,
+                commit: None,
+                commit_peak: None,
+                commitbytes: None,
+                commitpeakbytes: None,
+                privateworkingset: None,
+            },
+            cpu_stats: CPUStats {
+                cpu_usage: CPUUsage {
+                    total_usage,
+                    usage_in_kernelmode: 0,
+                    usage_in_usermode: 0,
+                    percpu_usage: None,
+                },
+                system_cpu_usage: Some(system_cpu_usage),
+                online_cpus: Some(4), // 4 cores
+                throttling_data: ThrottlingData {
+                    periods: throttling_periods,
+                    throttled_periods,
+                    throttled_time: 0,
+                },
+            },
+            precpu_stats: CPUStats {
+                cpu_usage: CPUUsage {
+                    total_usage: total_usage - 10_000_000,    // delta_total = 10_000_000
+                    usage_in_kernelmode: 0,
+                    usage_in_usermode: 0,
+                    percpu_usage: None,
+                },
+                system_cpu_usage: Some(system_cpu_usage - 100_000_000), // delta_system = 100_000_000
+                online_cpus: Some(4),
+                throttling_data: ThrottlingData {
+                    periods: throttling_periods,
+                    throttled_periods,
+                    throttled_time: 0,
+                },
+            },
+            num_procs: 1,
+            created_at,
+        }
+    }
+
+    fn approx_eq(a: f32, b: f32, epsilon: f32) -> bool {
+        (a - b).abs() < epsilon
+    }
+
+    #[test]
+    fn test_cpu_metrics_basic_usage() {
+        let now = Utc::now();
+        let stats = vec![
+            make_cpu_stats(10_000_000_000, 200_000_000_000_000, 10, 2, now),
+            make_cpu_stats(11_000_000_000, 200_001_000_000_000, 20, 5, now),
+        ];
+
+        let metrics = CpuMetrics::from_stats(&stats).expect("Expected valid CpuMetrics");
+
+        // Check CPU load values are within expected bounds
+        assert!(
+            approx_eq(metrics.load.mean, 40.0, 5.0),
+            "Expected load.mean ≈ 400, got {}",
+            metrics.load.mean
+        );
+
+        // Check throttling % calculation is roughly correct
+        assert!(
+            metrics.throttling.mean >= 0.0,
+            "Expected throttling to be >= 0, got {}",
+            metrics.throttling.mean
+        );
+
+        // Check created_at is from last stat
+        assert_eq!(metrics.created_at, now);
+    }
+
+    #[test]
+    fn test_cpu_metrics_empty_input() {
+        let stats = vec![];
+        let metrics = CpuMetrics::from_stats(&stats);
+        assert!(metrics.is_none(), "Expected None for empty stats");
+    }
+
+    #[test]
+    fn test_cpu_metrics_missing_system_cpu_usage() {
+        let now = Utc::now();
+        let mut stat = make_cpu_stats(10_000_000, 200_000_000_000_000, 0, 0, now);
+        stat.cpu_stats.system_cpu_usage = None; // Break the data
+        let stats = vec![stat];
+
+        let metrics = CpuMetrics::from_stats(&stats);
+        assert!(metrics.is_none(), "Expected None due to missing system_cpu_usage");
+    }
+
+    #[test]
+    fn test_cpu_metrics_mean_aggregation() {
+        let now = Utc::now();
+        let stats = vec![
+            make_cpu_stats(10_000_000_000, 200_000_000_000_000, 10, 2, now),
+            make_cpu_stats(11_000_000_000, 200_001_000_000_000, 20, 4, now),
+        ];
+        let metric1 = CpuMetrics::from_stats(&stats).unwrap();
+        let metric2 = CpuMetrics::from_stats(&stats).unwrap();
+        let mean = CpuMetrics::mean(&[&metric1, &metric2]).unwrap();
+
+        assert!(
+            approx_eq(mean.load.mean, metric1.load.mean, 1e-4),
+            "Mean CPU load should match input average"
+        );
+        assert_eq!(mean.created_at, now);
+    }
 }

@@ -10,6 +10,6 @@ pub use self::{
     test_definition::{TestDefinition, TestDefinitionsConfig, TestType},
     simple::SimpleTestParams,
     speed::SpeedTestParams,
-    drop::DropParams,
+    drop::{Drop, DropParams},
     cut::{Cut, CutParams}
 };

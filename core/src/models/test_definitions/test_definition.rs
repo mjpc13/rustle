@@ -1,9 +1,10 @@
 use core::fmt;
-use std::path::Display;
 
 use chrono::Utc;
 use serde::{Serialize, Deserialize};
 use surrealdb::sql::Thing;
+
+use crate::models::test_definitions::{Cut, Drop};
 
 use super::{speed::SpeedTestParams, CutParams, DropParams};
 
@@ -17,6 +18,23 @@ pub enum TestType {
     #[serde(rename = "cut")]
     Cut(CutParams)
 }
+
+impl TestType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            TestType::Simple => "simple",
+            TestType::Speed(_) => "speed",
+            TestType::Drop(_) => "drop",
+            TestType::Cut(_) => "cut",
+        }
+    }
+}
+
+pub enum RobustnessType {
+    Cut(Vec<Cut>),
+    Drop(Vec<Drop>),
+}
+
 
 #[derive(Debug, Deserialize)]
 pub struct TestDefinitionsConfig {
@@ -40,7 +58,7 @@ pub struct TestDefinition {
 }
 
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Eq, PartialEq, Hash)]
 #[serde(rename_all = "snake_case")]
 pub enum Sensor {
     Imu,

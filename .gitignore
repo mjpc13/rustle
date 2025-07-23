@@ -3,4 +3,4 @@ Cargo.lock
 *.bag
 .vscode/
 .venv/
-test/db/
+rustle/examples/dataset/

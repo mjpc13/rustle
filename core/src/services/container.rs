@@ -2,12 +2,12 @@ use crate::{models::Container, db::ContainerRepo};
 use super::error::ValidationError;
 
 pub struct ContainerService {
-    repo: ContainerRepo,
+    _repo: ContainerRepo,
 }
 
 impl ContainerService {
     pub fn new(repo: ContainerRepo) -> Self {
-        Self { repo }
+        Self { _repo: repo }
     }
 
     //pub async fn create_container(
@@ -25,7 +25,7 @@ impl ContainerService {
     //    Ok(container)
     //}
 
-    fn validate(&self, container: &Container) -> Result<(), ValidationError> {
+    fn _validate(&self, container: &Container) -> Result<(), ValidationError> {
         if container.name.is_empty() {
             return Err(ValidationError("Container name cannot be empty".into()));
         }

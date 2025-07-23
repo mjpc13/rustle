@@ -1,10 +1,9 @@
 use crate::{
     db::metric::MetricRepo,
-    models::{metric::{Metric, MetricType, StatisticalMetrics}, metrics::{memory::MemoryMetrics, pose_error::{Position, APE, RPE}, CpuMetrics, PoseErrorMetrics}, Iteration, Pose},
+    models::{metric::{Metric, MetricType, StatisticalMetrics}, metrics::{memory::MemoryMetrics, pose_error::{Position, APE, RPE}, CpuMetrics, PoseErrorMetrics}},
     services::error::ProcessingError
 };
 
-use chrono::Utc;
 use surrealdb::sql::Thing;
 
 
@@ -126,29 +125,5 @@ impl MetricService {
         }
         Ok(())
     }
-    
 
-
-
-
-    fn compute_stats(values: &[f64], is_pose_error: bool) -> StatisticalMetrics {
-        let mut sorted = values.to_vec();
-        sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-
-        let mean = sorted.iter().sum::<f64>() / sorted.len() as f64;
-        let variance = sorted.iter()
-            .map(|v| (v - mean).powi(2))
-            .sum::<f64>() / sorted.len() as f64;
-        let std_dev = variance.sqrt();
-
-        StatisticalMetrics {
-            mean,
-            median: sorted[sorted.len() / 2],
-            min: *sorted.first().unwrap_or(&0.0),
-            max: *sorted.last().unwrap_or(&0.0),
-            std: std_dev,
-            rmse: is_pose_error.then(|| (values.iter().map(|v| v.powi(2)).sum::<f64>() / values.len() as f64).sqrt()),
-            sse: is_pose_error.then(|| values.iter().map(|v| v.powi(2)).sum()),
-        }
-    }
 }

@@ -59,18 +59,37 @@ impl DatasetService {
     }
 
     pub async fn delete_dataset_by_name(&self, name: &String){
-        self.repo.delete_by_name(name.to_string()).await;
+        let _ = self.repo.delete_by_name(name.to_string()).await;
     }
 
 
+    pub async fn set_duration(&self, dataset: &Dataset) -> Result<(), ProcessingError>{
 
-    // Add validation logic
-    //pub fn validate_ground_truth(dataset: &Dataset) -> Result<(), ValidationError> {
-    //    if let Some(truth) = &dataset.ground_truth {
-    //        if truth.is_empty() {
-    //            return Err(ValidationError::new("Ground truth cannot be empty"));
-    //        }
-    //    }
-    //    Ok(())
-    //}
+        //get the ground truth
+        let dataset_id = dataset.id.as_ref()
+            .ok_or(ProcessingError::MissingField("Dataset ID".to_owned()))?;
+
+        let init_time = dataset.ground_truth.clone()
+            .ok_or(ProcessingError::MissingField("Groundtruth Positions".to_owned()))?
+            .iter()
+            .next()
+            .ok_or(ProcessingError::MissingField("Groundtruth Positions".to_owned()))?
+            .header.time;
+
+        let end_time = dataset.ground_truth.clone()
+            .ok_or(ProcessingError::MissingField("Groundtruth Positions".to_owned()))?
+            .iter()
+            .last()
+            .ok_or(ProcessingError::MissingField("Groundtruth Positions".to_owned()))?
+            .header.time;
+
+        let duration = (end_time - init_time).num_milliseconds() as f32 / 1000.0;
+    
+        let _ = self.repo.set_duration(dataset_id, Some(duration))
+            .await
+            .map_err(|e| ProcessingError::Database(e));
+
+        Ok(())
+    }
+
 }

@@ -1,9 +1,8 @@
 use std::sync::Arc;
 
-use log::warn;
 use surrealdb::{engine::local::Db, Surreal, sql::Thing};
 use tokio::sync::Mutex;
-use crate::{models::{metrics::stat::ContainerStats, Iteration}, services::{error::DbError, iteration}};
+use crate::{models::{metrics::stat::ContainerStats, Iteration}, services::{error::DbError}};
 
 #[derive(Clone)]
 pub struct StatRepo {

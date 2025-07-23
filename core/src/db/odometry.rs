@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use surrealdb::{Surreal, engine::local::Db, sql::Thing};
 use tokio::sync::Mutex;
-use crate::{models::{ros::odometry::Odometry, Iteration}, services::DbError};
+use crate::{models::{ros::odometry::Odometry}, services::DbError};
 
 #[derive(Clone)]
 pub struct OdometryRepo {

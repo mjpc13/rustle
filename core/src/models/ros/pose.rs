@@ -44,7 +44,7 @@ impl Ros1 for Pose {
         let position = Point3::from([p_x, p_y, p_z]);
         let orientation = Quaternion::from([o_x, o_y, o_z, o_w]);
 
-        let mut pose =  Pose{
+        let pose =  Pose{
             position,
             orientation,
             covariance: None

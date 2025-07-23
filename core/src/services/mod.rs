@@ -1,7 +1,7 @@
 pub mod error;
 pub mod dataset;
 pub mod algorithm;
-pub mod test_definition;
+//pub mod test_definition;
 pub mod metrics;
 pub mod container;
 pub mod ros;
@@ -13,10 +13,10 @@ pub mod stat;
 
 // Re-export key components
 pub use self::{
-    error::{ValidationError, AlgorithmError, TestDefinitionError, RosError, DbError},
+    error::{ValidationError, AlgorithmError, TestExecutionError, RosError, DbError},
     dataset::DatasetService,
     algorithm::AlgorithmService,
-    test_definition::TestDefinitionService,
+//    test_definition::TestDefinitionService,
     metrics::MetricService,
     container::ContainerService,
     ros::RosService,

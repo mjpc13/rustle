@@ -1,12 +1,11 @@
-use std::{collections::HashMap, fs, path::Path};
+use std::{collections::{BTreeMap, HashMap}, fs, path::Path};
 
 use crate::{
-    db::AlgorithmRunRepo, models::{algorithm_run::AlgorithmRun, metric::{Metric, MetricType}, metrics::{pose_error::{APE, RPE}, ContainerStats, CpuMetrics, PoseErrorMetrics}, Algorithm, Iteration, TestDefinition}, services::error::ProcessingError, utils::plots::{algorithm_ape_line_chart, algorithm_cpu_load_chart, algorithm_memory_usage_chart, algorithm_rpe_line_chart, memory_usage_line_chart}
+    db::AlgorithmRunRepo, models::{algorithm_run::AlgorithmRun, metric::{Metric, StatisticalMetrics, StatisticalMetricsStamped}, metrics::{pose_error::{APE, RPE}, ContainerStats, CpuMetrics}, Algorithm, Iteration, TestDefinition, TestType}, services::error::ProcessingError, utils::{config::Config, plots::{algorithm_ape_line_chart, algorithm_cpu_load_chart, algorithm_memory_usage_chart, algorithm_rpe_line_chart}}
 };
 
-use bollard::secret::ContainerState;
 use charming::Chart;
-use directories::ProjectDirs;
+use chrono::{DateTime, Utc};
 use futures_util::future::join_all;
 use log::warn;
 use surrealdb::sql::Thing;
@@ -29,12 +28,12 @@ impl AlgorithmRunService {
         num_iterations: u8,
         test_execution_id: &Thing,
         algorithm_id: &Thing, 
-        test_type: &str
+        test_type: TestType
     ) -> Result<AlgorithmRun, ProcessingError> {
 
         let algo = self.repo.get_algorithm(algorithm_id).await?;
 
-        let mut run = AlgorithmRun::new(bag_speed, num_iterations, algo);
+        let mut run = AlgorithmRun::new(bag_speed, num_iterations, algo, test_type.clone(), test_execution_id.clone());
         self.repo.save(&mut run, test_execution_id, algorithm_id).await?;
 
         
@@ -45,12 +44,14 @@ impl AlgorithmRunService {
             let algo = self.repo.get_algorithm_by_run(&run).await?;
 
             match run.id.clone(){
-                Some(thing) => self.iter_service.create(i, algo, &thing, test_type.to_string()).await?,
+                Some(thing) => {
+
+                    self.iter_service.create(i, algo, &thing, test_execution_id, test_type.clone()).await?
+                },
                 None => warn!("ID of algorithm_run was empty")
             };
-
         }
-
+        
         Ok(run)
     }
 
@@ -58,12 +59,13 @@ impl AlgorithmRunService {
 
         let metric_list = self.repo.get_metrics(run).await.unwrap(); //get metrics associated with the algo run (metrics of the iterations)
 
-        let aggregate_metrics = Metric::mean(metric_list);
+        let aggregate_metrics = Metric::mean(metric_list);  //Compute the "mean for buckets of space" for CPU/Memory/APE/RPE;
+
+        let _ = self.compute_buckets(run).await;
 
         for metric in aggregate_metrics{
             let _ = self.repo.update_aggregate_metric(run, metric).await;
         }
-
     }
 
     pub async fn get_iterations(&self, run: &AlgorithmRun) -> Result<Vec<Iteration>, DbError> {
@@ -72,18 +74,16 @@ impl AlgorithmRunService {
     }
 
 
-    pub async fn plot(&self, run: &AlgorithmRun, path: &str, overwrite: bool, format:  &str) -> Result<HashMap<String, Chart>, PlotError>{
+    pub async fn plot(&self, run: &AlgorithmRun, path: &str, overwrite: bool, format:  &str, config: &Config) -> Result<HashMap<String, Chart>, PlotError>{
 
         let mut hash: HashMap<String, Chart> = HashMap::new();
         let iterations = self.repo.get_iterations(run).await.unwrap();
-        let test_def: TestDefinition = self.repo.get_test_definition(&run).await.unwrap();
 
         let iter_path = self.get_parents_string(run).await.unwrap();
         let full_path = format!("{path}/{iter_path}");
 
         //Create the directories if they dont exist
         fs::create_dir_all(&full_path).unwrap();
-
 
         // Call the other plots
         let files = ["aggregated_cpu_load", "aggregated_memory_usage", "aggregated_ape", "aggregated_rpe"];
@@ -97,13 +97,17 @@ impl AlgorithmRunService {
                 return Err(PlotError::FileExists(filepath));
             } else {
                 let chart = match f {
-                    "aggregated_cpu_load" => self.plot_cpu_load(&iterations).await,
-                    "aggregated_memory_usage" => self.plot_memory_usage(&iterations).await,
-                    "aggregated_ape" => self.plot_ape(&iterations, &test_def).await,
-                    "aggregated_rpe" => self.plot_rpe(&iterations, &test_def).await,
+                    "aggregated_cpu_load" => self.plot_cpu_load(&iterations, config).await,
+                    "aggregated_memory_usage" => self.plot_memory_usage(&iterations, config).await,
+                    "aggregated_ape" => self.plot_ape(&iterations, &run.test_type, config).await,
+                    "aggregated_rpe" => self.plot_rpe(&iterations, &run.test_type, config).await,
                     &_ => todo!("This should be fine")
                 };
-                hash.insert(filepath, chart?);
+
+                if let Ok(c) = chart {
+                    hash.insert(filepath, c);
+                }
+
             }
 
         }
@@ -111,32 +115,36 @@ impl AlgorithmRunService {
         Ok(hash)
     }
 
-    async fn plot_ape(&self, iterations: &Vec<Iteration>, test_def: &TestDefinition) -> Result<Chart, PlotError>{
+    async fn plot_ape(&self, iterations: &Vec<Iteration>, test_def: &TestType, config: &Config) -> Result<Chart, PlotError>{
 
-        let algo_ape: Vec<Vec<APE>> = join_all(
-            iterations.iter().map(|iter| async {
-                self.iter_service.get_ape(iter).await.unwrap()
-            })
-        ).await;
+        let mut algo_ape: Vec<Vec<APE>> = Vec::new();
 
-            //PLOTS
+        for it in iterations{
+            match self.iter_service.get_ape(it).await {
+                Ok(ape_vec) => algo_ape.push(ape_vec),
+                Err(_) => warn!("Iteration {} of container {} does not have APE values", it.iteration_num, it.container.image_name),
+            }
+        }
 
-            algorithm_ape_line_chart(algo_ape, test_def)
-            //algorithm_rpe_line_chart(algo_rpe, test_def);
+        //PLOTS
+        algorithm_ape_line_chart(algo_ape, test_def, config)
     }
 
-    async fn plot_rpe(&self, iterations: &Vec<Iteration>, test_def: &TestDefinition) -> Result<Chart, PlotError>{
+    async fn plot_rpe(&self, iterations: &Vec<Iteration>, test_def: &TestType, config: &Config) -> Result<Chart, PlotError>{
 
-        let algo_rpe: Vec<Vec<RPE>> = join_all(
-            iterations.iter().map(|iter| async {
-                self.iter_service.get_rpe(iter).await.unwrap()
-            })
-        ).await;
+        let mut algo_rpe: Vec<Vec<RPE>> = Vec::new();
 
-        algorithm_rpe_line_chart(algo_rpe, test_def)
+        for it in iterations{
+            match self.iter_service.get_rpe(it).await {
+                Ok(rpe_vec) => algo_rpe.push(rpe_vec),
+                Err(_) => warn!("Iteration {} of container {} does not have APE values", it.iteration_num, it.container.image_name),
+            }
+        }
+
+        algorithm_rpe_line_chart(algo_rpe, test_def,config)
     }
 
-    async fn plot_cpu_load(&self, iterations: &Vec<Iteration>) -> Result<Chart, PlotError>{
+    async fn plot_cpu_load(&self, iterations: &Vec<Iteration>, config: &Config) -> Result<Chart, PlotError>{
 
         let algo_stats: Vec<Vec<ContainerStats>> = join_all(
             iterations.iter().map(|iter| async {
@@ -144,11 +152,11 @@ impl AlgorithmRunService {
             })
         ).await;
 
-        algorithm_cpu_load_chart(algo_stats)
+        algorithm_cpu_load_chart(algo_stats, config)
 
     }
 
-    async fn plot_memory_usage(&self, iterations: &Vec<Iteration>) -> Result<Chart, PlotError>{
+    async fn plot_memory_usage(&self, iterations: &Vec<Iteration>, config: &Config) -> Result<Chart, PlotError>{
 
         let algo_stats: Vec<Vec<ContainerStats>> = join_all(
             iterations.iter().map(|iter| async {
@@ -156,7 +164,25 @@ impl AlgorithmRunService {
             })
         ).await;
 
-        algorithm_memory_usage_chart(algo_stats)
+        algorithm_memory_usage_chart(algo_stats, config)
+    }
+
+    async fn compute_buckets(&self, algo_run: &AlgorithmRun) -> Result<(), RunError> {
+
+        let container_stats = self.get_all_container_stats(algo_run).await;
+        let apes = self.get_all_ape(algo_run).await;
+        let rpes = self.get_all_rpe(algo_run).await;
+
+        let [cpu_load_list, mem_usage_list] = aggregate_comp(container_stats)?;
+        let ape_list = aggregate_ape(apes)?;
+        let rpe_list = aggregate_rpe(rpes)?;
+
+        let _ = self.repo.update_cpu_load_list(algo_run, cpu_load_list).await;
+        let _ = self.repo.update_mem_usage_list(algo_run, mem_usage_list).await;
+        let _ = self.repo.update_ape_list(algo_run, ape_list).await;
+        let _ = self.repo.update_rpe_list(algo_run, rpe_list).await;
+
+        Ok(())
     }
 
     async fn get_parents_string(&self, algo_run: &AlgorithmRun) -> Result<String, RunError>{
@@ -192,11 +218,16 @@ impl AlgorithmRunService {
 
         //For each AlgorithmRun I need the container stats
         let iterations = self.repo.get_iterations(run).await.unwrap();
-        let algo_ape: Vec<Vec<APE>> = join_all(
-            iterations.iter().map(|iter| async {
-                self.iter_service.get_ape(iter).await.unwrap()
-            })
-        ).await;
+
+        let mut algo_ape: Vec<Vec<APE>> = Vec::new();
+
+        for it in iterations{
+            match self.iter_service.get_ape(&it).await {
+                Ok(ape_vec) => algo_ape.push(ape_vec),
+                Err(_) => (),
+            }
+        }
+
         algo_ape
     }
 
@@ -204,45 +235,204 @@ impl AlgorithmRunService {
 
         //For each AlgorithmRun I need the container stats
         let iterations = self.repo.get_iterations(run).await.unwrap();
-        let algo_rpe: Vec<Vec<RPE>> = join_all(
-            iterations.iter().map(|iter| async {
-                self.iter_service.get_rpe(iter).await.unwrap()
-            })
-        ).await;
+
+        let mut algo_rpe: Vec<Vec<RPE>> = Vec::new();
+
+        for it in iterations{
+            match self.iter_service.get_rpe(&it).await {
+                Ok(rpe_vec) => algo_rpe.push(rpe_vec),
+                Err(_) => warn!("Iteration {} of container {} does not have APE values", it.iteration_num, it.container.image_name),
+            }
+        }
+
         algo_rpe
     }
 
 }
 
+fn aggregate_ape(apes_list: Vec<Vec<APE>>) -> Result<Vec<StatisticalMetricsStamped>, RunError>{
 
+    let mut time_buckets: BTreeMap<u32, Vec<f32>> = BTreeMap::new();
 
-fn group_metrics(metrics: Vec<Metric>) -> MetricGroups {
-    let mut groups = MetricGroups::default();
-    for metric in metrics {
-        groups.add(&metric);
-    }
-    groups
+    for data in &apes_list {
+
+        let time_sec: Vec<f32> = data.iter()
+            .map(|ape| {
+                ape.time_from_start
+            })
+            .collect();
+
+        let ape_values: Vec<f32> = data.iter()
+            .map(|ape| {
+                ape.value
+            })
+            .collect();
+
+        for (t, usage) in time_sec.into_iter().zip(ape_values) {
+            let bucket_key = (t * 1000.0) as u32; // ms precision for alignment
+            time_buckets
+                .entry(bucket_key)
+                .or_insert_with(Vec::new)
+                .push(usage);
+        }
+
+    }    
+
+    //For each i64 I need to compute the corresponding StatisticalMetricStamped
+    let mut ape_list: Vec<StatisticalMetricsStamped> = time_buckets
+        .iter()
+        .map(|(key, apes)| {
+            let time = (*key as f32) / 1000.0; // Convert back to seconds
+            let stat = StatisticalMetrics::from_values(&apes, true).unwrap();
+            
+            StatisticalMetricsStamped { 
+                stat, 
+                timestamp: time
+            }
+        })
+        .collect();
+    
+    ape_list.sort();
+
+    Ok(ape_list)
 }
 
+fn aggregate_rpe(rpes_list: Vec<Vec<RPE>>) -> Result<Vec<StatisticalMetricsStamped>, RunError>{
 
-//A Struct to easily get the multiple metrics in a Vec<Metric>
-#[derive(Default)]
-struct MetricGroups {
-    inner: HashMap<&'static str, Vec<Box<dyn std::any::Any>>>,
+    let mut time_buckets: BTreeMap<u32, Vec<f32>> = BTreeMap::new();
+
+    for data in &rpes_list {
+
+        let time_sec: Vec<f32> = data.iter()
+            .map(|rpe| {
+                rpe.time_from_start
+            })
+            .collect();
+
+        let rpe_values: Vec<f32> = data.iter()
+            .map(|rpe| {
+                rpe.value
+            })
+            .collect();
+
+        for (t, usage) in time_sec.into_iter().zip(rpe_values) {
+            let bucket_key = (t * 1000.0) as u32; // ms precision for alignment
+            time_buckets
+                .entry(bucket_key)
+                .or_insert_with(Vec::new)
+                .push(usage);
+        }
+    }
+
+    //For each i64 I need to compute the corresponding StatisticalMetricStamped
+    let mut rpe_list: Vec<StatisticalMetricsStamped> = time_buckets
+        .iter()
+        .map(|(key, rpes)| {
+            let time = (*key as f32) / 1000.0; // Convert back to seconds
+            let stat = StatisticalMetrics::from_values(&rpes, true).unwrap();
+            
+            StatisticalMetricsStamped { 
+                stat, 
+                timestamp: time
+            }
+        })
+        .collect();
+
+    rpe_list.sort();
+
+    Ok(rpe_list)
+
 }
 
-impl MetricGroups {
-    pub fn add(&mut self, metric: &Metric) {
-        let type_name = metric.metric_type.type_name();
-        let entry = self.inner.entry(type_name).or_default();
-        entry.push(Box::new(metric.metric_type.clone()));
+fn aggregate_comp(container_stats: Vec<Vec<ContainerStats>>) -> Result<[Vec<StatisticalMetricsStamped>;2], RunError>{
+
+    let mut time_buckets_cpu: BTreeMap<u32, Vec<f32>> = BTreeMap::new();
+    let mut time_buckets_mem: BTreeMap<u32, Vec<f32>> = BTreeMap::new();
+
+    for iteration in &container_stats {
+        let data_ts: Vec<DateTime<Utc>> = iteration.iter().map(|cs| cs.created_at).collect();
+        let start_ts = data_ts[0];
+
+        let time_sec: Vec<f32> = data_ts.iter()
+            .map(|ts| (*ts - start_ts).num_seconds() as f32)
+            .collect();
+
+        let cpu_load: Result<Vec<f32>, RunError> = iteration.iter()
+            .skip(2)
+            .map(|cs| {
+                
+                let total_usage = cs.cpu_stats.cpu_usage.total_usage;
+                let prev_usage = cs.precpu_stats.cpu_usage.total_usage;
+                let system_cpu = cs.cpu_stats.system_cpu_usage.ok_or(RunError::Execution("CPU usage".to_owned()))?;
+                let prev_system_cpu = cs.precpu_stats.system_cpu_usage.ok_or(RunError::Execution("Pre CPU usage".to_owned()))?;
+                let online_cpus = cs.cpu_stats.online_cpus.ok_or(RunError::Execution("Online CPUs".to_owned()))? as f32;
+                
+                let used = (total_usage - prev_usage) as f32;
+                let available = (system_cpu - prev_system_cpu) as f32;
+                Ok(used / available * 100.0 * online_cpus)
+                
+            })
+            .collect();
+
+        let memory_usage: Vec<f32> = iteration.iter()
+            .skip(2)
+            .map(|cs| {
+
+                let mu = cs.memory_stats.usage;
+
+                let usage = match mu {
+                    Some(u) => u,
+                    None => 0
+                };
+
+                usage as f32 / 1_000_000.0 //Memory in MB
+
+            })
+            .collect();
+
+        let cpu_load = cpu_load?;
+
+        for (t, load) in time_sec.iter().zip(cpu_load) {
+            let bucket_key = (t * 1000.0) as u32;
+            time_buckets_cpu.entry(bucket_key).or_default().push(load);
+        }
+
+        for (t, mem) in time_sec.iter().zip(memory_usage) {
+            let bucket_key = (t * 1000.0) as u32;
+            time_buckets_mem.entry(bucket_key).or_default().push(mem);
+        }
+        
     }
 
-    pub fn get<T: 'static>(&self) -> Option<Vec<&T>> {
-        self.inner.get(std::any::type_name::<T>())
-            .map(|vec| vec.iter()
-                .filter_map(|any| any.downcast_ref::<T>())
-                .collect()
-            )
-    }
+    let mut cpu_list: Vec<StatisticalMetricsStamped> = time_buckets_cpu
+        .iter()
+        .map(|(key, loads)| {
+            let time = (*key as f32) / 1000.0; // Convert back to seconds
+            let stat = StatisticalMetrics::from_values(&loads, false).unwrap();
+            
+            StatisticalMetricsStamped { 
+                stat, 
+                timestamp: time
+            }
+        })
+        .collect();
+
+    let mut mem_list: Vec<StatisticalMetricsStamped> = time_buckets_mem
+        .iter()
+        .map(|(key, mems)| {
+            let time = (*key as f32) / 1000.0; // Convert back to seconds
+            let stat = StatisticalMetrics::from_values(&mems, false).unwrap();
+            
+            StatisticalMetricsStamped { 
+                stat, 
+                timestamp: time
+            }
+        })
+        .collect();
+
+    cpu_list.sort();
+    mem_list.sort();
+
+    Ok([cpu_list, mem_list])
+
 }

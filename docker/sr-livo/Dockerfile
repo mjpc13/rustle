@@ -62,10 +62,12 @@ RUN git clone --depth 1 --recurse-submodules https://github.com/ZikangYuan/sr_li
 
 
 # Build ros package source (compiles every package in the workspace, don't change this!)
-RUN catkin config --extend /opt/ros/$ROS_DISTRO --buildlist livox_ros_driver && catkin create pkg -p src/ rustle
+RUN catkin config --extend /opt/ros/$ROS_DISTRO --buildlist livox_ros_driver
+
+RUN git clone --depth 1 --recurse-submodules https://github.com/mjpc13/rustle-ros.git  src/rustle-ros
 
 #Copy custom launch file into our package
-COPY ./rustle.launch /rustle/catkin_ws/src/rustle/launch/rustle.launch
+COPY ./rustle.launch /rustle/catkin_ws/src/rustle-ros/launch/rustle.launch
 
 #Compile packages
 RUN catkin build -s

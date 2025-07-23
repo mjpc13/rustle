@@ -1,6 +1,5 @@
 use std::hash::{DefaultHasher, Hash, Hasher};
 
-use bollard::image;
 use serde::{Serialize, Deserialize};
 use surrealdb::sql::Thing;
 

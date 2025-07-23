@@ -3,11 +3,9 @@ use std::{fs::File, sync::Arc};
 use bollard::{image::CreateImageOptions, Docker};
 use bollard::errors::Error as DockerError;
 use log::{info, trace, warn};
-use tokio::sync::Mutex;
 
-use crate::{models::Algorithm, db::AlgorithmRepo, services::error::{AlgorithmError, ValidationError}};
+use crate::{models::Algorithm, db::AlgorithmRepo, services::error::{ValidationError}};
 use futures_util::stream::{StreamExt};
-use futures_util::future;
 use super::error::ProcessingError;
 
 pub struct AlgorithmService {
@@ -145,7 +143,7 @@ impl AlgorithmService {
     }
 
     pub async fn delete_algo_by_name(&self, name: &String){
-        self.repo.delete_by_name(name.to_string()).await;
+        let _ = self.repo.delete_by_name(name.to_string()).await;
     }
 
 

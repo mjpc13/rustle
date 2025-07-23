@@ -1,7 +1,7 @@
 use comfy_table::{presets::UTF8_FULL, ContentArrangement, Table};
 use log::{error, info};
 use rustle_core::{services::DatasetService, models::Dataset};
-use crate::args::{DatasetCommand, DatasetSubCommand, AddDataset, DeleteDataset};
+use crate::args::{DatasetCommand, DatasetSubCommand};
 use chrono::Utc;
 use serde_yaml::from_reader;
 use std::{fs::File, error::Error};
@@ -34,6 +34,7 @@ pub async fn handle_dataset(
                             dataset_path: add.dataset_path.expect("Missing: --dataset-path"),
                             ground_truth: None,
                             created_at: Utc::now(),
+                            duration: None
                         }
                     ]
                 }

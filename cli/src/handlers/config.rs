@@ -1,44 +1,93 @@
 use crate::args::{ConfigCommand, ConfigSubCommand, SetConfig};
 use rustle_core::utils::config::{Config, DatabaseConfig, DockerConfig, LoggingConfig, DataConfig};
-use comfy_table::{Table, Cell, presets::UTF8_FULL};
+use comfy_table::{presets::{UTF8_HORIZONTAL_ONLY}, Table};
 use std::{error::Error, fs};
 use toml;
+use owo_colors::OwoColorize;
+
 
 pub async fn handle_config(cmd: ConfigCommand) -> Result<(), Box<dyn Error>> {
     match cmd.command {
-        ConfigSubCommand::Show => handle_config_show().await?,
+        ConfigSubCommand::Show => handle_config_show()?,
         ConfigSubCommand::Set(set_config) => handle_config_set(set_config).await?,
     }
 
     Ok(())
 }
 
-async fn handle_config_show() -> Result<(), Box<dyn Error>> {
+fn format_bool(value: bool) -> String {
+    if value {
+        "✓".green().to_string()
+    } else {
+        "✗".red().to_string()
+    }
+}
 
-    let config = Config::load()?;
+fn print_section(header: String, rows: &[(String, String)]) {
+    println!("{}", format!("{}", header).bold().underline());
+
 
     let mut table = Table::new();
-    table.load_preset(UTF8_FULL);
-    table.set_header(vec!["Section", "Key", "Value"]);
+    table.load_preset(UTF8_HORIZONTAL_ONLY);
+    table.set_header(vec!["KEY".bold().to_string(), "VALUE".bold().to_string()]);
+    for (key, value) in rows {
+        table.add_row(vec![key.to_string(), value.clone()]);
+    }
+    println!("{}\n", table);
+}
 
-    // Database section
-    table.add_row(vec!["database", "path", &config.database.path]);
-    table.add_row(vec!["database", "namespace", &config.database.namespace]);
-    table.add_row(vec!["database", "name", &config.database.name]);
+fn handle_config_show() -> Result<(), Box<dyn std::error::Error>> {
+    let config = Config::load()?;
 
-    // Docker section
-    table.add_row(vec!["docker", "socket", &config.docker.socket]);
+    println!("\n{}\n", "--- Current Configuration ---".bold());
 
-    // Logging section
-    table.add_row(vec!["logging", "level", &config.logging.level]);
+    print_section("DATABASE".blue().to_string(), &[
+        ("path".blue().to_string(), config.database.path.clone()),
+        ("namespace".blue().to_string(), config.database.namespace.clone()),
+        ("name".blue().to_string(), config.database.name.clone()),
+    ]);
 
-    // Results section
-    table.add_row(vec!["results", "path", &config.data.path]);
+    print_section("DOCKER".cyan().to_string(), &[
+        ("socket".cyan().to_string(), config.docker.socket.clone()),
+    ]);
 
-    println!("{table}");
+    print_section("LOGGING".yellow().to_string(), &[
+        ("level".yellow().to_string(), config.logging.level.clone()),
+    ]);
+
+    print_section("DATA".magenta().to_string(), &[
+        ("path".magenta().to_string(), config.data.path.clone()),
+    ]);
+
+    print_section("PLOTTING".green().to_string(), &[
+        ("width".green().to_string(), config.plotting.width.to_string()),
+        ("height".green().to_string(), config.plotting.height.to_string()),
+        ("show_band".green().to_string(), format_bool(config.plotting.show_band)),
+        ("marker_type".green().to_string(), config.plotting.marker_type.to_string()),
+        ("show_confidence_band".green().to_string(), format_bool(config.plotting.show_confidence_band)),
+        ("confidence_color_offset".green().to_string(), config.plotting.confidence_color_offset.to_string()),
+    ]);
+
+    print_section("EVO".purple().to_string(), &[
+        ("align".purple().to_string(), format_bool(config.evo.align)),
+        ("align_origin".purple().to_string(), format_bool(config.evo.align_origin)),
+        ("t_max_diff".purple().to_string(), config.evo.t_max_diff.to_string()),
+        ("t_offset".purple().to_string(), config.evo.t_offset.to_string()),
+        ("scale".purple().to_string(), format_bool(config.evo.scale)),
+        ("n_to_align".purple().to_string(), config.evo.n_to_align.to_string()),
+    ]);
+
+    print_section("RUSTLE".bright_blue().to_string(), &[
+        ("start_offset".bright_blue().to_string(), config.rustle.start_offset.to_string()),
+        ("dataset_duration".bright_blue().to_string(), config.rustle.dataset_duration.to_string()),
+        ("dataset_start".bright_blue().to_string(), config.rustle.dataset_start.to_string()),
+    ]);
+
+    println!("{}\n", "--- End of Configuration ---".bold());
 
     Ok(())
 }
+
 
 
 // Set the configuration value

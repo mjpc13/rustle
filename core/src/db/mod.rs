@@ -1,6 +1,5 @@
 pub mod dataset;
 pub mod algorithm;
-pub mod test_definition;
 pub mod metric;
 pub mod container;
 
@@ -14,7 +13,6 @@ pub mod stat;
 pub use self::{
     dataset::DatasetRepo,
     algorithm::AlgorithmRepo,
-    test_definition::TestDefinitionRepo,
     metric::MetricRepo,
     container::ContainerRepo,
     odometry::OdometryRepo,

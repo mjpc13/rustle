@@ -51,7 +51,7 @@ impl RosMsg{
     pub fn as_odometry(self) -> Result<Odometry, RosError>{
 
         let odom = match self {
-            RosMsg::Header(v) => Err(RosError::ParseError { from: "Header".into(), to: "Odometry".into() }),
+            RosMsg::Header(_v) => Err(RosError::ParseError { from: "Header".into(), to: "Odometry".into() }),
             RosMsg::Pose(_) => Err(RosError::ParseError { from: "Pose".into(), to: "Odometry".into() }),
             RosMsg::PoseStamped(p) => {
                 Ok(
@@ -87,9 +87,9 @@ impl RosMsg{
     pub fn get_header(self) -> Result<Header, RosError> {
         match self {
             RosMsg::Header(header) => Ok(header),
-            RosMsg::Pose(pose) => Err(RosError::MissingHeader { rostype: "Pose".into() }),
+            RosMsg::Pose(_pose) => Err(RosError::MissingHeader { rostype: "Pose".into() }),
             RosMsg::PoseStamped(pose_stamped) => Ok(pose_stamped.header),
-            RosMsg::Twist(twist) => Err(RosError::MissingHeader { rostype: "Twist".into() }),
+            RosMsg::Twist(_twist) => Err(RosError::MissingHeader { rostype: "Twist".into() }),
             RosMsg::Path(path) => Ok(path.header),
             RosMsg::Odometry(odometry) => Ok(odometry.header),
 
@@ -129,10 +129,5 @@ impl RosMsg{
                 )
             ),
         }
-    }
-
-
-    fn echo(&self) -> String{
-        todo!()
     }
 }

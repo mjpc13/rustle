@@ -9,6 +9,8 @@ pub mod algorithm_run;
 pub mod test_execution;
 pub mod iteration;
 
+pub mod messages;
+
 // Re-export main structs for ergonomic imports
 pub use self::{
     dataset::Dataset,
@@ -18,7 +20,7 @@ pub use self::{
     container::Container,
     ros::{Odometry, Header, Pose, Twist},
     algorithm_run::{AlgorithmRun},
-    test_execution::{TestExecution, TestExecutionStatus, Environment, TestResults},
+    test_execution::{TestExecution, TestExecutionStatus},
     iteration::Iteration,
+    messages::ProgressMessage,
 };
-
