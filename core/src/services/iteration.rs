@@ -395,8 +395,8 @@ impl IterationService {
             let _ape = self.compute_metrics(&iter, &ape_args, &full_path, &full_dataset_path).await.map_err(|_e| RunError::Evo("Failed to compute APE".to_owned()))?;
             let _rpe = self.compute_metrics(&iter, &rpe_args, &full_path, &full_dataset_path).await.map_err(|_e| RunError::Evo("Failed to compute RPE".to_owned()))?;
 
-            let mut ape_list = APE::read_from_file(&format!("{full_path}/ape.txt")).unwrap();
-            let mut rpe_list = RPE::read_from_file(&format!("{full_path}/rpe.txt")).unwrap();
+            let mut ape_list = APE::read_from_file(&format!("{full_path}/ape.txt")).map_err(|e| RunError::Evo("Failure to load poses".to_owned()))?;
+            let mut rpe_list = RPE::read_from_file(&format!("{full_path}/rpe.txt")).map_err(|e| RunError::Evo("Failure to load poses".to_owned()))?;
             let mut position_list = Position::read_from_file(&format!("{full_path}/aligned_poses.txt")).unwrap();
 
             let _ = self.metric_service.create_ape(iteration_id_clone.clone(), &mut ape_list).await;

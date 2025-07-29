@@ -70,7 +70,7 @@ pub fn run_metrics_py(
     data_path: &str,
     evo_config: &Config,
     output_dir: &str
-){
+) -> Result<(), EvoError>{
     Python::with_gil(|py| {
         // Create a Python module from the embedded code
         let embedded_module = PyModule::from_code(py, PY_CODE, "embedded_module", "embedded_module").unwrap();
@@ -98,8 +98,8 @@ pub fn run_metrics_py(
         // Call the Python function
         embedded_module
             .getattr("compute_metrics").unwrap()
-            .call((), Some(kwargs)).unwrap();
-
+            .call((), Some(kwargs)).map_err(|e| EvoError::CommandError("Evo could not compute APE/RPE.".to_owned()))?;
+        Ok(())
     })
 }
 
