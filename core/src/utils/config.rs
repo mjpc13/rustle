@@ -192,7 +192,7 @@ impl Default for Config {
                 align_origin: true, 
                 t_max_diff: 0.01, 
                 t_offset: 0.0, 
-                scale: true,
+                scale: false,
                 n_to_align: 100, 
             },
             rustle: RustleConfig { 
