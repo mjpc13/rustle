@@ -48,18 +48,18 @@ impl TemporalEfficiencyMetric{
                 tes_accum / list_size
             };
 
-
         let fpt_value_opt = eff_s.clone().into_values()
             .filter(|&x| (1.0 - x).abs() > 0.1)// Filter out values at 90% of initial freq
             .min_by(|a, b| a.partial_cmp(b).unwrap());
 
+
         let fpt_time = if let Some(fpt_value) = fpt_value_opt {
             let fpt_freq = eff_s.iter()
                 .find(|(_, &v)| v == fpt_value)
-                .map(|(k, _)| k.parse::<f32>().unwrap())
+                .map(|(k, v)| k.parse::<f32>().unwrap())
                 .ok_or(MetricError::ComputeError("Could not compute Frame Processing Time".to_owned()))?;
-        
-            1.0 / (fpt_freq * fpt_value)
+
+            1.0 / (fpt_freq * fpt_value * base_freq)
         } else {
             warn!("Algorithm estimation frequency did not drop by 10% for the given set. Increase maximum bag speed value.");
             -1.0
