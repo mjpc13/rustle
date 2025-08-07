@@ -250,7 +250,7 @@ impl TestExecutionRepo {
 
     pub async fn delete_by_name(&self, name: String) -> Result<(), DbError> {
         self.conn.lock().await
-            .query("DELETE FROM test_execution WHERE name = $name")
+            .query("DELETE FROM test_execution WHERE def.name = $name")
             .bind(("name", name))
             .await
             .map_err(DbError::Operation)?;
