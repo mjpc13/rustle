@@ -1,3 +1,17 @@
+#Camera Intrinsics
+cam_model: Pinhole
+cam_width: 960
+cam_height: 600
+scale: 0.5
+cam_fx: 1285.037489588135
+cam_fy: 1282.905320971802
+cam_cx: 921.9275250487939
+cam_cy: 615.7833724677270
+cam_d0: -0.063225205921112
+cam_d1: 0.100254763768352
+cam_d2: 0.0
+cam_d3: 0.0
+
 common:
   img_topic: "/dalsa_rgb/left/image_raw"
   lid_topic: "/livox/lidar"
