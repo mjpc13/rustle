@@ -35,6 +35,12 @@ algorithms:
     parameters: "/home/mjpc13/Documents/rustle/examples/config/fast-livo2/params.yaml"
     odom_topics: ["/aft_mapped_to_init"]
 
+  - name: "lio-sam"
+    version: "0.3.0"
+    image_name: "mjpc13/rustle:lio-sam"
+    parameters: "/home/mjpc13/Documents/rustle/examples/config/lio-sam/params.yaml"
+    odom_topics: ["/lio_sam/mapping/odometry"]
+
   - name: "kiss-icp"
     version: "0.3.0"
     image_name: "mjpc13/rustle:kiss-icp"

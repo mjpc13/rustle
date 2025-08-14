@@ -65,6 +65,5 @@ RUN catkin build -s
 
 RUN chmod +x /rustle/catkin_ws/src/rustle-ros/scripts/cut_manager.py /rustle/catkin_ws/src/rustle-ros/scripts/drop_manager.py 
 
-
 # source catkin workspace
 RUN echo "source /rustle/catkin_ws/devel/setup.bash" >> /root/.profile
