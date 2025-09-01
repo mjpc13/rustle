@@ -22,7 +22,6 @@ struct DataItem{
 }
 
 //PLOTS FOR A SINGLE ITERATION!!!
-
 pub fn cpu_load_line_chart(data: &Vec<ContainerStats>, config: &Config) -> Result<Chart, PlotError> {
     let data_ts: Vec<DateTime<Utc>> = data.iter().map(|cs| cs.created_at).collect();
     let start_ts = data_ts[0];
@@ -208,7 +207,7 @@ pub fn ape_line_chart(data: &Vec<APE>, test_type: &TestType, config: &Config) ->
         0.0
     };
 
-    let area_data = get_area_from_def(test_type);
+    let area_data = get_area_from_def(test_type, config);
 
     let xy_data: Vec<Vec<f32>> = time
         .iter()
@@ -286,7 +285,7 @@ pub fn rpe_line_chart(data: &Vec<RPE>, test_type: &TestType, config: &Config) ->
         0.0
     };
 
-    let area_data = get_area_from_def(&test_type);
+    let area_data = get_area_from_def(&test_type, config);
 
     let xy_data: Vec<Vec<f32>> = time
         .iter()
@@ -607,7 +606,7 @@ pub fn algorithm_ape_line_chart(iterations: Vec<Vec<APE>>, test_type: &TestType,
         }
     }
 
-    let area_data = get_area_from_def(test_type);
+    let area_data = get_area_from_def(test_type, config);
 
     // Convert to Vec<DataItem> with statistics
     let data_items: Vec<DataItem> = time_buckets
@@ -717,7 +716,7 @@ pub fn algorithm_rpe_line_chart(iterations: Vec<Vec<RPE>>, test_type: &TestType,
         }
     }
 
-    let area_data = get_area_from_def(test_type);
+    let area_data = get_area_from_def(test_type, config);
 
     // Convert to Vec<DataItem> with statistics
     let data_items: Vec<DataItem> = time_buckets
@@ -915,9 +914,9 @@ pub fn test_cpu_load_line_chart(data: &HashMap<AlgorithmRun, Vec<Vec<ContainerSt
             Legend::new()
                 .show(true)
                 .top("top")
-                .left("left")
+                .left("right")
                 .orient(Orient::Horizontal)
-                .text_style(TextStyle::new().font_size(14))
+                .text_style(TextStyle::new().font_size(config.plotting.legend_size))
         )
     }
 
@@ -1032,9 +1031,9 @@ pub fn test_memory_usage_line_chart(data: &HashMap<AlgorithmRun, Vec<Vec<Contain
                 Legend::new()
                     .show(true)
                     .top("top")
-                    .left("left")
+                    .left("right")
                     .orient(Orient::Horizontal)
-                    .text_style(TextStyle::new().font_size(14))
+                    .text_style(TextStyle::new().font_size(config.plotting.legend_size))
             )
         }
     
@@ -1141,9 +1140,9 @@ pub fn test_ape_line_chart(data: &HashMap<AlgorithmRun, Vec<Vec<APE>>>, config: 
             Legend::new()
                 .show(true)
                 .top("top")
-                .left("left")
+                .left("right")
                 .orient(Orient::Horizontal)
-                .text_style(TextStyle::new().font_size(14))
+                .text_style(TextStyle::new().font_size(config.plotting.legend_size))
         )
     }
     
@@ -1249,9 +1248,9 @@ pub fn test_rpe_line_chart(data: &HashMap<AlgorithmRun, Vec<Vec<RPE>>>, config: 
             Legend::new()
                 .show(true)
                 .top("top")
-                .left("left")
+                .left("right")
                 .orient(Orient::Horizontal)
-                .text_style(TextStyle::new().font_size(14))
+                .text_style(TextStyle::new().font_size(config.plotting.legend_size))
         )
     }
     
@@ -1297,7 +1296,7 @@ pub fn test_adp_chart(data: &HashMap<Algorithm, &Vec<Metric>>, test_type: &TestT
 
     }
 
-    let area_data = get_area_from_def(&test_type);
+    let area_data = get_area_from_def(&test_type, config);
 
     let mut chart = Chart::new()
         .x_axis(
@@ -1320,9 +1319,9 @@ pub fn test_adp_chart(data: &HashMap<Algorithm, &Vec<Metric>>, test_type: &TestT
             Legend::new()
                 .show(true)
                 .top("top")
-                .left("left")
+                .left("right")
                 .orient(Orient::Horizontal)
-                .text_style(TextStyle::new().font_size(14))
+                .text_style(TextStyle::new().font_size(config.plotting.legend_size))
         )
     }
     chart = add_areas_markers(chart, area_data, config);
@@ -1370,7 +1369,7 @@ pub fn test_rdp_chart(data: &HashMap<Algorithm, &Vec<Metric>>, test_type: &TestT
 
     }
 
-    let area_data = get_area_from_def(&test_type);
+    let area_data = get_area_from_def(&test_type, config);
 
     let mut chart = Chart::new()
         .x_axis(
@@ -1383,7 +1382,7 @@ pub fn test_rdp_chart(data: &HashMap<Algorithm, &Vec<Metric>>, test_type: &TestT
         .y_axis(
             Axis::new()
                 .type_(AxisType::Value)
-                .name("ADP")
+                .name("RDP")
                 .name_text_style(TextStyle::new().font_size(config.plotting.y_axis_title_size).font_weight("bold"))
                 .axis_label(AxisLabel::new().font_size(config.plotting.y_axis_label_size)),
         );
@@ -1393,9 +1392,9 @@ pub fn test_rdp_chart(data: &HashMap<Algorithm, &Vec<Metric>>, test_type: &TestT
             Legend::new()
                 .show(true)
                 .top("top")
-                .left("left")
+                .left("right")
                 .orient(Orient::Horizontal)
-                .text_style(TextStyle::new().font_size(14))
+                .text_style(TextStyle::new().font_size(config.plotting.legend_size))
         )
     }
     chart = add_areas_markers(chart, area_data, config);
@@ -1412,7 +1411,7 @@ pub fn test_rdp_chart(data: &HashMap<Algorithm, &Vec<Metric>>, test_type: &TestT
 
 //Helper functions
 
-fn get_area_from_def(test_type: &TestType) -> Vec<MarkArea>{  
+fn get_area_from_def(test_type: &TestType, config: &Config) -> Vec<MarkArea>{  
 
     match &test_type{
         TestType::Simple => vec![],
@@ -1440,7 +1439,7 @@ fn get_area_from_def(test_type: &TestType) -> Vec<MarkArea>{
                             .show(true)
                             .position(LabelPosition::Top)
                             .color("rgba(80, 80, 80, 0.8)")
-                            .font_size(12)
+                            .font_size(config.plotting.band_legend_size)
                             .formatter("{b}")
                         )                        
                     .data(mark_areas_data);
