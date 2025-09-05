@@ -146,6 +146,4 @@ impl AlgorithmService {
         let _ = self.repo.delete_by_name(name.to_string()).await;
     }
 
-
-
 }

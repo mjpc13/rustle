@@ -1,5 +1,13 @@
 datasets:
-  - name: "botanic_garden"
+  - name: "park_dataset"
     ground_truth_topic: "/gt_poses"
-    dataset_path: "/home/mjpc13/Documents/rustle/test/dataset/"
-    tag: ["Botanic"]
+    dataset_path: "/home/francisco/Desktop/dataset"
+    tag: ["Park"]
+  - name: "1018_00_LIO"
+    ground_truth_topic: "/gt_poses"
+    dataset_path: "/home/francisco/Desktop/dataset"
+    tag: ["1018"]
+  - name: "ig_lio_test"
+    ground_truth_topic: "/gt_poses"
+    dataset_path: "/home/francisco/Desktop/dataset"
+    tag: ["ig_lio_test"]

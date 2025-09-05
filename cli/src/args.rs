@@ -133,6 +133,8 @@ pub struct AddAlgorithm {
     /// List of odometry topics
     #[clap(short, long)]
     pub odom_topics: Vec<String>,
+
+    pub param_list: Vec<String>,
 }
 
 /// Arguments for deleting a SLAM algorithm.

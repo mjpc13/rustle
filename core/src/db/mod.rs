@@ -9,6 +9,8 @@ pub mod test_execution;
 pub mod iteration;
 pub mod stat;
 
+pub mod params;
+
 // Re-export repositories
 pub use self::{
     dataset::DatasetRepo,

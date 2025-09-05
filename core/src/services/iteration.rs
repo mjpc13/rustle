@@ -26,6 +26,7 @@ use crate::models::metrics::metric::StatisticalMetrics;
 use crate::models::metrics::pose_error::{PoseErrorMetrics, Position, APE, RPE};
 use crate::models::metrics::{ContainerStats, CpuMetrics};
 use crate::models::{ProgressMessage, TestDefinition, TestType};
+use crate::services::params::ParamsService;
 use crate::utils::config::Config;
 use crate::utils::evo_wrapper::{run_metrics_py, EvoApeArg, EvoRpeArg, PlotArg};
 use crate::utils::plots::{ape_line_chart, cpu_load_line_chart, memory_usage_line_chart, rpe_line_chart};
@@ -50,13 +51,14 @@ pub struct IterationService {
     dataset_service: DatasetService,
     stat_service: StatService,
     metric_service: MetricService,
+    params_service: ParamsService,
     docker: Arc<Docker>,  // Assuming you have Docker client setup
 }
 
 impl IterationService {
-    pub fn new(repo: IterationRepo, docker: Arc<Docker>, ros_service: RosService, dataset_service: DatasetService, stat_service: StatService, metric_service: MetricService,) -> Self {
+    pub fn new(repo: IterationRepo, docker: Arc<Docker>, ros_service: RosService, dataset_service: DatasetService, stat_service: StatService, metric_service: MetricService, params_service: ParamsService) -> Self {
         let config = Config::load().expect("Missing Configuration");
-        Self { repo, docker, ros_service, dataset_service, stat_service, metric_service, config }
+        Self { repo, docker, ros_service, dataset_service, stat_service, metric_service, config, params_service }
     }
 
     pub async fn create(&self, iter_number: u8, algo:Algorithm, algorithm_run_id: &Thing, exec_id: &Thing, test_type: TestType) -> Result<(), DbError> {
@@ -517,7 +519,21 @@ impl IterationService {
         });
 
         let dataset = self.repo.get_dataset(iteration).await?; //get the dataset
-        let algorithm = self.repo.get_algorithm(iteration).await?; //get the algorithm
+        let algorithm: Algorithm = self.repo.get_algorithm(iteration).await?; //get the algorithm
+
+        let target_id = algorithm.current_params.unwrap();
+
+        //println!("Id of the current config -> {:?}", target_id);
+
+        let current_slam_config = self.params_service.repo.get_by_id(target_id).await.unwrap();
+
+        let mut rng = rand::thread_rng();
+        let random_seed: u32 = rng.gen();
+
+        let mut file_name = String::from("/tmp/");
+        let mut temp_file_name = format!("/tmp/temp_params_{}.yaml", random_seed);
+
+        current_slam_config.save_to_file(&temp_file_name);
 
         // get test definition, if it matches the Drop test need to mount an 
         // additional file to /rustle/config/drop_config.yaml!
@@ -533,10 +549,10 @@ impl IterationService {
         //Add an extra YAML file for the Drop configurations.
         match &iteration.test_type{
             crate::models::TestType::Simple => {
-                hm.insert("/rustle/config/params.yaml", &algorithm.parameters);
+                hm.insert("/rustle/config/params.yaml", &temp_file_name);
             },
             crate::models::TestType::Speed(_) => {
-                hm.insert("/rustle/config/params.yaml", &algorithm.parameters);
+                hm.insert("/rustle/config/params.yaml", &temp_file_name);
             },
             crate::models::TestType::Drop(drop_params) => {
                 //Add to the cache!
@@ -544,16 +560,12 @@ impl IterationService {
                     let cache_dir = proj_dirs.cache_dir();
                     let cache_dir_str = cache_dir.to_str().ok_or(RunError::Execution("Unable to find application path".to_owned())).unwrap();
 
-                    let params_string = fs::read_to_string(&algorithm.parameters).unwrap();
-
-                    let drop_yaml = drop_params.update_file(&params_string);
-
                     let file_name = format!("{}_drop.yaml",&iteration.container.container_name);
 
                     let full_path = format!("{}/{}", cache_dir_str, file_name);
                     drop_file = full_path;
 
-                    let _ = fs::write(format!("{}/{}", cache_dir_str, file_name), drop_yaml);
+                    current_slam_config.save_to_file(&format!("{}/{}", cache_dir_str, file_name));
 
                     hm.insert("/rustle/config/params.yaml", &drop_file);
 
@@ -565,16 +577,12 @@ impl IterationService {
                     let cache_dir = proj_dirs.cache_dir();
                     let cache_dir_str = cache_dir.to_str().ok_or(RunError::Execution("Unable to find application path".to_owned())).unwrap();
 
-                    let params_string = fs::read_to_string(&algorithm.parameters).unwrap();
-
-                    let cut_yaml = cut_params.update_file(&params_string);
-
                     let file_name = format!("{}_cut.yaml",&iteration.container.container_name);
 
                     let full_path = format!("{}/{}", cache_dir_str, file_name);
                     cut_file = full_path;
 
-                    let _ = fs::write(format!("{}/{}", cache_dir_str, file_name), cut_yaml);
+                    current_slam_config.save_to_file(&format!("{}/{}", cache_dir_str, file_name));
 
                     hm.insert("/rustle/config/params.yaml", &cut_file);
 

@@ -39,6 +39,6 @@ itertools = "*"
 
 nalgebra = { version = "0.32.4", features = ["serde-serialize"] }
 
-charming = {version = "*", features = ["ssr"]}
+charming = {version = "0.4.0", features = ["ssr"]}
 rand = "*"
 pyo3 = { version = "0.20.0", features = ["auto-initialize"] }

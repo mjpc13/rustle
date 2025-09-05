@@ -11,6 +11,8 @@ pub mod iteration;
 
 pub mod messages;
 
+pub mod slam_config;
+
 // Re-export main structs for ergonomic imports
 pub use self::{
     dataset::Dataset,
