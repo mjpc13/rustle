@@ -523,8 +523,6 @@ impl IterationService {
 
         let target_id = algorithm.current_params.unwrap();
 
-        //println!("Id of the current config -> {:?}", target_id);
-
         let current_slam_config = self.params_service.repo.get_by_id(target_id).await.unwrap();
 
         let mut rng = rand::thread_rng();
