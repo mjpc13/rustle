@@ -23,6 +23,9 @@ pub enum CommandType {
 
     /// Manage application configuration
     Config(ConfigCommand),
+
+    // Manage and run hyperparameter tuning experiments
+    Tune(TuneCommand),
 }
 
 // ================== DATASET COMMANDS ==================
@@ -316,4 +319,30 @@ pub struct SetConfig {
 
     /// New value to assign to the key
     pub value: String,
+}
+
+// ================== TUNE COMMANDS ==================
+
+/// Command wrapper for dataset-related actions.
+#[derive(Debug, Args)]
+pub struct TuneCommand {
+    #[clap(subcommand)]
+    pub command: TuneSubCommand,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum TuneSubCommand {
+    /// Add a tuning configuration
+    Add(AddConfig),
+
+    /// Show all available tuning configurations
+    List,
+}
+
+/// Arguments for adding a tuning configuration
+#[derive(Debug, Args)]
+pub struct AddConfig {
+    /// yaml file to load tuning config from
+    #[clap(short, long)]
+    pub file: Option<String>,
 }

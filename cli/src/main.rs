@@ -4,7 +4,7 @@ mod bootstrap;
 
 use args::*;
 use bootstrap::*;
-use handlers::{handle_algo, handle_config, handle_dataset, handle_test};
+use handlers::{handle_algo, handle_config, handle_dataset, handle_test, handle_tune};
 use clap::Parser;
 use env_logger::{self, Builder};
 use log::LevelFilter;
@@ -28,6 +28,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         CommandType::Algo(algo_cmd) => handle_algo(algo_cmd, &app.algo_service, &app.params_service).await?,
         CommandType::Test(test_cmd) => handle_test(test_cmd, &app.test_exec_service).await?,
         CommandType::Config(config_cmd) => handle_config(config_cmd).await?,
+        CommandType::Tune(tune_cmd) => handle_tune(tune_cmd).await?,
     }
 
     Ok(())
