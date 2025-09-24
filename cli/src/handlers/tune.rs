@@ -19,7 +19,7 @@ pub async fn handle_tune(tune_cmd: TuneCommand, service: &TuningService) -> Resu
             let tuning_configs = service.get_all().await?;
         
             if tuning_configs.is_empty() {
-                println!("No datasets found.");
+                println!("No tuning configurations found.");
                 return Ok(());
             }
 
