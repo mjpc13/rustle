@@ -27,7 +27,7 @@ pub async fn handle_tune(tune_cmd: TuneCommand, service: &TuningService) -> Resu
             table.load_preset(UTF8_FULL);
             table.set_content_arrangement(ContentArrangement::Dynamic);
             table.set_header(vec![
-                "Algo name",
+                "Algorithm name",
                 "Dataset name"
             ]);
 
