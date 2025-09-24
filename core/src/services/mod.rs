@@ -11,6 +11,7 @@ pub mod iteration;
 pub mod stat;
 
 pub mod params;
+pub mod tuning;
 
 
 // Re-export key components

@@ -9,6 +9,8 @@ use rustle_core::{
     utils::config::Config,
     db::params::ParamsRepo,
     services::params::ParamsService,
+    db::tuning::TuningRepo,
+    services::tuning::TuningService,
 };
 
 pub struct AppContext {
@@ -16,6 +18,7 @@ pub struct AppContext {
     pub dataset_service: DatasetService,
     pub test_exec_service: TestExecutionService,
     pub params_service: ParamsService,
+    pub tuning_service: TuningService,
 }
 
 pub async fn build_app() -> Result<AppContext, Box<dyn std::error::Error>> {
@@ -39,6 +42,7 @@ pub async fn build_app() -> Result<AppContext, Box<dyn std::error::Error>> {
     let iteration_repo = IterationRepo::new(conn_m.clone());
     let metric_repo = MetricRepo::new(conn_m.clone());
     let params_repo = ParamsRepo::new(conn_m.clone());
+    let tuning_repo = TuningRepo::new(conn_m.clone());
 
     // Services
     let algo_service = AlgorithmService::new(algo_repo, docker.clone());
@@ -47,6 +51,8 @@ pub async fn build_app() -> Result<AppContext, Box<dyn std::error::Error>> {
     let stat_service = StatService::new(stat_repo);
     let metric_service = MetricService::new(metric_repo);
     let params_service = ParamsService::new(params_repo, docker.clone());
+    let tuning_service = TuningService::new(tuning_repo, docker.clone());
+
     let iteration_service = IterationService::new(
         iteration_repo,
         docker.clone(),
@@ -68,5 +74,6 @@ pub async fn build_app() -> Result<AppContext, Box<dyn std::error::Error>> {
         dataset_service,
         test_exec_service,
         params_service,
+        tuning_service,
     })
 }
