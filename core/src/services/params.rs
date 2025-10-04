@@ -9,6 +9,9 @@ use crate::{models::Algorithm, db::params::ParamsRepo, services::error::{Validat
 use futures_util::stream::{StreamExt};
 use super::error::ProcessingError;
 
+use crate::services::DbError;
+use surrealdb::sql::Thing;
+
 #[derive(Clone)]
 pub struct ParamsService {
     pub repo: ParamsRepo,
@@ -27,5 +30,9 @@ impl ParamsService {
         self.repo.save(&mut params_config).await?;
 
         Ok(params_config)
+    }
+
+    pub async fn get_by_id(&self, id: Option<Thing>) -> Result<Option<SLAMConfig>, DbError> {
+        self.repo.get_by_id(id).await
     }
 }

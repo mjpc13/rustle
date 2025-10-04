@@ -200,3 +200,60 @@ pub enum PlotError{
     FileExists(String),
 
 }
+
+#[derive(Debug, Error)]
+pub enum ParameterSpaceError {
+    
+    #[error("The parameter {0} has repeated values, which is not permitted.")]
+    RepeatedFields(String),
+
+    #[error("The parameter {0} cannot have higher bound {2} lower than or equal to lower bound {1}.")]
+    BoundsProblem(String, String, String),
+
+    #[error("The parameter {0} is out of bounds({1})")]
+    OutOfBoundsIndex(String, i32),
+
+    #[error("There exists no parameter '{0}' for this SLAM algorithm")]
+    InvalidKey(String),
+
+    #[error("A parameter of type {0} was asked, but you provided something else")]
+    IncompatibleTypes(String),
+
+    #[error("You specified too many boolean values in an array, when only 2 are possible")]
+    TooManyBoolValues(),
+
+    #[error("You have repeated values of type {0} in an array, which is not allowed")]
+    RepeatedValuesInArray(String),
+
+    #[error("The number array you specified has too many/few values. The correct format is: (first value, step, total number of values)")]
+    NumberArrayWrongFormat(),
+
+    #[error("'{0}' is supposed to be an array of {1} values, but value(s) of other type(s) were supplied")]
+    WrongTypeInArray(String, String),
+
+    #[error("In a number array, the total number of values cannot be zero")]
+    NoValuesInVector(),
+
+    #[error("'{0}' is supposed to be an array of {1} elements, but {2} elements were supplied")]
+    WrongArraySize(String, usize, usize),
+
+    #[error("'{0}' is supposed to be an array, but a value of another typed was supplied")]
+    NotAnArray(String)
+
+}
+
+#[derive(Debug, Error)]
+pub enum TuningError {
+
+    #[error("No field called 'algo_name' was found")]
+    NoAlgoName(),
+
+    #[error("No field called 'dataset_name' was found")]
+    NoDatasetName(),
+
+    #[error("No field called 'parameters' was found")]
+    NoParametersField(),
+
+    #[error("The 'parameters' field is not a json object")]
+    NoParametersObject()
+}

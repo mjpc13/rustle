@@ -66,21 +66,13 @@ impl ParamsRepo {
         }
     }
 
-    pub async fn get_by_id(&self, id: Thing) -> Result<SLAMConfig, DbError> {
-        let mut existing = self.conn
-            .lock().await
-            .query("SELECT * FROM params")
-            .await.unwrap();
-
-
-        let params: Vec<SLAMConfig> = existing.take(0).expect("An error ocurred while trying to retrieve SLAM configs from the database");
-
-        if let Some(existing_config) = params.clone().iter().find(|cfg| cfg.id.as_ref().unwrap() == &id) {
-            Ok(existing_config.clone())
-        }
-        else {
-            Err(DbError::NotFound(String::from("Config not found in the database")))
-        }
+    pub async fn get_by_id(&self, id: Option<Thing>) -> Result<Option<SLAMConfig>, DbError> {
+        self.conn.lock().await
+            .query("SELECT * FROM params WHERE id = $id")
+            .bind(("id", id))
+            .await?
+            .take(0)
+            .map_err(|e| DbError::Operation(e))
     }
 
     pub async fn change_param_value(&self, id: Thing, param_key: String, new_value: Value) -> Result<(), DbError> {

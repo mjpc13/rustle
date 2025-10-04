@@ -29,8 +29,6 @@ impl SLAMConfig {
         }
     }
 
-    
-
     fn parse_yaml(file_path: &str) -> Result<SLAMConfig, Box<dyn std::error::Error>> {
         let file = File::open(file_path)?;
         let reader = BufReader::new(file);

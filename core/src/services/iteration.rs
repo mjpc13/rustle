@@ -521,9 +521,9 @@ impl IterationService {
         let dataset = self.repo.get_dataset(iteration).await?; //get the dataset
         let algorithm: Algorithm = self.repo.get_algorithm(iteration).await?; //get the algorithm
 
-        let target_id = algorithm.current_params.unwrap();
+        let target_id: Option<Thing> = algorithm.current_params;
 
-        let current_slam_config = self.params_service.repo.get_by_id(target_id).await.unwrap();
+        let current_slam_config = self.params_service.repo.get_by_id(target_id).await?.unwrap();
 
         let mut rng = rand::thread_rng();
         let random_seed: u32 = rng.gen();

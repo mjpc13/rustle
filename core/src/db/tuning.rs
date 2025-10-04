@@ -22,42 +22,17 @@ impl TuningRepo {
     }
 
     pub async fn save(&self, tuning_config: &mut TuningConfig) -> Result<(), DbError> {
-        let mut config_exists = false;
 
-        let mut existing = self.conn
-            .lock().await
-            .query("SELECT * FROM tuning")
-            .await.unwrap();
+        let created: Option<TuningConfig> = self.conn.lock().await
+            .create("tuning")
+            .content(tuning_config.clone())
+            .await?;
 
-        let configs: Vec<TuningConfig> = existing.take(0).expect("Failed to retrieve stuff from database");
-
-        if configs.is_empty() {
-            config_exists = false;
-        }
-        else {
-            for current_config in &configs {
-                if *current_config == *tuning_config {
-                    config_exists = true;
-                }
-            }
+        if let Some(created) = created {
+            tuning_config.id = created.id;
         }
 
-        if config_exists == false {
-            let created: Option<SLAMConfig> = self.conn
-                .lock().await
-                .create("tuning")
-                .content(tuning_config.clone())
-                .await.unwrap();
-
-                if let Some(created) = created {
-                    tuning_config.id = created.id;
-                }
-
-            Ok(())
-        }
-        else {
-            return Err(DbError::NotFound(String::from("Config already exists in the database")));
-        }
+        Ok(())
     }
 
     pub async fn get_by_id(&self, id: Thing) -> Result<TuningConfig, DbError> {

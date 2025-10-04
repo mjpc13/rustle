@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use surrealdb::{engine::local::Db, Surreal};
+use surrealdb::{engine::local::Db, Surreal, sql::Thing};
 use tokio::sync::Mutex;
 
 use crate::{models::Algorithm, services::DbError};
@@ -23,8 +23,10 @@ impl AlgorithmRepo {
 
             if let Some(created) = created {
                 algorithm.id = created.id;
+                //println!("Algo created: {:?}", algorithm.id);
             }
 
+        
         Ok(())
     
     }  
@@ -40,6 +42,15 @@ impl AlgorithmRepo {
 
     pub async fn load(&self, id: &str) -> Result<Option<Algorithm>, surrealdb::Error> {
         self.conn.lock().await.select(("algorithm", id)).await
+    }
+
+    pub async fn get_by_id(&self, id: Option<Thing>) -> Result<Option<Algorithm>, DbError> {
+        self.conn.lock().await
+            .query("SELECT * FROM algorithm WHERE id = $id")
+            .bind(("id", id))
+            .await?
+            .take(0)
+            .map_err(|e| DbError::Operation(e))
     }
 
     pub async fn list_all(&self) -> Result<Vec<Algorithm>, surrealdb::Error> {

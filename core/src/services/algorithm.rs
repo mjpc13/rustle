@@ -4,9 +4,12 @@ use bollard::{image::CreateImageOptions, Docker};
 use bollard::errors::Error as DockerError;
 use log::{info, trace, warn};
 
+use crate::services::DbError;
 use crate::{models::Algorithm, db::AlgorithmRepo, services::error::{ValidationError}};
 use futures_util::stream::{StreamExt};
 use super::error::ProcessingError;
+
+use surrealdb::sql::Thing;
 
 pub struct AlgorithmService {
     repo: AlgorithmRepo,
@@ -140,6 +143,36 @@ impl AlgorithmService {
     pub async fn get_all(&self) -> Result<Vec<Algorithm>, ProcessingError> {
         let results = self.repo.list_all().await?;
         Ok(results)
+    }
+
+    pub async fn get_algo_id_by_name(&self, name: String) -> Result<Option<Thing>, ProcessingError> {
+        let current_algos = self.repo.list_all().await?;
+
+        for algo in current_algos.clone() {
+            if algo.name.to_string() == name {
+                return Ok(algo.id);
+            }
+        }
+
+        return Err(ProcessingError::NotFound(String::from("Algorithm not found")));
+    }
+
+    pub async fn get_algo_name_by_id(&self, id:Option<Thing>) -> Result<Option<String>, DbError> {
+        match self.repo.get_by_id(id).await {
+            Ok(Some(algo)) => {
+                Ok(Some(algo.name))
+            },
+            Ok(None) => {
+                Ok(None)
+            }
+            Err(err) => {
+                Err(err)
+            }
+        }
+    }
+
+    pub async fn get_by_id(&self, id: Option<Thing>) -> Result<Option<Algorithm>, DbError> {
+        self.repo.get_by_id(id).await
     }
 
     pub async fn delete_algo_by_name(&self, name: &String){
