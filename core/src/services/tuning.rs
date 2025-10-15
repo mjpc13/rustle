@@ -6,7 +6,7 @@ use log::{info, trace, warn};
 
 use crate::db::TuningRepo;
 use crate::models::slam_config::SLAMConfig;
-use crate::models::tuning_config::{self, TuningConfig};
+use crate::models::tuning::tuning_config::{self, TuningConfig};
 use crate::services::DbError;
 use crate::{models::Algorithm, db::params::ParamsRepo, services::error::{ValidationError}};
 use futures_util::stream::{StreamExt};

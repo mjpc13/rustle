@@ -202,8 +202,36 @@ pub enum PlotError{
 }
 
 #[derive(Debug, Error)]
+pub enum TuningError {
+
+    #[error("No field called 'algo_name' was found")]
+    NoAlgoName(),
+
+    #[error("No field called 'dataset_name' was found")]
+    NoDatasetName(),
+
+    #[error("No field called 'parameters' was found")]
+    NoParametersField(),
+
+    #[error("The 'parameters' field is not a json object")]
+    NoParametersObject()
+}
+
+#[derive(Debug, Error)]
 pub enum ParameterSpaceError {
-    
+
+    #[error("There exists no parameter '{0}' for this SLAM algorithm")]
+    InvalidKey(String),
+
+    #[error(transparent)]
+    BoolParsing(#[from] BoolParsingError),
+
+    #[error(transparent)]
+    StringParsing(#[from] StringParsingError),
+
+    #[error(transparent)]
+    NumberParsing(#[from] NumberParsingError),
+
     #[error("The parameter {0} has repeated values, which is not permitted.")]
     RepeatedFields(String),
 
@@ -213,14 +241,8 @@ pub enum ParameterSpaceError {
     #[error("The parameter {0} is out of bounds({1})")]
     OutOfBoundsIndex(String, i32),
 
-    #[error("There exists no parameter '{0}' for this SLAM algorithm")]
-    InvalidKey(String),
-
     #[error("A parameter of type {0} was asked, but you provided something else")]
     IncompatibleTypes(String),
-
-    #[error("You specified too many boolean values in an array, when only 2 are possible")]
-    TooManyBoolValues(),
 
     #[error("You have repeated values of type {0} in an array, which is not allowed")]
     RepeatedValuesInArray(String),
@@ -243,17 +265,64 @@ pub enum ParameterSpaceError {
 }
 
 #[derive(Debug, Error)]
-pub enum TuningError {
+pub enum BoolParsingError {
 
-    #[error("No field called 'algo_name' was found")]
-    NoAlgoName(),
+    #[error("In boolean Parameter '{0}': the value must be a boolean.")]
+    NotABoolean(String),
 
-    #[error("No field called 'dataset_name' was found")]
-    NoDatasetName(),
+    #[error("In array for boolean parameter '{0}': the array must not be empty.")]
+    EmptyBoolArray(String),
 
-    #[error("No field called 'parameters' was found")]
-    NoParametersField(),
+    #[error("In array for boolean parameter '{0}': repeated values are not allowed. At most, the array may contain both 'true' and 'false' values.")]
+    RepeatedValues(String),
 
-    #[error("The 'parameters' field is not a json object")]
-    NoParametersObject()
+    #[error("In array for boolean parameter '{0}': the array must not have more than 2 values. At most, it may have 2 values(true and false).")]
+    TooManyValuesInArray(String),
+
+    #[error("In array for boolean parameter '{0}': the array contains at least 1 value that is not a boolean.")]
+    WrongTypeInArray(String)
+
+}
+
+#[derive(Debug, Error)]
+pub enum StringParsingError {
+
+    #[error("In String parameter '{0}': the value must be a String.")]
+    NotAString(String),
+
+    #[error("In array for String parameter '{0}': the array must not be empty.")]
+    EmptyStringArray(String),
+
+    #[error("In array for String parameter '{0}': the array contains at least 1 value that is not a String.")]
+    WrongTypeInArray(String),
+
+    #[error("In array for String parameter '{0}': repeated values are not allowed")]
+    RepeatedValues(String)
+
+}
+
+#[derive(Debug, Error)]
+pub enum NumberParsingError {
+
+    #[error("In {0} parameter '{1}': the value must be a {0}.")]
+    NotANumber(String, String),
+
+    #[error("In array for {0} parameter '{1}': the array must not be empty.")]
+    EmptyNumberArray(String, String),
+
+    #[error("In array for numeric parameter '{0}': the supplied array has too many/little values. The correct format is [start, step, number_of_elements].")]
+    WrongArrayFormat(String),
+
+    #[error("In array for {0} parameter '{1}': the array contains at least 1 value that is not a {0}.")]
+    WrongTypeInarray(String, String),
+
+    #[error("In array for {0} parameter '{1}': the 'start' value must be a {0}.")]
+    WrongFirstValue(String, String),
+
+    #[error("In array for {0} parameter '{1}': the 'step' value must be a {0}.")]
+    WrongStepType(String, String),
+
+    #[error("In array for {0} parameter '{1}': the 'number_of_elements' value must be a u64.")]
+    WrongNumElementsType(String, String)
+
 }

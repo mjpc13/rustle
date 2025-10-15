@@ -3,6 +3,7 @@ use crate::{args::{TuneCommand, TuneSubCommand}, handlers::tune};
 use comfy_table::{presets::UTF8_FULL, ContentArrangement, Table};
 use log::{error, info};
 use rustle_core::{services::{tuning::TuningService, AlgorithmService, DatasetService, params::ParamsService}, models::Dataset, models::tuning_config::TuningConfig};
+use rustle_core::models::tuning::grid_search::GridSearchConfig;
 use chrono::Utc;
 use serde_yaml::from_reader;
 use std::{error::Error, fs::File, vec};
@@ -24,11 +25,19 @@ pub async fn handle_tune(tune_cmd: TuneCommand, service: &TuningService, algo_se
             match cfg {
                 Ok(Some(mut result_cfg)) => {
                     service.save_to_db(&mut result_cfg).await?;
+
+                    let algo_params_id = algo_service.get_by_id(result_cfg.algo_id.clone()).await?.unwrap();
+                    let mut initial_config: HashMap<String, Value> = params_service.get_by_id(algo_params_id.current_params).await?.unwrap().params;
+
+                    let mut grid = GridSearchConfig::new();
+                    grid.build_configurations(&result_cfg.parameters, &initial_config);
+
                     info!("Created tuning config");
                 }
                 Ok(None) => info!("Failed to create tuning config"),
                 Err(e) => info!("Failed to create tuning config: {}", e),
             }
+
         }
 
         TuneSubCommand::List => {

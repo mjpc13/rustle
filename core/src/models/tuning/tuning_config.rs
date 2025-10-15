@@ -6,7 +6,7 @@ use std::io::{BufReader, Write, BufRead};
 
 use crate::models::parameter_space::ParameterSpaceThing;
 use crate::models::slam_config::SLAMConfig;
-use crate::services::error::ParameterSpaceError;
+use crate::services::error::{BoolParsingError, NumberParsingError, ParameterSpaceError, StringParsingError};
 
 use std::mem::discriminant;
 
@@ -20,7 +20,7 @@ pub struct TuningConfig {
 
 impl TuningConfig {
     pub fn new() -> Self {
-        Self { id: None, algo_id: None, dataset_id: None, parameters: HashMap::new() }
+        Self { id: None, algo_id: None, dataset_id: None, parameters: HashMap::new()}
     }
 
     /// This function assumes `algo_cfg` belongs to the correct algorithm.
@@ -65,14 +65,26 @@ impl TuningConfig {
         match value {
             Value::String(_) => Ok(()),
             Value::Array(elements) => {
-                for elem in elements {
-                    if !elem.is_string() {
-                        return Err(ParameterSpaceError::IncompatibleTypes(String::from("String")));
+                let temp_vec = value.as_array().unwrap();
+
+                if temp_vec.len() == 0 {
+                    return Err(ParameterSpaceError::StringParsing(StringParsingError::EmptyStringArray(key)));
+                }
+
+                for i in 0..temp_vec.len() {
+                    if !temp_vec[i].is_string() {
+                        return Err(ParameterSpaceError::StringParsing(StringParsingError::WrongTypeInArray(key)));
+                    }
+
+                    for j in i+1..temp_vec.len() {
+                        if temp_vec[i] == temp_vec[j] {
+                            return Err(ParameterSpaceError::StringParsing(StringParsingError::RepeatedValues(key)));
+                        }
                     }
                 }
                 return Ok(());
             },
-            _ => return Err(ParameterSpaceError::IncompatibleTypes(String::from("String"))),
+            _ => return Err(ParameterSpaceError::StringParsing(StringParsingError::NotAString(key))),
         }
     }
 
@@ -82,27 +94,30 @@ impl TuningConfig {
             Value::Array(elements) => {
                 let temp_vec = value.as_array().unwrap();
 
+                if temp_vec.len() == 0 {
+                    return Err(ParameterSpaceError::BoolParsing(BoolParsingError::EmptyBoolArray(key)));
+                }
+
                 if temp_vec.len() > 2 {
-                    return Err(ParameterSpaceError::TooManyBoolValues());
+                    return Err(ParameterSpaceError::BoolParsing(BoolParsingError::TooManyValuesInArray(key)));
                 }
                 else if temp_vec.len() == 2 {
                     if !temp_vec[0].is_boolean() || !temp_vec[1].is_boolean() {
-                        return Err(ParameterSpaceError::IncompatibleTypes(String::from("bool")));
+                        return Err(ParameterSpaceError::BoolParsing(BoolParsingError::WrongTypeInArray(key)));
                     }
                     else if temp_vec[0] == temp_vec[1] {
-                        return Err(ParameterSpaceError::RepeatedValuesInArray(String::from("bool")));
+                        return Err(ParameterSpaceError::BoolParsing(BoolParsingError::RepeatedValues(key)));
                     }
                     return Ok(());
                 }
 
                 // only 1 value...
                 if !temp_vec[0].is_boolean() {
-                    return Err(ParameterSpaceError::IncompatibleTypes(String::from("bool")));
+                    return Err(ParameterSpaceError::BoolParsing(BoolParsingError::NotABoolean(key)));
                 }
                 Ok(())
             },
-            _ => return Err(ParameterSpaceError::IncompatibleTypes(String::from("bool"))),
-
+            _ => return Err(ParameterSpaceError::BoolParsing(BoolParsingError::NotABoolean(key))),
         }
     }
 
@@ -118,20 +133,25 @@ impl TuningConfig {
             let temp_vec = value.as_array().unwrap();
 
             if temp_vec.len() != 3 {
-                return Err(ParameterSpaceError::NumberArrayWrongFormat());
+                return Err(ParameterSpaceError::NumberParsing(NumberParsingError::WrongArrayFormat(key)));
             }
-            else {
-                if !temp_vec[0].is_u64() || !temp_vec[1].is_u64() || !temp_vec[2].is_u64() {
-                    return Err(ParameterSpaceError::WrongTypeInArray(key, String::from("u64")))
-                }
-                if temp_vec[2].as_u64().unwrap() == 0 {
-                    return Err(ParameterSpaceError::NoValuesInVector());
-                }
+
+            if !temp_vec[0].is_u64() {
+                return Err(ParameterSpaceError::NumberParsing(NumberParsingError::WrongFirstValue(String::from("u64"), key)));
             }
+
+            if !temp_vec[1].is_u64() {
+                return Err(ParameterSpaceError::NumberParsing(NumberParsingError::WrongStepType(String::from("u64"), key)));
+            }
+
+            if !temp_vec[2].is_u64() {
+                return Err(ParameterSpaceError::NumberParsing(NumberParsingError::WrongNumElementsType(String::from("u64"), key)));
+            }
+
             Ok(())
         }
         else {
-            return Err(ParameterSpaceError::IncompatibleTypes(String::from("u64")));
+            return Err(ParameterSpaceError::NumberParsing(NumberParsingError::NotANumber(String::from("u64"), key)));
         }
     }
 
@@ -177,20 +197,25 @@ impl TuningConfig {
             let temp_vec = value.as_array().unwrap();
 
             if temp_vec.len() != 3 {
-                return Err(ParameterSpaceError::NumberArrayWrongFormat());
+                return Err(ParameterSpaceError::NumberParsing(NumberParsingError::WrongArrayFormat(key)));
             }
-            else {
-                if !temp_vec[0].is_f64() || !temp_vec[1].is_f64() || !temp_vec[2].is_u64() {
-                    return Err(ParameterSpaceError::WrongTypeInArray(key, String::from("f64")))
-                }
-                if temp_vec[2].as_u64().unwrap() == 0 {
-                    return Err(ParameterSpaceError::NoValuesInVector());
-                }
+
+            if !temp_vec[0].is_f64() {
+                return Err(ParameterSpaceError::NumberParsing(NumberParsingError::WrongFirstValue(String::from("f64"), key)));
             }
+
+            if !temp_vec[1].is_f64() {
+                return Err(ParameterSpaceError::NumberParsing(NumberParsingError::WrongStepType(String::from("f64"), key)));
+            }
+
+            if !temp_vec[2].is_u64() {
+                return Err(ParameterSpaceError::NumberParsing(NumberParsingError::WrongNumElementsType(String::from("f64"), key)));
+            }
+
             Ok(())
         }
         else {
-            return Err(ParameterSpaceError::IncompatibleTypes(String::from("f64")));
+            return Err(ParameterSpaceError::NumberParsing(NumberParsingError::NotANumber(String::from("f64"), key)));
         }
     }
 
