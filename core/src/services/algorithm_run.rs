@@ -1,7 +1,7 @@
 use std::{collections::{BTreeMap, HashMap}, fs, path::Path};
 
 use crate::{
-    db::AlgorithmRunRepo, models::{algorithm_run::AlgorithmRun, metric::{Metric, StatisticalMetrics, StatisticalMetricsStamped}, metrics::{pose_error::{APE, RPE}, ContainerStats, CpuMetrics}, Algorithm, Iteration, TestDefinition, TestType}, services::error::ProcessingError, utils::{config::Config, plots::{algorithm_ape_line_chart, algorithm_cpu_load_chart, algorithm_memory_usage_chart, algorithm_rpe_line_chart}}
+    db::AlgorithmRunRepo, models::{algorithm_run::AlgorithmRun, metric::{Metric, StatisticalMetrics, StatisticalMetricsStamped}, metrics::{pose_error::{APE, RPE}, ContainerStats, CpuMetrics}, Algorithm, Iteration, TestDefinition, TestType}, services::error::ProcessingError, utils::{config::Config, plots::{algorithm_ape_line_chart, algorithm_cpu_load_chart, algorithm_memory_usage_chart, algorithm_plot, algorithm_rpe_line_chart, GraphType}}
 };
 
 use charming::Chart;
@@ -97,11 +97,11 @@ impl AlgorithmRunService {
                 return Err(PlotError::FileExists(filepath));
             } else {
                 let chart = match f {
-                    "aggregated_cpu_load" => self.plot_cpu_load(&iterations, config).await,
-                    "aggregated_memory_usage" => self.plot_memory_usage(&iterations, config).await,
-                    "aggregated_ape" => self.plot_ape(&iterations, &run.test_type, config).await,
-                    "aggregated_rpe" => self.plot_rpe(&iterations, &run.test_type, config).await,
-                    &_ => todo!("This should be fine")
+                    "aggregated_cpu_load" => algorithm_plot(&run.cpu_load_list, config, GraphType::CPU),
+                    "aggregated_memory_usage" => algorithm_plot(&run.mem_usage_list, config, GraphType::Memory),
+                    "aggregated_ape" => algorithm_plot(&run.ape_list, config, GraphType::APE),
+                    "aggregated_rpe" => algorithm_plot(&run.rpe_list, config, GraphType::RPE),
+                    &_ => todo!("")
                 };
 
                 if let Ok(c) = chart {
@@ -144,27 +144,16 @@ impl AlgorithmRunService {
         algorithm_rpe_line_chart(algo_rpe, test_def,config)
     }
 
-    async fn plot_cpu_load(&self, iterations: &Vec<Iteration>, config: &Config) -> Result<Chart, PlotError>{
+    async fn plot_cpu_load(&self, iterations: &Vec<StatisticalMetricsStamped>, config: &Config) -> Result<Chart, PlotError>{
 
-        let algo_stats: Vec<Vec<ContainerStats>> = join_all(
-            iterations.iter().map(|iter| async {
-                self.iter_service.get_stats(iter).await.unwrap()
-            })
-        ).await;
-
-        algorithm_cpu_load_chart(algo_stats, config)
+        algorithm_cpu_load_chart(iterations, config)
 
     }
 
-    async fn plot_memory_usage(&self, iterations: &Vec<Iteration>, config: &Config) -> Result<Chart, PlotError>{
+    async fn plot_memory_usage(&self, iterations: &Vec<StatisticalMetricsStamped>, config: &Config) -> Result<Chart, PlotError>{
 
-        let algo_stats: Vec<Vec<ContainerStats>> = join_all(
-            iterations.iter().map(|iter| async {
-                self.iter_service.get_stats(iter).await.unwrap()
-            })
-        ).await;
 
-        algorithm_memory_usage_chart(algo_stats, config)
+        algorithm_memory_usage_chart(iterations, config)
     }
 
     async fn compute_buckets(&self, algo_run: &AlgorithmRun) -> Result<(), RunError> {

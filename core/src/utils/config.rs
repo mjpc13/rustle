@@ -56,6 +56,19 @@ pub struct PlottingConfig {
     pub marker_size: f32,
     pub show_confidence_band: bool,
     pub confidence_color_offset: u8,
+    //Configurations for specific plots
+    //y_max
+    pub algorithm_memory_y_max: f32,
+    pub algorithm_cpu_y_max: f32,
+    pub algorithm_ape_y_max: f32,
+    pub algorithm_rpe_y_max: f32,
+    // Axis Label
+    pub algorithm_memory_y_label: String,
+    pub algorithm_cpu_y_label: String,
+    pub algorithm_ape_y_label: String,
+    pub algorithm_rpe_y_label: String,
+    // Units -- Maybe
+
 }
 
 
@@ -187,7 +200,15 @@ impl Default for Config {
                 legend_size: 20,
                 smooth: false,
                 marker_size: 6.0,
-                band_legend_size: 20, 
+                band_legend_size: 20,
+                algorithm_memory_y_max: -1.0,
+                algorithm_cpu_y_max: -1.0,
+                algorithm_ape_y_max: -1.0,
+                algorithm_rpe_y_max: -1.0,
+                algorithm_memory_y_label: String::from("Memory Usage (MB)"),
+                algorithm_cpu_y_label: String::from("CPU Load (%)"),
+                algorithm_ape_y_label: String::from("APE (m)"),
+                algorithm_rpe_y_label: String::from("RPE (m)"), 
             },
             evo: EvoConfig { 
                 align: false, 
