@@ -5,20 +5,24 @@ use std::{collections::HashMap, fs::OpenOptions, path::PathBuf, sync::Arc, threa
 use std::io::Write;
 
 use bollard::container::LogOutput;
+use bollard::secret::PortBinding;
 use bollard::{container::{self, RemoveContainerOptions, StatsOptions}, exec::{CreateExecOptions, StartExecResults}, secret::{HostConfig, ResourcesUlimits}, Docker};
 use charming::Chart;
 use chrono::Utc;
-use futures_util::{future, StreamExt};
+use futures_util::{future, StreamExt, SinkExt};
 use log::{debug, info, warn};
 use rand::rng;
 use rand::{distr::Alphanumeric, Rng};
 use tokio::sync::mpsc::Sender;
 use tokio::{select};
+use tokio_tungstenite::{connect_async, tungstenite};
+use serde_json::{Value, json};
 
 use surrealdb::sql::Thing;
 use tokio_util::sync::CancellationToken;
 use yaml_rust2::YamlLoader;
 
+use crate::db::OdometryRepo;
 use crate::models::metric::Metric;
 use crate::models::metrics::memory::MemoryMetrics;
 use crate::models::metrics::metric::StatisticalMetrics;
@@ -41,22 +45,22 @@ use directories::ProjectDirs;
 
 use super::error::{EvoError, PlotError};
 use super::{MetricService};
-use super::{error::RunError, DatasetService, RosService, StatService};
+use super::{error::RunError, DatasetService, StatService};
 #[derive(Clone)]
 pub struct IterationService {
     repo: IterationRepo,
     config: Config,
-    ros_service: RosService,
     dataset_service: DatasetService,
     stat_service: StatService,
     metric_service: MetricService,
+    odom_repo: OdometryRepo,
     docker: Arc<Docker>,  // Assuming you have Docker client setup
 }
 
 impl IterationService {
-    pub fn new(repo: IterationRepo, docker: Arc<Docker>, ros_service: RosService, dataset_service: DatasetService, stat_service: StatService, metric_service: MetricService,) -> Self {
+    pub fn new(repo: IterationRepo, odom_repo: OdometryRepo, docker: Arc<Docker>, dataset_service: DatasetService, stat_service: StatService, metric_service: MetricService,) -> Self {
         let config = Config::load().expect("Missing Configuration");
-        Self { repo, docker, ros_service, dataset_service, stat_service, metric_service, config }
+        Self { repo, docker, dataset_service, stat_service, metric_service, config, odom_repo }
     }
 
     pub async fn create(&self, iter_number: u8, algo:Algorithm, algorithm_run_id: &Thing, exec_id: &Thing, test_type: TestType) -> Result<(), DbError> {
@@ -206,24 +210,19 @@ impl IterationService {
                 let token_clone = token.clone();
                 let container_name = iter.container.container_name.clone();
                 let docker_clone = self.docker.clone();
-                let ros_service_clone = self.ros_service.clone();
                 let dataset_service_clone = self.dataset_service.clone();
                 let dataset_clone = dataset.clone();
+                let odom_repo_clone = self.odom_repo.clone();
                 let gt_topic_clone = gt_topic.clone();
                 
                 tokio::spawn(async move {
                     // LOGIC TO SAVE ODOMS TO DB 
                     if s.eq(&gt_topic_clone){
-                        Self::record_ground_truth(dataset_service_clone, 
-                          docker_clone, 
-                          container_name, 
-                          &s,
-                          token_clone, &dataset_clone).await;
+                        Self::record_gt_ws(&s, &iter_id_clone, odom_repo_clone).await;
                     }else{
-                        let _ = Self::record_task(ros_service_clone, docker_clone, container_name, &s, token_clone, iter_id_clone).await;
+                        let _ = Self::record_task_ws(&s, &iter_id_clone, odom_repo_clone).await;
                     }
                 })
-
             })
             .collect();
 
@@ -595,13 +594,27 @@ impl IterationService {
             .collect();
         
 
-        //Setup container flags (cmd to execute, env variables, volumes to mount, etc...).
+        // Create a PortBinding mapping container port to host port
+        let port_bindings = Some(HashMap::from([
+            ("57331/tcp".to_string(), Some(vec![
+                PortBinding {
+                    host_ip: Some("0.0.0.0".to_string()), // listen on all interfaces
+                    host_port: Some("57331".to_string()), // host port
+                }
+            ]))
+        ]));
+
+        //Setup container flags (cmd to execute, env variables, volumes to mount, etc...). 
         let config_docker = container::Config {
             image: Some(iteration.container.image_name.clone()),
             cmd: Some(vec!["roscore".to_string()]),
+            exposed_ports: Some(HashMap::from([
+                ("57331/tcp".to_string(), HashMap::new())
+            ])),
             host_config: Some(HostConfig {
                 binds: Some(path_mounts),
                 ulimits: Some(vec![ResourcesUlimits{name:Some("nofile".to_string()),soft:Some(1024), hard:Some(524288)}]),
+                port_bindings,
                 ..Default::default()
             }),
             ..Default::default()
@@ -616,166 +629,112 @@ impl IterationService {
         Ok(())
     }
 
-    async fn record_task(ros_service: RosService, docker: Arc<Docker>, container_id: String, topic: &str, cancelation_token: Arc<CancellationToken>, iteration_id: Thing){
 
-        let cmd = format!("rostopic echo {topic}");
+    async fn record_gt_ws(topic: &str, iteration_id: &Thing, odom_repo: OdometryRepo){
 
-        // Check how I'm gonna record the localization
-        let record_options_future = docker
-            .create_exec(
-            &container_id,
-            CreateExecOptions {
-                attach_stdout: Some(true),
-                attach_stderr: Some(true),
-                cmd: Some(vec!["/bin/bash", "-l", "-c", &cmd]), //need a different way to pass the topics to record
-                ..Default::default()
-            },
-        );
+        let ten_sec = time::Duration::from_secs(5);
+        thread::sleep(ten_sec);
 
-        let record_exec_id = record_options_future.await.unwrap().id; 
+        let (mut ws, _) = connect_async("ws://localhost:57331").await.unwrap();
 
-        if let StartExecResults::Attached { mut output, .. } = docker.start_exec(&record_exec_id, None).await.unwrap() {
+        info!("Connected to a WebSocket!");
 
-                loop{
-                    select!{
-                        Some(Ok(msg)) = output.next() => {
+        // Subscribe to a topic
+        let msg = json!({
+            "op": "subscribe",
+            "topic": topic
+        });
+        ws.send(tungstenite::Message::Text(msg.to_string())).await.unwrap();
 
-                            match Self::convert_to_ros(msg.to_string()){
-                                Ok(r) => {
-                                    //let odom = r.as_odometry().unwrap();
-                                    let _ = ros_service.process_message(r, &iteration_id).await;
-                                }
-                                Err(e) => {
-                                    warn!("{e:}");
-                                }
-                            }
+        // Receive messages
+        while let Some(Ok(msg)) = ws.next().await {
+            if let tungstenite::Message::Text(data) = msg {
+                println!("Got message: {data}");
 
-                        },
-                        _ = cancelation_token.cancelled()=>{
-                            
-                            let record_options_future = docker
-                                .create_exec(
-                                &container_id,
-                                CreateExecOptions {
-                                    attach_stderr: Some(true),
-                                    cmd: Some(vec!["/bin/bash", "-l", "-c", "rosnode", "kill", "-a", "2>/dev/null"]),
-                                    ..Default::default()
-                                },
-                            ).await.unwrap();
-
-                            docker.start_exec(&record_options_future.id, None).await.unwrap();
-
-                            let ten_sec = time::Duration::from_secs(5);
-                            thread::sleep(ten_sec);
-
-                            break;
-                        }
+                match Self::convert_to_ros_msg(data.to_string()){
+                    Ok(r) => {
+                        let _ = Self::process_message(&odom_repo, r, &iteration_id).await;                    }
+                    Err(e) => {
+                        warn!("{e:}");
                     }
                 }
-
             }
-
+        }
 
     }
 
-    async fn record_ground_truth(dataset_service: DatasetService, docker: Arc<Docker>, container_id: String, topic: &str, cancelation_token: Arc<CancellationToken>, dataset: &Dataset){
+    async fn record_task_ws(topic: &str, iteration_id: &Thing, odom_repo: OdometryRepo){
 
-        let cmd = format!("rostopic echo {topic}");
+        let ten_sec = time::Duration::from_secs(5);
+        thread::sleep(ten_sec);
 
-        // Check how I'm gonna record the localization
-        let record_options_future = docker
-            .create_exec(
-            &container_id,
-            CreateExecOptions {
-                attach_stdout: Some(true),
-                attach_stderr: Some(true),
-                cmd: Some(vec!["/bin/bash", "-l", "-c", &cmd]), //need a different way to pass the topics to record
-                ..Default::default()
-            },
-        );
+        let (mut ws, _) = connect_async("ws://localhost:57331").await.unwrap();
 
-        let record_exec_id = record_options_future.await.unwrap().id; 
+        info!("Connected to a WebSocket!");
 
+        // Subscribe to a topic
+        let msg = json!({
+            "op": "subscribe",
+            "topic": topic
+        });
+        ws.send(tungstenite::Message::Text(msg.to_string())).await.unwrap();
 
-        if let StartExecResults::Attached { mut output, .. } = docker.start_exec(&record_exec_id, None).await.unwrap() {
-
-                loop{
-                    select!{
-                        Some(Ok(msg)) = output.next() => {
-
-                            match Self::convert_to_ros(msg.to_string()){
-                                Ok(r) => {
-
-                                    let odom = r.as_odometry().unwrap();
-                                    let mut db_odom = Odometry::new(odom.header);
-                                    
-                                    // Copy relevant fields
-                                    db_odom.child_frame_id = odom.child_frame_id;
-                                    db_odom.pose = odom.pose;
-                                    db_odom.twist = odom.twist;
-
-                                    //let odom = r.as_odometry().unwrap();
-                                    //WRITE CODE TO ADD TO GROUNDTRUTH
-                                    let _ = dataset_service.add_ground_truth(&dataset, db_odom).await;
-                                    //let _ = dataset_service.add_ground_truth
-                                }
-                                Err(e) => {
-                                    warn!("{e:}");
-                                }
-                            }
-
-                        },
-                        _ = cancelation_token.cancelled()=>{
-                            
-                            let record_options_future = docker
-                                .create_exec(
-                                &container_id,
-                                CreateExecOptions {
-                                    attach_stderr: Some(true),
-                                    cmd: Some(vec!["/bin/bash", "-l", "-c", "rosnode", "kill", "-a", "2>/dev/null"]),
-                                    ..Default::default()
-                                },
-                            ).await.unwrap();
-
-                            docker.start_exec(&record_options_future.id, None).await.unwrap();
-
-                            let ten_sec = time::Duration::from_secs(5);
-                            thread::sleep(ten_sec);
-
-                            break;
-                        }
+        // Receive messages
+        while let Some(Ok(msg)) = ws.next().await {
+            if let tungstenite::Message::Text(data) = msg {
+                match Self::convert_to_ros_msg(data.to_string()){
+                    Ok(r) => {
+                        let _ = Self::process_message(&odom_repo, r, &iteration_id).await;                    }
+                    Err(e) => {
+                        warn!("{e:}");
                     }
                 }
-
             }
+        }
 
     }
 
 
-    fn convert_to_ros(msg: String) -> Result<RosMsg, RosError> {
 
-        let yaml = match YamlLoader::load_from_str(&msg.replace("\n---\n", "")){
-            Ok(y) => y,
-            Err(_) => {
-                return Err(RosError::FormatError(msg.into()))
-            },
-        };
-        
-        let ros_msg = yaml[0].as_hash().ok_or_else(|| RosError::FormatError(format!("YAML msg: {:?}", yaml[0])))?;
+    fn convert_to_ros_msg(data: String) -> Result<RosMsg, RosError> {
+        // Parse JSON
+        let v: Value = serde_json::from_str(&data)
+            .map_err(|_| RosError::FormatError(data.clone()))?;
 
+        let inner_msg = v.get("msg")
+            .ok_or_else(|| RosError::FormatError(format!("Missing 'msg' field: {}", data)))?;
 
-
-        let top_fields: Vec<_> = ros_msg
+        // Determine top-level keys
+        let top_fields: Vec<&str> = inner_msg.as_object()
+            .ok_or_else(|| RosError::FormatError(format!("Expected object in 'msg': {}", inner_msg)))?
             .keys()
-            .into_iter()
-            .map(|y|{
-                y.as_str().unwrap()
-            }).collect();
+            .map(|s| s.as_str())
+            .collect();
 
+        // Create RosMsg
         let ros = RosMsg::new(top_fields)?;
+        let ros = ros.from_json(inner_msg)?;
 
-        return ros.from_yaml(yaml[0].clone());
+        Ok(ros)
     }
+
+    async fn process_message(
+        odom_repo: &OdometryRepo,
+        msg: RosMsg,
+        iteration_id: &Thing
+    ) -> Result<(), ProcessingError> {
+        let odom = msg.as_odometry().unwrap();
+        let mut db_odom = Odometry::new(odom.header);
+        
+        // Copy relevant fields
+        db_odom.child_frame_id = odom.child_frame_id;
+        db_odom.pose = odom.pose;
+        db_odom.twist = odom.twist;
+
+        odom_repo.save(&mut db_odom, iteration_id).await?;
+        Ok(())
+    }
+
 
     async fn remove_container(&self, container_name:&str){
         //Remove the containers

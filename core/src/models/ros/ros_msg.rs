@@ -20,6 +20,7 @@ pub enum RosMsg{
 pub trait Ros1: Sized{
     fn empty() -> Self;
     fn from_yaml(yaml: Yaml) -> Result<Self, RosError>;
+    fn from_json(value: &serde_json::Value) -> Result<Self, RosError>;
 }
 
 impl RosMsg{
@@ -130,4 +131,35 @@ impl RosMsg{
             ),
         }
     }
+
+
+
+    pub fn from_json(&self, value: &serde_json::Value) -> Result<RosMsg, RosError> {
+        match self {
+            RosMsg::Header(_) => Ok(RosMsg::Header(
+                Header::from_json(value)?
+            )),
+            RosMsg::Pose(_) => Ok(RosMsg::Pose(
+                Pose::from_json(value)?
+            )),
+            RosMsg::PoseStamped(_) => Ok(RosMsg::PoseStamped(
+                PoseStamped::from_json(value)?
+            )),
+            RosMsg::Twist(_) => Ok(RosMsg::Twist(
+                Twist::from_json(value)?
+            )),
+            RosMsg::Path(_) => Ok(RosMsg::Path(
+                Path::from_json(value)?
+            )),
+            RosMsg::Odometry(_) => Ok(RosMsg::Odometry(
+                Odometry::from_json(value)?
+            )),
+        }
+    }
+
+
+
+
+
+
 }

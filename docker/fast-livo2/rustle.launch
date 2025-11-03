@@ -10,6 +10,12 @@
     
     <rosparam command="load" file="/rustle/config/params.yaml"/>
 
+    <include file="$(find rosbridge_server)/launch/rosbridge_websocket.launch">
+        <!-- Optional arguments -->
+        <arg name="port" value="57331" />
+        <arg name="address" value="0.0.0.0" />
+    </include>
+
     <!--=================== FAST-LIVO for the Simple Test =======================-->
     <group if="$(eval arg('test_type') == 'simple')">
 	    <node pkg="fast_livo" type="fastlivo_mapping" name="laserMapping" output="screen">

@@ -30,6 +30,7 @@ RUN apt-get update \
   ros-$ROS_DISTRO-cv-bridge \
   ros-$ROS_DISTRO-image-transport \
   ros-${ROS_DISTRO}-image-transport-plugins \
+  ros-${ROS_DISTRO}-rosbridge-server \
   && rm -rf /var/lib/apt/lists/* \
   && mkdir -p /rustle/catkin_ws/src
 

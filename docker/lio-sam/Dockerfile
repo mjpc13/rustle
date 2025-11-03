@@ -17,6 +17,7 @@ RUN apt-get update \
   ros-$ROS_DISTRO-robot-state-publisher \
   ros-$ROS_DISTRO-xacro \
   ros-$ROS_DISTRO-topic-tools \
+  ros-${ROS_DISTRO}-rosbridge-server \
   python-catkin-tools \
   && rm -rf /var/lib/apt/lists/* \
   && mkdir -p /rustle/catkin_ws/src

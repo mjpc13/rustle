@@ -19,6 +19,7 @@ RUN apt-get update \
   ros-$ROS_DISTRO-rviz-satellite \
   ros-$ROS_DISTRO-pcl-conversions \
   ros-$ROS_DISTRO-pcl-ros \
+  ros-${ROS_DISTRO}-rosbridge-server \
   python3-catkin-tools \
   qt5-default \
   libpcl-dev \

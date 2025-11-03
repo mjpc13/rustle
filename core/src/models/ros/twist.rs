@@ -61,4 +61,47 @@ impl Ros1 for Twist {
         return Ok(twist)
 
     }
+
+
+    fn from_json(value: &serde_json::Value) -> Result<Twist, RosError> {
+        // Parse linear components
+        let l_x = value["linear"]["x"].as_f64()
+            .ok_or_else(|| RosError::FormatError(format!("Missing 'linear.x': {:?}", value)))?;
+        let l_y = value["linear"]["y"].as_f64()
+            .ok_or_else(|| RosError::FormatError(format!("Missing 'linear.y': {:?}", value)))?;
+        let l_z = value["linear"]["z"].as_f64()
+            .ok_or_else(|| RosError::FormatError(format!("Missing 'linear.z': {:?}", value)))?;
+
+        // Parse angular components
+        let a_x = value["angular"]["x"].as_f64()
+            .ok_or_else(|| RosError::FormatError(format!("Missing 'angular.x': {:?}", value)))?;
+        let a_y = value["angular"]["y"].as_f64()
+            .ok_or_else(|| RosError::FormatError(format!("Missing 'angular.y': {:?}", value)))?;
+        let a_z = value["angular"]["z"].as_f64()
+            .ok_or_else(|| RosError::FormatError(format!("Missing 'angular.z': {:?}", value)))?;
+
+        let linear = Vector3::from([l_x, l_y, l_z]);
+        let angular = Vector3::from([a_x, a_y, a_z]);
+
+        let mut twist = Twist {
+            linear,
+            angular,
+            covariance: None,
+        };
+
+        // Parse covariance if present
+        if let Some(cov_vec) = value["covariance"].as_array() {
+            let covariance: Result<Vec<f64>, RosError> = cov_vec.iter()
+                .map(|v| v.as_f64().ok_or_else(|| 
+                    RosError::FormatError(format!("Invalid covariance value: {:?}", v))
+                ))
+                .collect();
+            
+            twist.covariance = Some(Matrix6::from_vec(covariance?));
+        }
+
+        Ok(twist)
+    }
+
+
 }

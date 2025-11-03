@@ -15,6 +15,7 @@ RUN apt-get update \
   && apt-get install -y git \
     ros-$ROS_DISTRO-tf2 \
     ros-$ROS_DISTRO-tf2-ros \
+    ros-$ROS_DISTRO-rosbridge-server \
     python3-catkin-tools \
     python3-pip \
   && rm -rf /var/lib/apt/lists/* \

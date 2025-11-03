@@ -11,6 +11,12 @@
     <arg name="project" if="$(eval arg('test_type') != 'speed')" value="LIO-SAM"/>
     <arg name="project" if="$(eval arg('test_type') == 'speed')" value="LIO-SAM_speed"/>
 
+    <include file="$(find rosbridge_server)/launch/rosbridge_websocket.launch">
+        <!-- Optional arguments -->
+        <arg name="port" value="57331" />
+        <arg name="address" value="0.0.0.0" />
+    </include>
+
     <!-- Parameters -->
     <rosparam file="/rustle/config/params.yaml" command="load" />
     <!--- LOAM -->

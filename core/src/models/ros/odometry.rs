@@ -71,8 +71,39 @@ impl Ros1 for Odometry {
             created_at: Utc::now()
             }
         )
-
     }
+    fn from_json(value: &serde_json::Value) -> Result<Odometry, RosError> {
+        // Parse header
+        let header = Header::from_json(&value["header"])?;
+
+        // Parse pose
+        let pose = match value["pose"]["pose"].as_object() {
+            Some(_) => Some(Pose::from_json(&value["pose"]["pose"])?),
+            None => None,
+        };
+
+        // Parse twist
+        let twist = match value["twist"]["twist"].as_object() {
+            Some(_) => Some(Twist::from_json(&value["twist"]["twist"])?),
+            None => None,
+        };
+
+        // Parse child_frame_id
+        let child_frame_id = value["child_frame_id"]
+            .as_str()
+            .map(|s| s.to_string());
+
+        Ok(Odometry {
+            id: None,
+            header,
+            pose,
+            twist,
+            child_frame_id,
+            created_at: Utc::now(),
+        })
+    }
+
+
 }
 
 impl fmt::Display for Odometry {

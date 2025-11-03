@@ -21,6 +21,7 @@ RUN apt-get update \
   libgoogle-glog-dev \
   ros-$ROS_DISTRO-pcl-ros \
   ros-$ROS_DISTRO-pcl-conversions \
+  ros-${ROS_DISTRO}-rosbridge-server \
   ros-$ROS_DISTRO-eigen-conversions \
   python3-catkin-tools \
   && rm -rf /var/lib/apt/lists/* \

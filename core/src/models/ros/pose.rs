@@ -68,6 +68,50 @@ impl Ros1 for Pose {
         return Ok(pose)
 
     }
+
+    fn from_json(value: &serde_json::Value) -> Result<Pose, RosError> {
+        // Parse position
+        let p_x = value["position"]["x"].as_f64()
+            .ok_or_else(|| RosError::FormatError(format!("Missing 'position.x': {:?}", value)))?;
+        let p_y = value["position"]["y"].as_f64()
+            .ok_or_else(|| RosError::FormatError(format!("Missing 'position.y': {:?}", value)))?;
+        let p_z = value["position"]["z"].as_f64()
+            .ok_or_else(|| RosError::FormatError(format!("Missing 'position.z': {:?}", value)))?;
+
+        // Parse orientation
+        let o_x = value["orientation"]["x"].as_f64()
+            .ok_or_else(|| RosError::FormatError(format!("Missing 'orientation.x': {:?}", value)))?;
+        let o_y = value["orientation"]["y"].as_f64()
+            .ok_or_else(|| RosError::FormatError(format!("Missing 'orientation.y': {:?}", value)))?;
+        let o_z = value["orientation"]["z"].as_f64()
+            .ok_or_else(|| RosError::FormatError(format!("Missing 'orientation.z': {:?}", value)))?;
+        let o_w = value["orientation"]["w"].as_f64()
+            .ok_or_else(|| RosError::FormatError(format!("Missing 'orientation.w': {:?}", value)))?;
+
+        let position = Point3::from([p_x, p_y, p_z]);
+        let orientation = Quaternion::from([o_x, o_y, o_z, o_w]);
+
+        let mut pose = Pose {
+            position,
+            orientation,
+            covariance: None,
+        };
+
+        // Parse covariance if present
+        if let Some(cov_vec) = value["covariance"].as_array() {
+            let covariance: Result<Vec<f64>, RosError> = cov_vec.iter()
+                .map(|v| v.as_f64().ok_or_else(|| 
+                    RosError::FormatError(format!("Invalid covariance value: {:?}", v))
+                ))
+                .collect();
+            
+            pose.covariance = Some(Matrix6::from_vec(covariance?));
+        }
+
+        Ok(pose)
+    }
+
+
 }
 
 impl Ros1 for PoseStamped {
@@ -87,6 +131,15 @@ impl Ros1 for PoseStamped {
             header,
             pose
         });
+    }
 
+    fn from_json(value: &serde_json::Value) -> Result<Self, RosError> {
+        let header = Header::from_json(&value["header"].clone())?;
+        let pose = Pose::from_json(&value["pose"].clone())?;
+
+        return Ok(PoseStamped{
+            header,
+            pose
+        });
     }
 }

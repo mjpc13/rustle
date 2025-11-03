@@ -21,6 +21,7 @@ RUN apt-get update \
   libtbb-dev \
   ros-$ROS_DISTRO-pcl-ros \
   ros-$ROS_DISTRO-topic-tools \
+  ros-${ROS_DISTRO}-rosbridge-server \
   python3-catkin-tools \
   && rm -rf /var/lib/apt/lists/* \
   && mkdir -p /rustle/catkin_ws/src

@@ -7,7 +7,7 @@ ENV ROS_WS /rustle/catkin_ws
 ### METADATA ###
 LABEL author="Mario Cristovao <mario.cristovao@isr.uc.pt>"
 LABEL maintainer="Mario Cristovao <mario.cristovao@isr.uc.pt>"
-LABEL description="iG-LIO Environment for Rustle"
+LABEL description="FAST-LIO Environment for Rustle"
 ### END METADATA ###
 
 
@@ -20,6 +20,7 @@ RUN apt-get update \
   ros-$ROS_DISTRO-pcl-ros \
   ros-$ROS_DISTRO-pcl-conversions \
   ros-$ROS_DISTRO-eigen-conversions \
+  ros-$ROS_DISTRO-rosbridge-server \
   python3-catkin-tools \
   && rm -rf /var/lib/apt/lists/* \
   && mkdir -p /rustle/catkin_ws/src

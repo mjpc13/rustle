@@ -10,6 +10,12 @@
     
     <rosparam command="load" file="/rustle/config/params.yaml" />
 
+    <include file="$(find rosbridge_server)/launch/rosbridge_websocket.launch">
+        <!-- Optional arguments -->
+        <arg name="port" value="57331" />
+        <arg name="address" value="0.0.0.0" />
+    </include>
+
 
     <!--=================== iG-LIO for the Simple Test =======================-->
     <node pkg="point_lio" type="pointlio_mapping" name="laserMapping" 
