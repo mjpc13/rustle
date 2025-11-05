@@ -1,4 +1,5 @@
 use chrono::Utc;
+use log::warn;
 use serde::{Deserialize, Serialize};
 use yaml_rust2::Yaml;
 
@@ -25,28 +26,19 @@ pub trait Ros1: Sized{
 
 impl RosMsg{
     pub fn new(top_fields: Vec<&str>) -> Result<RosMsg, RosError>{
-        match top_fields[..]{
-            [
-                "position",
-                "orientation"
-            ] => Ok(RosMsg::Pose(Pose::empty())),
-            [
-                "header",
-                "pose"
-            ] => Ok(RosMsg::PoseStamped(PoseStamped::empty())),
-            [
-                "header",
-                "poses",
-            ] => Ok(RosMsg::Path(Path::empty())),
-            [
-                "header",
-                "child_frame_id",
-                "pose",
-                "twist"
-            ] => Ok(RosMsg::Odometry(Odometry::empty())),
 
-            _ => return Err(RosError::ParseError{from: format!("{:?}",top_fields).into(), to: "Header.timestamp".into()})
+        if top_fields.contains(&"twist"){
+            return Ok(RosMsg::Odometry(Odometry::empty()));
+        } else if top_fields.contains(&"orientation") && top_fields.contains(&"position")  {
+            return Ok(RosMsg::Pose(Pose::empty()));
+        } else if top_fields.contains(&"poses")  {
+            return Ok(RosMsg::Path(Path::empty()));
+        } else if top_fields.contains(&"pose") {
+            return Ok(RosMsg::PoseStamped(PoseStamped::empty()))
+        } else {
+            return Err(RosError::ParseError{from: format!("{:?}",top_fields).into(), to: "Header.timestamp".into()})
         }
+
     }
 
     pub fn as_odometry(self) -> Result<Odometry, RosError>{

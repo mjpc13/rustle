@@ -362,9 +362,6 @@ impl IterationRepo {
             .bind(("iteration_id", iteration_id.clone()))
             .await.unwrap();
 
-
-
-
         // Handle nested array structure from graph query
         let nested_odoms_min: Vec<Vec<Odometry>> = result_min.take("odometry").unwrap();
         let nested_odoms_max: Vec<Vec<Odometry>> = result_max.take("odometry").unwrap();

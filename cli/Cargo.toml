@@ -8,7 +8,7 @@ license = "MIT"
 
 
 [[bin]]
-name = "rustle_bin"
+name = "rustle"
 path = "src/main.rs"
 
 [dependencies]

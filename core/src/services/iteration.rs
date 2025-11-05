@@ -1,6 +1,7 @@
 use std::fs;
 use std::path::Path;
 use std::str::FromStr;
+use std::time::{SystemTime, UNIX_EPOCH};
 use std::{collections::HashMap, fs::OpenOptions, path::PathBuf, sync::Arc, thread, time};
 use std::io::Write;
 
@@ -8,14 +9,16 @@ use bollard::container::LogOutput;
 use bollard::secret::PortBinding;
 use bollard::{container::{self, RemoveContainerOptions, StatsOptions}, exec::{CreateExecOptions, StartExecResults}, secret::{HostConfig, ResourcesUlimits}, Docker};
 use charming::Chart;
-use chrono::Utc;
+use chrono::{Utc};
 use futures_util::{future, StreamExt, SinkExt};
 use log::{debug, info, warn};
 use rand::rng;
 use rand::{distr::Alphanumeric, Rng};
+use tokio::net::TcpStream;
 use tokio::sync::mpsc::Sender;
+use tokio::time::{sleep, timeout, Duration};
 use tokio::{select};
-use tokio_tungstenite::{connect_async, tungstenite};
+use tokio_tungstenite::{MaybeTlsStream, connect_async, tungstenite};
 use serde_json::{Value, json};
 
 use surrealdb::sql::Thing;
@@ -29,14 +32,14 @@ use crate::models::metrics::metric::StatisticalMetrics;
 
 use crate::models::metrics::pose_error::{PoseErrorMetrics, Position, APE, RPE};
 use crate::models::metrics::{ContainerStats, CpuMetrics};
-use crate::models::{ProgressMessage, TestDefinition, TestType};
+use crate::models::{Dataset, ProgressMessage, TestType};
 use crate::utils::config::Config;
 use crate::utils::evo_wrapper::{run_metrics_py, EvoApeArg, EvoRpeArg, PlotArg};
 use crate::utils::plots::{ape_line_chart, cpu_load_line_chart, memory_usage_line_chart, rpe_line_chart};
 use crate::{
     db::{iteration::IterationRepo}, 
     models::{iteration::{DockerContainer, Iteration}, 
-    ros::ros_msg::RosMsg, Algorithm, Dataset, Odometry}, 
+    ros::ros_msg::RosMsg, Algorithm, Odometry}, 
     services::error::{DbError, ProcessingError, RosError}, 
     utils::evo_wrapper::EvoArg
 };
@@ -218,7 +221,7 @@ impl IterationService {
                 tokio::spawn(async move {
                     // LOGIC TO SAVE ODOMS TO DB 
                     if s.eq(&gt_topic_clone){
-                        Self::record_gt_ws(&s, &iter_id_clone, odom_repo_clone).await;
+                        let _ = Self::record_gt_ws(&s, &dataset_clone, &dataset_service_clone).await;
                     }else{
                         let _ = Self::record_task_ws(&s, &iter_id_clone, odom_repo_clone).await;
                     }
@@ -461,14 +464,12 @@ impl IterationService {
         Ok(hash_chart)
     }
 
-    
     pub async fn get_metrics(&self, iter: &Iteration) -> Result<Vec<Metric>, DbError>{
 
         let metrics = self.repo.get_metrics(iter).await?;
         Ok(metrics)
     }
     
-
     pub async fn get_stats(&self, iter: &Iteration) -> Result<Vec<ContainerStats>, DbError>{
         let stats = self.stat_service.get_stats(iter).await?;
         Ok(stats)
@@ -630,30 +631,30 @@ impl IterationService {
     }
 
 
-    async fn record_gt_ws(topic: &str, iteration_id: &Thing, odom_repo: OdometryRepo){
+    async fn record_gt_ws(topic: &str, dataset: &Dataset, dataset_service: &DatasetService){
 
         let ten_sec = time::Duration::from_secs(5);
         thread::sleep(ten_sec);
 
         let (mut ws, _) = connect_async("ws://localhost:57331").await.unwrap();
-
-        info!("Connected to a WebSocket!");
+        let topic_type = Self::resolve_topic_type(&mut ws, topic, 10).await.unwrap();
 
         // Subscribe to a topic
         let msg = json!({
             "op": "subscribe",
-            "topic": topic
+            "topic": topic,
+            "type": topic_type
         });
+
         ws.send(tungstenite::Message::Text(msg.to_string())).await.unwrap();
 
         // Receive messages
         while let Some(Ok(msg)) = ws.next().await {
+            
             if let tungstenite::Message::Text(data) = msg {
-                println!("Got message: {data}");
-
                 match Self::convert_to_ros_msg(data.to_string()){
                     Ok(r) => {
-                        let _ = Self::process_message(&odom_repo, r, &iteration_id).await;                    }
+                        let _ = Self::process_ground_truth(dataset_service, dataset, r).await;                    }
                     Err(e) => {
                         warn!("{e:}");
                     }
@@ -662,6 +663,8 @@ impl IterationService {
         }
 
     }
+
+
 
     async fn record_task_ws(topic: &str, iteration_id: &Thing, odom_repo: OdometryRepo){
 
@@ -669,19 +672,20 @@ impl IterationService {
         thread::sleep(ten_sec);
 
         let (mut ws, _) = connect_async("ws://localhost:57331").await.unwrap();
-
-        info!("Connected to a WebSocket!");
+        let topic_type = Self::resolve_topic_type(&mut ws, topic, 10).await.unwrap();
 
         // Subscribe to a topic
         let msg = json!({
             "op": "subscribe",
-            "topic": topic
+            "topic": topic,
+            "type": topic_type
         });
         ws.send(tungstenite::Message::Text(msg.to_string())).await.unwrap();
 
         // Receive messages
         while let Some(Ok(msg)) = ws.next().await {
             if let tungstenite::Message::Text(data) = msg {
+
                 match Self::convert_to_ros_msg(data.to_string()){
                     Ok(r) => {
                         let _ = Self::process_message(&odom_repo, r, &iteration_id).await;                    }
@@ -693,6 +697,115 @@ impl IterationService {
         }
 
     }
+
+
+
+
+
+
+
+
+    // Call rosapi/topic_type repeatedly until we get a non-empty type.
+    async fn resolve_topic_type(
+        ws: &mut tokio_tungstenite::WebSocketStream<MaybeTlsStream<TcpStream>>,
+        topic: &str,
+        max_attempts: usize,
+    ) -> Result<String, RosError> {
+        for attempt in 0..max_attempts {
+            // generate a unique id for this request
+            let millis = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis();
+            let id = format!("topic_type_{}_{}", millis, attempt);
+
+            let req = json!({
+                "op": "call_service",
+                "service": "/rosapi/topic_type",
+                "args": { "topic": topic },
+                "id": id
+            });
+
+            let txt = req.to_string();
+            warn!("Sending topic_type request (attempt {}): {}", attempt + 1, txt);
+            ws.send(tungstenite::Message::Text(txt)).await.unwrap();
+
+            // wait for response matching our id; allow multiple incoming messages and short timeouts
+            let mut got_type: Option<String> = None;
+            let deadline = Duration::from_secs(1); // wait up to 2s per attempt
+
+            // Loop reading messages until timeout or we find the response for our id
+            loop {
+                match timeout(deadline, ws.next()).await {
+                    Ok(Some(Ok(tungstenite::Message::Text(data)))) => {
+
+                        let parsed: serde_json::Value = serde_json::from_str(&data).unwrap_or_default();
+
+                        // response may be: { "op":"service_response", "id": "<id>", "values": {"type": "..."}, ... }
+                        if parsed.get("id") == Some(&json!(id)) {
+                            let t = parsed
+                                .get("values")
+                                .and_then(|v| v.get("type"))
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("")
+                                .to_string();
+
+                            if !t.is_empty() {
+                                got_type = Some(t);
+                                break;
+                            } else {
+                                warn!("Rosapi returned empty type for {}, will retry", topic);
+                                break; // break inner loop and retry
+                            }
+                        } else {
+                            // not our response; continue reading
+                            debug!("Not our service response (id mismatch).");
+                            continue;
+                        }
+                    }
+
+                    Ok(Some(Ok(tungstenite::Message::Ping(_)))) => {
+                        debug!("Ping (while waiting)");
+                        // respond automatically, tungstenite may handle pong automatically, but you can reply if needed
+                    }
+
+                    Ok(Some(Ok(other_msg))) => {
+                        debug!("Other message while resolving type: {:?}", other_msg);
+                        // continue reading for our id
+                    }
+
+                    Ok(Some(Err(e))) => {
+                        return Err(RosError::Query("Unable to find ROS topic type".to_owned()));
+                    }
+
+                    Ok(None) => {
+                        return Err(RosError::Query("Unable to find ROS topic type".to_owned()));
+                    }
+
+                    Err(_) => {
+                        // timeout waiting for messages matching our id — break to retry
+                        debug!("Timed out waiting for service response (attempt {})", attempt + 1);
+                        break;
+                    }
+                }
+            }
+
+            if let Some(t) = got_type {
+                return Ok(t);
+            }
+
+            // small delay before retrying
+            sleep(Duration::from_millis(500)).await;
+        }
+
+        Err(RosError::Query(format!(
+            "Could not resolve type for topic '{}' after {} attempts",
+            topic,
+            max_attempts
+        )))
+    }
+
+
+
+
+
 
 
 
@@ -732,6 +845,22 @@ impl IterationService {
         db_odom.twist = odom.twist;
 
         odom_repo.save(&mut db_odom, iteration_id).await?;
+        Ok(())
+    }
+    async fn process_ground_truth(
+        dataset_service: &DatasetService,
+        dataset: &Dataset,
+        msg: RosMsg,
+    ) -> Result<(), ProcessingError> {
+        let odom = msg.as_odometry().unwrap();
+        let mut db_odom = Odometry::new(odom.header);
+        
+        // Copy relevant fields
+        db_odom.child_frame_id = odom.child_frame_id;
+        db_odom.pose = odom.pose;
+        db_odom.twist = odom.twist;
+
+        dataset_service.add_ground_truth(dataset, db_odom).await?;
         Ok(())
     }
 
