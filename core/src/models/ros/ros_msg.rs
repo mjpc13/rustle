@@ -1,10 +1,11 @@
 use chrono::Utc;
 use log::warn;
+use nalgebra::{Point3, Quaternion};
 use serde::{Deserialize, Serialize};
 use yaml_rust2::Yaml;
 
 
-use crate::services::error::RosError;
+use crate::{models::ros::Tum, services::error::RosError};
 
 use super::{Header, Pose, PoseStamped, Twist, Path, Odometry};
 
@@ -15,7 +16,8 @@ pub enum RosMsg{
     PoseStamped(PoseStamped),
     Twist(Twist),
     Path(Path),
-    Odometry(Odometry)
+    Odometry(Odometry),
+    Tum(Tum)
 }
 
 pub trait Ros1: Sized{
@@ -72,6 +74,24 @@ impl RosMsg{
                 )
             },
             RosMsg::Odometry(o) => Ok(o),
+            RosMsg::Tum(t) => Ok(
+                Odometry { 
+                    id: None, 
+                    header: Header { 
+                        seq: 0, 
+                        time: t.time, 
+                        frame_id: None
+                    }, 
+                    child_frame_id: None, 
+                    pose: Some( Pose{
+                        position: Point3::new(t.x, t.y, t.z),
+                        orientation: Quaternion::new(t.qw, t.qx, t.qy, t.qz),
+                        covariance: None,
+                    }), 
+                    twist: None, 
+                    created_at: Utc::now()
+                }
+            ),
         };
         odom
 
@@ -85,7 +105,13 @@ impl RosMsg{
             RosMsg::Twist(_twist) => Err(RosError::MissingHeader { rostype: "Twist".into() }),
             RosMsg::Path(path) => Ok(path.header),
             RosMsg::Odometry(odometry) => Ok(odometry.header),
-
+            RosMsg::Tum(tum) => Ok(
+                Header { 
+                        seq: 0, 
+                        time: tum.time, 
+                        frame_id: None
+                    }
+            ),
         }
     }
 
@@ -121,6 +147,9 @@ impl RosMsg{
                     Odometry::from_yaml(yaml)?
                 )
             ),
+            RosMsg::Tum(_) => Ok(
+                RosMsg::Tum(Tum::from_yaml(yaml)?)
+            )
         }
     }
 
@@ -146,6 +175,9 @@ impl RosMsg{
             RosMsg::Odometry(_) => Ok(RosMsg::Odometry(
                 Odometry::from_json(value)?
             )),
+            RosMsg::Tum(_) => Ok(
+                RosMsg::Tum(Tum::from_json(value)?)
+            )
         }
     }
 

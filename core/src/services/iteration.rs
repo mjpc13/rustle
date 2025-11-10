@@ -16,7 +16,7 @@ use rand::rng;
 use rand::{distr::Alphanumeric, Rng};
 use tokio::net::TcpStream;
 use tokio::sync::mpsc::Sender;
-use tokio::time::{sleep, timeout, Duration};
+use tokio::time::{sleep, timeout, Duration, Instant};
 use tokio::{select};
 use tokio_tungstenite::{MaybeTlsStream, connect_async, tungstenite};
 use serde_json::{Value, json};
@@ -181,26 +181,7 @@ impl IterationService {
             }
         });
 
-        //Only add the groundtruth if there is no GT in the Dataset Object
-        let is_gt_empty = match dataset.ground_truth{
-            Some(_) => false,
-            None => {
-                true
-            },
-        };
-
-        let topic_list = match is_gt_empty{
-            true => {
-                let topic = dataset.ground_truth_topic.clone()  // Clone the Option<String> first
-                    .ok_or_else(|| ProcessingError::MissingField("ground_truth_topic".into())).unwrap();
-                let mut topics = algorithm.odom_topics;
-                topics.push(topic);
-                topics
-            },
-            false => algorithm.odom_topics
-        };
-        let gt_topic = dataset.ground_truth_topic.clone()  // Clone the Option<String> first
-         .ok_or_else(|| ProcessingError::MissingField("ground_truth_topic".into())).unwrap();
+        let topic_list = algorithm.odom_topics;
         
         //TODO: OPTIMIZE THIS, THINK OF A BETTER WAY TO SAVE THE GT TOPIC
         let _res_tasks: Vec<_> = topic_list
@@ -210,21 +191,11 @@ impl IterationService {
                 .clone()  // Clone the Option first
                 .ok_or_else(|| ProcessingError::NotFound("Iteration ID".into())).unwrap();
 
-                let token_clone = token.clone();
-                let container_name = iter.container.container_name.clone();
-                let docker_clone = self.docker.clone();
-                let dataset_service_clone = self.dataset_service.clone();
-                let dataset_clone = dataset.clone();
                 let odom_repo_clone = self.odom_repo.clone();
-                let gt_topic_clone = gt_topic.clone();
                 
                 tokio::spawn(async move {
                     // LOGIC TO SAVE ODOMS TO DB 
-                    if s.eq(&gt_topic_clone){
-                        let _ = Self::record_gt_ws(&s, &dataset_clone, &dataset_service_clone).await;
-                    }else{
-                        let _ = Self::record_task_ws(&s, &iter_id_clone, odom_repo_clone).await;
-                    }
+                    let _ = Self::record_task_ws(&s, &iter_id_clone, odom_repo_clone).await;
                 })
             })
             .collect();
@@ -326,21 +297,27 @@ impl IterationService {
         //If the dataset duration was not set before set it now
         let _ = self.dataset_service.set_duration(&dataset).await;
 
+        warn!("Computing frequency...");
+
         //Compute the frequency
         let freq = self.repo.get_odom_frequency(&iter).await.map_err(|_e| RunError::Evo("Unable to find odometries".to_owned()))?;
+        
+        warn!("Here");
         let freq_metric = StatisticalMetrics::from_single_value(freq as f32);
-
+        warn!("Here here");
         let _ = self.metric_service.create_freq_metric(iteration_id_clone.clone(), freq_metric).await; // add to DB
 
-
+        warn!("Computing stats...");
         let stats = self.stat_service.get_stats(&iter).await.unwrap();
-
+        
+        warn!("Computing cpu...");
         //Compute CPU stats
         let cpu_metric_opt = CpuMetrics::from_stats(&stats);
         if let Some(cpu_metric) = cpu_metric_opt {
             let _ = self.metric_service.create_cpu_metric(iteration_id_clone.clone(), cpu_metric).await.unwrap();  
         }
 
+        warn!("Computing memory...");
         //Compute Memory stats
         let memory_metric_opt = MemoryMetrics::from_stats(&stats).unwrap();
         if let Some(memory_metric) = memory_metric_opt {
@@ -348,6 +325,7 @@ impl IterationService {
         }
 
         //This needs to be reviewed
+        warn!("Computing APE's...");
         if let Some(proj_dirs) = ProjectDirs::from("org", "FRUC",  "RUSTLE") {
             let data_dir = proj_dirs.data_dir();
 
@@ -356,15 +334,16 @@ impl IterationService {
 
             //Create the folder for this iteration:
             let iter_path = self.get_parents_string(&iter).await?;
-            let dataset_path = self.get_dataset_string(&iter).await?;
+            let dataset_name = self.get_dataset_name(&iter).await?;
 
             let full_path = format!("{data_dir_str}/data/{iter_path}");
-            let full_dataset_path = format!("{data_dir_str}/data/{dataset_path}");
+            let full_dataset_path = format!("{data_dir_str}/data/dataset_{dataset_name}");
 
             //Create the directories if they dont exist
             fs::create_dir_all(&full_path).unwrap();
             fs::create_dir_all(&full_dataset_path).unwrap();
 
+            warn!("Computing APE and RPE!");
             //Compute the APE and RPE metrics
             let ape_args = EvoApeArg{
                 //plot: Some(PlotArg::default()),
@@ -397,10 +376,12 @@ impl IterationService {
             let _ape = self.compute_metrics(&iter, &ape_args, &full_path, &full_dataset_path).await.map_err(|_e| RunError::Evo("Failed to compute APE".to_owned()))?;
             let _rpe = self.compute_metrics(&iter, &rpe_args, &full_path, &full_dataset_path).await.map_err(|_e| RunError::Evo("Failed to compute RPE".to_owned()))?;
 
+            warn!("Read from file!");
             let mut ape_list = APE::read_from_file(&format!("{full_path}/ape.txt")).map_err(|e| RunError::Evo("Failure to load poses".to_owned()))?;
             let mut rpe_list = RPE::read_from_file(&format!("{full_path}/rpe.txt")).map_err(|e| RunError::Evo("Failure to load poses".to_owned()))?;
             let mut position_list = Position::read_from_file(&format!("{full_path}/aligned_poses.txt")).unwrap();
 
+            warn!("Create ape rpe position!");
             let _ = self.metric_service.create_ape(iteration_id_clone.clone(), &mut ape_list).await;
             let _ = self.metric_service.create_rpe(iteration_id_clone.clone(), &mut rpe_list).await;
             let _ = self.metric_service.create_position(iteration_id_clone.clone(), &mut position_list).await;
@@ -414,10 +395,12 @@ impl IterationService {
                     rpe.value
                 }).collect();
 
+                warn!("Create metrics");
             let pose_error_metric = PoseErrorMetrics::from_values(&ape_values, &rpe_values).unwrap();
             let _metric = self.metric_service.create_pose_error_metric(iteration_id_clone.clone(), pose_error_metric).await.unwrap();
 
         };
+        warn!("Finish iteration!");
 
         Ok(())
     }
@@ -485,12 +468,11 @@ impl IterationService {
         Ok(rpe)
     }
 
-    async fn get_dataset_string(&self, iter: &Iteration) -> Result<String, RunError>{
+    async fn get_dataset_name(&self, iter: &Iteration) -> Result<String, RunError>{
 
-        let ds = self.repo.get_dataset_thing(iter).await.unwrap();
-        let ds_str = ds.to_raw().replace(|c: char| !c.is_alphanumeric(), "_").to_lowercase();
+        let ds = self.repo.get_dataset(iter).await.unwrap();
 
-        Ok(format!("{ds_str}"))
+        Ok(ds.name)
     }
 
     async fn get_parents_string(&self, iter: &Iteration) -> Result<String, RunError>{
@@ -631,41 +613,6 @@ impl IterationService {
     }
 
 
-    async fn record_gt_ws(topic: &str, dataset: &Dataset, dataset_service: &DatasetService){
-
-        let ten_sec = time::Duration::from_secs(5);
-        thread::sleep(ten_sec);
-
-        let (mut ws, _) = connect_async("ws://localhost:57331").await.unwrap();
-        let topic_type = Self::resolve_topic_type(&mut ws, topic, 10).await.unwrap();
-
-        // Subscribe to a topic
-        let msg = json!({
-            "op": "subscribe",
-            "topic": topic,
-            "type": topic_type
-        });
-
-        ws.send(tungstenite::Message::Text(msg.to_string())).await.unwrap();
-
-        // Receive messages
-        while let Some(Ok(msg)) = ws.next().await {
-            
-            if let tungstenite::Message::Text(data) = msg {
-                match Self::convert_to_ros_msg(data.to_string()){
-                    Ok(r) => {
-                        let _ = Self::process_ground_truth(dataset_service, dataset, r).await;                    }
-                    Err(e) => {
-                        warn!("{e:}");
-                    }
-                }
-            }
-        }
-
-    }
-
-
-
     async fn record_task_ws(topic: &str, iteration_id: &Thing, odom_repo: OdometryRepo){
 
         let ten_sec = time::Duration::from_secs(5);
@@ -688,7 +635,18 @@ impl IterationService {
 
                 match Self::convert_to_ros_msg(data.to_string()){
                     Ok(r) => {
-                        let _ = Self::process_message(&odom_repo, r, &iteration_id).await;                    }
+
+                        let odometry_repo = odom_repo.clone();
+                        let it_thing = iteration_id.clone();
+
+                        // Spawn background task (does not block the loop)
+                        tokio::spawn(async move {
+                            if let Err(e) = Self::process_message(&odometry_repo, r, &it_thing).await {
+                                warn!("Error processing messages: {e}");
+                            }
+                        });            
+
+                    }
                     Err(e) => {
                         warn!("{e:}");
                     }
@@ -847,23 +805,6 @@ impl IterationService {
         odom_repo.save(&mut db_odom, iteration_id).await?;
         Ok(())
     }
-    async fn process_ground_truth(
-        dataset_service: &DatasetService,
-        dataset: &Dataset,
-        msg: RosMsg,
-    ) -> Result<(), ProcessingError> {
-        let odom = msg.as_odometry().unwrap();
-        let mut db_odom = Odometry::new(odom.header);
-        
-        // Copy relevant fields
-        db_odom.child_frame_id = odom.child_frame_id;
-        db_odom.pose = odom.pose;
-        db_odom.twist = odom.twist;
-
-        dataset_service.add_ground_truth(dataset, db_odom).await?;
-        Ok(())
-    }
-
 
     async fn remove_container(&self, container_name:&str){
         //Remove the containers
@@ -881,19 +822,19 @@ impl IterationService {
 
     async fn compute_metrics<R: EvoArg>(&self, iter: &Iteration, args: &R, result_path: &String, dataset_path: &String) -> Result<StatisticalMetrics, EvoError>{
 
-        let ground_truth_data = self.repo.get_dataset(iter)
-            .await.unwrap()
-            .ground_truth  // Clone the Option first
-            .ok_or_else(|| ProcessingError::NotFound("Dataset Odometries were not found".into())).unwrap();
+        //let ground_truth_data = self.repo.get_dataset(iter)
+        //    .await.unwrap()
+        //    .ground_truth  // Clone the Option first
+        //    .ok_or_else(|| ProcessingError::NotFound("Dataset Odometries were not found".into())).unwrap();
         
-        let _ = Self::write_file(&ground_truth_data, "groundtruth", &mut PathBuf::from_str(&dataset_path).unwrap());
+        //let _ = Self::write_file(&ground_truth_data, "groundtruth", &mut PathBuf::from_str(&dataset_path).unwrap());
 
         let odoms: Vec<Odometry> = self.repo.get_odometries(iter).await.unwrap();
         let _ = Self::write_file(&odoms, &iter.container.container_name, &mut PathBuf::from_str(&result_path).unwrap());
 
         let evo_ape_str = args.compute(&format!("{dataset_path}/groundtruth"), &format!("{result_path}/{}",&iter.container.container_name))?;
         
-        run_metrics_py(&format!("{dataset_path}/groundtruth"), &format!("{result_path}/{}",&iter.container.container_name), &self.config, &result_path);
+        let _ = run_metrics_py(&format!("{dataset_path}/groundtruth"), &format!("{result_path}/{}",&iter.container.container_name), &self.config, &result_path);
 
         let metric = StatisticalMetrics::from_str(&evo_ape_str); //TODO Dont unwrap() this
         metric

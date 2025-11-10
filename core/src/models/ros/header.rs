@@ -21,7 +21,7 @@ impl Ros1 for Header {
     fn empty() -> Header{
         Header { 
             seq: 0, 
-            time: DateTime::from_timestamp(0, 0).unwrap(), 
+            time: DateTime::from_timestamp(0, 0).unwrap(),
             frame_id: None
         }
     }

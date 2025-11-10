@@ -100,6 +100,15 @@ pub enum ProcessingError {
     #[error("Database error: {0}")]
     Database(#[from] crate::services::error::DbError),
 
+    #[error("Invalid Input: {0}")]
+    InvalidInput(String),
+
+    #[error("I/O Error: {0}")]
+    IO(String),
+
+    #[error("Invalid Dataset: {0}")]
+    InvalidDataset(String),
+
     #[error("Resource conflict: {0}")]
     Conflict(String),
     
@@ -183,11 +192,8 @@ pub enum MetricError{
 
 #[derive(Debug,Error)]
 pub enum ExecutionError{
-
     #[error("Unable to compute test execution: {0}")]
     ComputeError(String),
-
-
 }
 
 #[derive(Debug,Error)]
