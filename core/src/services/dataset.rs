@@ -103,7 +103,8 @@ impl DatasetService {
         // Read the TUM files as a CSV
         let file = File::open(&format!("{}/groundtruth",&full_dataset_path)).map_err(|e| ProcessingError::IO(format!("Unable to open Groundtruth positions file: {e}")))?;
         let mut rdr = ReaderBuilder::new()
-            .has_headers(true) // set to false if your CSV has no headers
+            .has_headers(false) // set to false if your CSV has no headers
+            .delimiter(b' ')
             .from_reader(file);
 
         let mut odom_list: Vec<Odometry> = vec![];

@@ -341,7 +341,6 @@ impl IterationService {
 
             //Create the directories if they dont exist
             fs::create_dir_all(&full_path).unwrap();
-            fs::create_dir_all(&full_dataset_path).unwrap();
 
             warn!("Computing APE and RPE!");
             //Compute the APE and RPE metrics
@@ -373,8 +372,8 @@ impl IterationService {
             };
 
 
-            let _ape = self.compute_metrics(&iter, &ape_args, &full_path, &full_dataset_path).await.map_err(|_e| RunError::Evo("Failed to compute APE".to_owned()))?;
-            let _rpe = self.compute_metrics(&iter, &rpe_args, &full_path, &full_dataset_path).await.map_err(|_e| RunError::Evo("Failed to compute RPE".to_owned()))?;
+            let _ape = self.compute_metrics(&iter, &ape_args, &full_path, &full_dataset_path).await.map_err(|e| RunError::Evo(format!("Failed to compute APE {e}")))?;
+            let _rpe = self.compute_metrics(&iter, &rpe_args, &full_path, &full_dataset_path).await.map_err(|e| RunError::Evo(format!("Failed to compute RPE {e}")))?;
 
             warn!("Read from file!");
             let mut ape_list = APE::read_from_file(&format!("{full_path}/ape.txt")).map_err(|e| RunError::Evo("Failure to load poses".to_owned()))?;
@@ -395,7 +394,7 @@ impl IterationService {
                     rpe.value
                 }).collect();
 
-                warn!("Create metrics");
+            warn!("Create metrics");
             let pose_error_metric = PoseErrorMetrics::from_values(&ape_values, &rpe_values).unwrap();
             let _metric = self.metric_service.create_pose_error_metric(iteration_id_clone.clone(), pose_error_metric).await.unwrap();
 

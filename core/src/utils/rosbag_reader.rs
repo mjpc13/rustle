@@ -76,8 +76,8 @@ def read_robag(bag_path, gt_path, topic):
                     # Initialize writer and write header once
                     if not header_written:
                         fieldnames = list(data.keys())
-                        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-                        writer.writeheader()
+                        writer = csv.DictWriter(csvfile, fieldnames=fieldnames, delimiter=' ')
+                        #writer.writeheader()
                         header_written = True
 
                     # Write the actual data row
