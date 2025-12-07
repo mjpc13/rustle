@@ -46,7 +46,7 @@ use super::{error::RunError, DatasetService, RosService, StatService};
 #[derive(Clone)]
 pub struct IterationService {
     repo: IterationRepo,
-    config: Config,
+    pub config: Config,
     ros_service: RosService,
     dataset_service: DatasetService,
     stat_service: StatService,
@@ -61,7 +61,7 @@ impl IterationService {
         Self { repo, docker, ros_service, dataset_service, stat_service, metric_service, config, params_service }
     }
 
-    pub async fn create(&self, iter_number: u8, algo:Algorithm, algorithm_run_id: &Thing, exec_id: &Thing, test_type: TestType) -> Result<(), DbError> {
+    pub async fn create(&self, iter_number: u64, algo:Algorithm, algorithm_run_id: &Thing, exec_id: &Thing, test_type: TestType) -> Result<(), DbError> {
         
         let sanitized = algo.name.replace(|c: char| !c.is_alphanumeric(), "_")
         .to_lowercase();
@@ -836,7 +836,7 @@ impl IterationService {
 
 }
 
-pub fn parse_rosbag_line(line: &str, iter_num: usize, algo: String) -> Option<ProgressMessage> {
+pub fn parse_rosbag_line(line: &str, iter_num: u64, algo: String) -> Option<ProgressMessage> {
     let re = regex::Regex::new(r"Bag Time: (\d+\.\d+)\s+Duration: (\d+\.\d+) / (\d+\.\d+)").ok()?;
     let caps = re.captures(line)?;
     Some(ProgressMessage {

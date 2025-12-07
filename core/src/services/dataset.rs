@@ -79,8 +79,8 @@ impl DatasetService {
         return Err(ProcessingError::NotFound(String::from("Dataset not found")));
     }
 
-    pub async fn get_dataset_name_by_id(&self, id: Option<Thing>) -> Result<Option<String>, DbError> {
-        match self.repo.get_by_id(id).await {
+    pub async fn get_dataset_name_by_id(&self, id: &Option<Thing>) -> Result<Option<String>, DbError> {
+        match self.repo.get_by_id(id.clone()).await {
             Ok(Some(ds)) => {
                 Ok(Some(ds.name))
             },

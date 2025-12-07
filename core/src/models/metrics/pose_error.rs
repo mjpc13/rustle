@@ -10,7 +10,7 @@ use surrealdb::sql::Thing;
 
 
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct APE{
     pub id: Option<Thing>,
     pub value: f32,
@@ -51,7 +51,7 @@ impl APE {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct RPE{
     pub id: Option<Thing>,
     pub value: f32,
@@ -93,7 +93,7 @@ impl RPE {
 
 
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Position{
     pub id: Option<Thing>,
     pub x: f32,
@@ -144,7 +144,7 @@ impl Position {
 }
 
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct PoseErrorMetrics {
     pub ape: StatisticalMetrics,
     pub rpe: StatisticalMetrics,

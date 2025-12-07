@@ -8,7 +8,7 @@ use crate::services::error::MetricError;
 use super::{metric::{MetricTypeInfo, StatisticalMetrics}, ContainerStats};
 
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct MemoryMetrics {
     pub limit_mb: f32,
     pub usage: StatisticalMetrics,

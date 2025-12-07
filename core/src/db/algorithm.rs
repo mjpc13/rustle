@@ -5,6 +5,7 @@ use tokio::sync::Mutex;
 
 use crate::{models::Algorithm, services::DbError};
 
+#[derive(Clone)]
 pub struct AlgorithmRepo {
     conn: Arc<Mutex<Surreal<Db>>>,
 }

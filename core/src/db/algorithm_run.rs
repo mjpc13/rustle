@@ -5,6 +5,7 @@ use tokio::sync::Mutex;
 
 use crate::{models::{metric::{Metric, StatisticalMetricsStamped}, Algorithm, AlgorithmRun, Iteration, TestDefinition, TestExecution}, services::DbError};
 
+#[derive(Clone)]
 pub struct AlgorithmRunRepo {
     conn: Arc<Mutex<Surreal<Db>>>,
 }

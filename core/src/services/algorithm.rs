@@ -11,6 +11,7 @@ use super::error::ProcessingError;
 
 use surrealdb::sql::Thing;
 
+#[derive(Clone)]
 pub struct AlgorithmService {
     repo: AlgorithmRepo,
     docker: Arc<Docker>

@@ -42,3 +42,10 @@ nalgebra = { version = "0.32.4", features = ["serde-serialize"] }
 charming = {version = "0.4.0", features = ["ssr"]}
 rand = "*"
 pyo3 = { version = "0.20.0", features = ["auto-initialize"] }
+
+indicatif = "0.17.7"
+
+argmin = "*"
+rand_xoshiro = "0.7"
+rand_distr = "0.5.1"
+csv = "1.4.0"

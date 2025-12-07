@@ -11,7 +11,7 @@ use surrealdb::sql::Thing;
 
 
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct TemporalEfficiencyMetric {
     pub speed_freq: HashMap<String, StatisticalMetrics>,    // HashMap speed multiplier to frequency of estimates
     pub eff_s: HashMap<String, f32>,        // Hashmap for the ratio between freq. at 1x and freq at sx; (Greater the value the worse the performance)

@@ -12,7 +12,6 @@ pub mod iteration;
 pub mod messages;
 
 pub mod slam_config;
-pub mod parameter_space;
 pub mod tuning;
 
 // Re-export main structs for ergonomic imports

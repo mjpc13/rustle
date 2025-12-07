@@ -28,8 +28,9 @@ use crate::{db::{TestExecutionRepo}, models::{metrics::ContainerStats, test_defi
 use super::{error::PlotError, AlgorithmRunService, IterationService};
 use surrealdb::sql::Thing;
 
+#[derive(Clone)]
 pub struct TestExecutionService {
-    execution_repo: TestExecutionRepo,
+    pub execution_repo: TestExecutionRepo,
     algorithm_run_service: AlgorithmRunService,
     iteration_service: IterationService,
 }
@@ -99,6 +100,7 @@ impl TestExecutionService {
                 if let Some(iter) = iteration{
 
                     //RUN ITERATION JOB
+                    // Alterar params
                     let iter_job = self.iteration_service.run(iter.clone(), msg_tx.clone()).await;
 
                     match iter_job {

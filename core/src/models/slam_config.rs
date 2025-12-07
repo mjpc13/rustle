@@ -72,17 +72,6 @@ impl SLAMConfig {
         Ok(())
     }
 
-    fn inspect_field_type(&self, field: &Value) -> &str {
-        match field {
-            Value::Number(_) => "Number",
-            Value::String(_) => "String",
-            Value::Bool(_) => "Bool",
-            Value::Array(_) => "Array",
-            Value::Object(_) => "Object",
-            Value::Null => "Null",
-        }
-    }
-
     fn extract_numbers(&self, array: &Value) -> Option<Vec<f64>> {
         if let Value::Array(vec) = array {
             let mut result = Vec::new();
@@ -99,7 +88,7 @@ impl SLAMConfig {
         }
     }
 
-    pub fn save_to_file(&self, file_name: &str) {
+    pub fn save_to_file(&self, file_name: &str) -> Result<(), Box<dyn std::error::Error>> {
         let mut file = File::create(file_name).unwrap();
         let yaml_string = serde_yaml::to_string(&self.params);
         file.write_all(yaml_string.unwrap().as_bytes());
@@ -107,15 +96,13 @@ impl SLAMConfig {
         let mut updates = Vec::new();
         let mut stuff: HashMap<String, Value> = HashMap::new();
         stuff = self.params.clone();
-        //let mut target_keys: Vec<&str> = Vec::new();
         let mut target_keys: Vec<String> = Vec::new();
 
         for (key, value) in &stuff {
-            if self.inspect_field_type(&value) == "Array" {
+            if value.is_array() {
                 let mut vec = self.extract_numbers(&value).unwrap();
                 let s = format!("{:?}", vec);
                 updates.push((key.clone(), Value::String(s)));
-                //target_keys.push(key.clone().as_str());
                 target_keys.push(key.clone());
             }
         }
@@ -124,11 +111,13 @@ impl SLAMConfig {
             stuff.insert(key, new_value);
         }
 
-        let yaml_string = serde_yaml::to_string(&stuff);
-        let mut file = File::create(file_name).unwrap();
-        file.write_all(yaml_string.unwrap().as_bytes());
+        let yaml_string = serde_yaml::to_string(&stuff)?;
+        let yaml_pretty = yaml_string.replace("\"[", "[").replace("]\"", "]").replace("\'[", "[").replace("]\'", "]");
 
-        self.remove_quotes_from_target_keys(file_name, target_keys);
+        let mut file = File::create(file_name).unwrap();
+        file.write_all(yaml_pretty.as_bytes());
+
+        Ok(())
     }
 }
 

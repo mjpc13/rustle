@@ -51,7 +51,6 @@ pub async fn build_app() -> Result<AppContext, Box<dyn std::error::Error>> {
     let stat_service = StatService::new(stat_repo);
     let metric_service = MetricService::new(metric_repo);
     let params_service = ParamsService::new(params_repo, docker.clone());
-    let tuning_service = TuningService::new(tuning_repo, docker.clone());
 
     let iteration_service = IterationService::new(
         iteration_repo,
@@ -59,15 +58,17 @@ pub async fn build_app() -> Result<AppContext, Box<dyn std::error::Error>> {
         ros_service,
         dataset_service.clone(),
         stat_service,
-        metric_service,
+        metric_service.clone(),
         params_service.clone(),
     );
     let algo_run_service = AlgorithmRunService::new(algo_run_repo, iteration_service.clone());
     let test_exec_service = TestExecutionService::new(
         test_exec_repo,
-        algo_run_service,
-        iteration_service,
+        algo_run_service.clone(),
+        iteration_service.clone(),
     );
+
+    let tuning_service = TuningService::new(tuning_repo, iteration_service.clone(), algo_run_service, test_exec_service.clone(), dataset_service.clone(), algo_service.clone(), params_service.clone(), metric_service.clone(), docker.clone());
 
     Ok(AppContext {
         algo_service,

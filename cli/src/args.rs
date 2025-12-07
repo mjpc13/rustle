@@ -337,6 +337,16 @@ pub enum TuneSubCommand {
 
     /// Show all available tuning configurations
     List,
+
+    Run(RunTune),
+
+    Show(ShowTune),
+}
+
+/// Arguments for running a tuning algorithm
+#[derive(Debug, Args)]
+pub struct RunTune {
+    pub tuning_instance_name: String,
 }
 
 /// Arguments for adding a tuning configuration
@@ -345,4 +355,9 @@ pub struct AddConfig {
     /// yaml file to load tuning config from
     #[clap(short, long)]
     pub file: Option<String>,
+}
+
+#[derive(Debug, Args)]
+pub struct ShowTune {
+    pub name: String,
 }

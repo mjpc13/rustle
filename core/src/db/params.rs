@@ -115,4 +115,15 @@ impl ParamsRepo {
         
         Ok(())
     }
+
+    pub async fn change_all_params(&self, params_id: Option<Thing>, new_params: HashMap<String, Value>) -> Result<(), DbError> {
+        let test_query_exec = self.conn
+                                    .lock().await
+                                    .query("UPDATE $params_id SET params = $params")
+                                    .bind(("params_id", params_id.clone().unwrap()))
+                                    .bind(("params", new_params))
+                                    .await?;
+
+        Ok(())
+    }
 }

@@ -9,7 +9,7 @@ use super::{cpu::CpuMetrics, memory::MemoryMetrics, pose_error::PoseErrorMetrics
 
 
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Metric {
     pub id: Option<Thing>,
     #[serde(rename = "metric_type")]
@@ -86,7 +86,7 @@ impl Metric {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type", rename_all = "PascalCase")]
 pub enum MetricType{
     Cpu(CpuMetrics),
@@ -117,6 +117,15 @@ impl MetricType {
             MetricType::Memory(m) => m,
             MetricType::TemporalEfficiency(m) => m,
             MetricType::Robustness(m) => m,
+        }
+    }
+
+    pub fn as_pose_error(&self) -> &PoseErrorMetrics {
+        match self {
+            MetricType::PoseError(p) => p,
+            _ => {
+                panic!("wtf");
+            }
         }
     }
 }

@@ -12,6 +12,7 @@ use surrealdb::sql::Thing;
 
 use super::{error::{PlotError, RunError}, DbError, IterationService};
 
+#[derive(Clone)]
 pub struct AlgorithmRunService {
     repo: AlgorithmRunRepo,
     iter_service: IterationService
@@ -25,7 +26,7 @@ impl AlgorithmRunService {
     pub async fn create_run(
         &self,
         bag_speed: f32,
-        num_iterations: u8,
+        num_iterations: u64,
         test_execution_id: &Thing,
         algorithm_id: &Thing, 
         test_type: TestType

@@ -204,17 +204,135 @@ pub enum PlotError{
 #[derive(Debug, Error)]
 pub enum TuningError {
 
+    #[error("No field called 'name' was found")]
+    NoName(),
+
     #[error("No field called 'algo_name' was found")]
     NoAlgoName(),
 
-    #[error("No field called 'dataset_name' was found")]
-    NoDatasetName(),
+    #[error("No field called \"dataset_settings\" was found")]
+    NoDatasetSettingsField(),
 
-    #[error("No field called 'parameters' was found")]
+    #[error("The \"dataset_settings\" field is not a json object")]
+    NoDatasetSettingsObject(),
+
+    #[error("No field called \"name\" was found inside \"dataset_settings\"")]
+    NoDatasetName(),
+    
+    #[error("No field called \"start\" was found inside \"dataset_settings\"")]
+    NoDatasetStart(),
+
+    #[error("No field called \"duration\" was found inside \"dataset_settings\"")]
+    NoDatasetDuration(),
+
+    #[error("No field called \"tuning_settings\" was found")]
+    NoTuningSettingsField(),
+
+    #[error("The \"tuning_settings\" field is not a json object")]
+    NoTuningSettingsObject(),
+
+    #[error("No field called \"parameters\" was found")]
     NoParametersField(),
 
-    #[error("The 'parameters' field is not a json object")]
-    NoParametersObject()
+    #[error("The \"parameters\" field is not a json object")]
+    NoParametersObject(),
+
+    #[error("No field called 'early_stopping' was found")]
+    NoEarlyStoppingField(),
+
+    #[error("The 'early_stopping' field is not a json object")]
+    NoEarlyStoppingObject(),
+
+    #[error("No field called \"tolerance\" was found inside \"early_stopping\"")]
+    EarlyStoppingNoToleranceField(),
+
+    #[error("No field called \"delta\" was found inside \"early_stopping\"")]
+    EarlyStoppingNoDeltaField(),
+
+    #[error("The \"delta\" parameter must be a float between 0 and 1")]
+    EarlyStoppingDeltaOutOfRange(),
+
+    #[error("No field called 'metric_weights' was found")]
+    NoMetricWeightsField(),
+
+    #[error("The \"metric_weights\" is not a json object")]
+    NoMetricWeightsObject(),
+
+    #[error("'{0}' is not a valid tuning algorithm('tuning_algo')")]
+    InvalidTuningAlgo(String),
+
+    #[error("The 'tuning_algo' has no value")]
+    NoTuningAlgo(),
+
+    #[error("The weight for metric '{0}' must be a positive f64")]
+    WeightNotValidValue(String),
+
+    #[error("No field called '{0}' was found")]
+    NoField(String),
+
+    #[error("The field \"{0}\" must be of type {1}")]
+    WrongTypeField(String, String),
+
+    #[error("The numeric field \"{0}\" cannot have negative values")]
+    NumericTypeNegativeValue(String),
+
+    #[error("Error while calculating best configuration: no valid iterations were found")]
+    NoMetrics(),
+
+    #[error("The field \"time_limit\" must be a positive number")]
+    InvalidTimeLimit(),
+}
+
+#[derive(Debug, Error)]
+pub enum SimulatedAnnealingError {
+
+    #[error("No field called \"temperature\" was found")]
+    NoTemperatureSettingsField(),
+
+    #[error("The \"temperature\" field is not a json object")]
+    NoTemperatureSettingsObject(),
+
+    #[error("No field called \"initial_value\" was found inside \"temperature\"")]
+    NoInitialTemperatureValueField(),
+
+    #[error("The temperature initial value must be a non negative f64 value")]
+    InvalidInitialTemperature(),
+
+    #[error("No field called \"function\" was found inside \"temperature\"")]
+    NoTemperatureFunctionField(),
+
+    #[error("Invalid temperature function")]
+    InvalidTemperatureFunction(),
+
+    #[error("No field called \"parameter_bounds\" was found inside \"tuning_settings\"")]
+    NoParameterBoundsField(),
+
+    #[error("The \"parameter_bounds\" field is not a json object")]
+    NoParameterBoundsObject(),
+
+    #[error("The algorithm \"{0}\" does not have a parameter called \"{1}\"")]
+    BoundKeyNotFound(String, String),
+
+    #[error("The \"{0}\" parameter bound must be an array")]
+    BoundNotArray(String),
+
+    #[error("The \"{0}\" parameter bound must be an array of 3 elements")]
+    BoundArrayWrongLength(String),
+
+    #[error("The \"{0}\" parameter is of the wrong type. Currently, only numeric types(i64, u64 and f64. arrays not allowed) are allowed")]
+    BoundParameterForbiddenType(String),
+
+    #[error("The \"{0}\" parameter array must contain 3 values of type {1}")]
+    BoundParameterDifferentTypes(String, String),
+
+    #[error("The \"{0}\" parameter's lower bound must be lower than its upper bound")]
+    BoundParameterInvalidBounds(String),
+
+    #[error("No field called \"max_iterations\" was found inside \"tuning_settings\"")]
+    NoMaxIterationsField(),
+
+    #[error("The field \"max_iterations\" must be a non negative integer(> 0)")]
+    MaxIterationsNotValidInteger(),
 }
 
 #[derive(Debug, Error)]

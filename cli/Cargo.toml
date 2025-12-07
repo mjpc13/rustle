@@ -28,6 +28,8 @@ bollard = "0.16.0" # Manage Docker
 directories= "*"
 toml = "*"
 
+serde_json = "*"
+
 # Output formatting
 comfy-table = "*"
 owo-colors = "*"

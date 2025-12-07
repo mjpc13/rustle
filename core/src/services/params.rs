@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::{fs::File, sync::Arc};
 
 use bollard::{image::CreateImageOptions, Docker};
@@ -11,6 +12,7 @@ use super::error::ProcessingError;
 
 use crate::services::DbError;
 use surrealdb::sql::Thing;
+use serde_json::Value;
 
 #[derive(Clone)]
 pub struct ParamsService {
@@ -34,5 +36,23 @@ impl ParamsService {
 
     pub async fn get_by_id(&self, id: Option<Thing>) -> Result<Option<SLAMConfig>, DbError> {
         self.repo.get_by_id(id).await
+    }
+
+    /*
+    pub async fn duplicate(&self, id: Option<Thing>) -> Result<Option<Thing>, DbError> {
+        if let Some(mut slam_params) = self.repo.get_by_id(id).await? {
+            slam_params.id = None;
+            self.repo.save(&mut slam_params).await?;
+            Ok(slam_params.id)
+        }
+        else {
+            return Err(DbError::NotFound(String::from("SLAM config not found in database")));
+        }
+    }
+    */
+
+    pub async fn update_params(&self, id: Option<Thing>, new_params: &HashMap<String, Value>) -> Result<(), DbError> {
+        self.repo.change_all_params(id, new_params.clone()).await?;
+        Ok(())
     }
 }
