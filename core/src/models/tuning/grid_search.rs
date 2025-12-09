@@ -1,6 +1,6 @@
 use std::{collections::HashMap, vec};
 use serde_json::{Value, Number, json, Map};
-use crate::models::metrics::Metric;
+use crate::{db::params, models::metrics::Metric};
 
 // grid search can execute configurations concurrently
 #[derive(Debug, serde::Deserialize, serde::Serialize, Clone, PartialEq)]
@@ -9,7 +9,7 @@ pub struct GridSearchConfig {
     pub tunable_params: HashMap<String, Value>,
     
     /// for grid/random search
-    pub tunable_params_array_sizes: HashMap<String, u64>,
+    pub tunable_params_array_sizes: Vec<(String, u64)>,
     
     /// for random search
     pub visited_points: Vec<Vec<(String, u64)>>,
@@ -19,7 +19,7 @@ impl GridSearchConfig {
     pub fn new() -> Self {
         Self { configs: Vec::new(), 
                tunable_params: HashMap::new(), 
-               tunable_params_array_sizes: HashMap::new(),
+               tunable_params_array_sizes: Vec::new(),
                visited_points: Vec::new(), }
     }
 
@@ -128,31 +128,43 @@ impl GridSearchConfig {
         result_vec
     }
 
+    pub fn build_array_sizes(&mut self) {
+        for (key, value) in &self.tunable_params {
+            self.tunable_params_array_sizes.push((key.clone(), value.clone().as_array().unwrap()[2].as_u64().unwrap()));
+            //self.tunable_params_array_sizes.insert(key.clone(), value.clone().as_array().unwrap()[2].as_u64().unwrap());
+        }
+    }
+
     /// if param is `Some()` then the number of values is provided for the specific parameter, if it exists.
     /// 
     /// if param is `None`, then the total number of configurations of the parameter space is provided
-    pub fn parameter_space_size(&self, param: Option<&String>) -> Option<usize> {
-        if let Some(param) = param {
-            if let Some((key, index)) = self.tunable_params_array_sizes.iter().find(|(key, _)| *key == param) {
-                return Some(index.clone() as usize);
+    pub fn get_param_array_size_by_key(&self, param: Option<&String>) -> Option<u64> {
+        if let Some(param_key) = param {
+            if let Some((key, param_size)) = self.tunable_params_array_sizes.iter().find(|(key, _)| key == param_key) {
+                return Some(param_size.clone());
             }
             else {
                 return None;
             }
         }
         else {
-            let sum: u64 = self.tunable_params_array_sizes.iter().map(|(_, v)| v.clone()).product();
-            return Some(sum as usize);
+            return Some(self.tunable_params_array_sizes.iter().map(|(_, v)| v.clone()).product());      
         }
     }
 
-    pub fn build_array_sizes(&mut self) {
-        for (key, value) in &self.tunable_params {
-            self.tunable_params_array_sizes.insert(key.clone(), value.clone().as_array().unwrap()[2].as_u64().unwrap());
+    pub fn get_param_array_size_by_index(&self, index: Option<usize>) -> Option<u64> {
+        if let Some(index_value) = index {
+            if index_value >= self.tunable_params_array_sizes.len() {
+                return None;
+            }
+            else {
+                return Some(self.tunable_params_array_sizes[index_value].1.clone());
+            }
+        }
+        else {
+            return Some(self.tunable_params_array_sizes.iter().map(|(_, v)| v.clone()).product());  
         }
     }
-
-
 }
 
 fn cartesian_product(data: &[Vec<Value>]) -> Vec<Vec<Value>> {

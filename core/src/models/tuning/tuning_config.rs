@@ -301,7 +301,7 @@ impl TuningConfig {
                     let mut random_point: Vec<(String, u64)> = Vec::new();
                     let mut rng = thread_rng();
 
-                    if rs_config.visited_points.len() == rs_config.parameter_space_size(None).unwrap() {
+                    if rs_config.visited_points.len() == rs_config.get_param_array_size_by_index(None).unwrap() as usize {
                         return None;
                     }
 
@@ -332,19 +332,20 @@ impl TuningConfig {
         if let Some(TuneType::RandomSearch(rs_config)) = &self.tuning_type {
             let mut total_index: u64 = 0;
             for i in 0..random_point.len() {
-                total_index += random_point[i].1 * (rs_config.tunable_params_array_sizes.get(&random_point[i].0.clone()).unwrap()).pow(i as u32);
+                total_index += random_point[i].1 * (rs_config.get_param_array_size_by_index(Some(i)).unwrap()).pow(i as u32);
+                //total_index += random_point[i].1 * (rs_config.tunable_params_array_sizes.get(&random_point[i].0.clone()).unwrap()).pow(i as u32);
             }
             Some(total_index)
         }
         else if let Some(TuneType::GridSearch(gs_config)) = &self.tuning_type {
             let mut total_index: u64 = 0;
             for i in 0..random_point.len() {
-                total_index += random_point[i].1 * (gs_config.tunable_params_array_sizes.get(&random_point[i].0.clone()).unwrap()).pow(i as u32);
+                //total_index += random_point[i].1 * (gs_config.tunable_params_array_sizes.get(&random_point[i].0.clone()).unwrap()).pow(i as u32);
+                total_index += random_point[i].1 * (gs_config.get_param_array_size_by_index(Some(i)).unwrap()).pow(i as u32);
             }
             Some(total_index)
         }
         else { None }
-
     }
 
     pub fn index_to_grid_point(&self) {
@@ -360,7 +361,8 @@ impl TuningConfig {
                     let mut next_point = previous_point.clone();
 
                     //let first_element_size = get_parameter_array_current_index(next_point.clone(), next_point[0].0.clone()).unwrap();
-                    let first_element_size = params_array_sizes.get(&next_point[0].0.clone()).unwrap().clone();
+                    //let first_element_size = params_array_sizes.get(&next_point[0].0.clone()).unwrap().clone();
+                    let first_element_size = params_array_sizes[0].1.clone();
                     //println!("{}", first_element_size.clone());
                     if next_point[0].1.clone() == (first_element_size - 1) {
                         let first_key = next_point[0].0.clone();
@@ -368,7 +370,8 @@ impl TuningConfig {
                         for i in 1..next_point.len() {
                             let current_key = next_point[i].0.clone();
                             let current_param_index: u64 = get_parameter_array_current_index(next_point.clone(), current_key.clone()).unwrap();
-                            if current_param_index == params_array_sizes.get(&current_key).unwrap().clone() - 1 {
+                            // params_array_sizes.get(&current_key).unwrap().clone()
+                            if current_param_index == gs_config.get_param_array_size_by_key(Some(&current_key)).unwrap() - 1 {
                                 //next_point.push((key.clone(), 0));
                                 change_parameter_array_index(&mut next_point, current_key, 0);
                             }

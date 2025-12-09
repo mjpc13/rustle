@@ -302,24 +302,8 @@ async fn load_grid_search_config(input_file_params: &HashMap<String, Value>, tun
     let mut new_grid_search_config = GridSearchConfig::new();
     new_grid_search_config.tunable_params = tuning_config.parameters_to_tune.clone();
     new_grid_search_config.build_array_sizes();
-    //println!("{:?}", new_grid_search_config.tunable_params_array_sizes);
-
-
-    //new_grid_search_config.build_configurations(tuning_config.parameters_to_tune.clone(), algo_params);
     tuning_config.tuning_type = Some(TuneType::GridSearch(new_grid_search_config));
     
-    //let initial_grid_point = tuning_config.generate_initial_grid_point().unwrap();
-    //let mut current_grid_point = initial_grid_point.clone();
-
-    /*
-    println!("{:?}", initial_grid_point);
-
-    for i in 0..100100 {
-        current_grid_point = tuning_config.generate_next_grid_point(current_grid_point).unwrap();
-        println!("{:?}", current_grid_point);
-    }
-    */
-
     Ok(())
 }
 
@@ -347,9 +331,6 @@ async fn load_random_search_config(input_file_params: &HashMap<String, Value>, t
     let mut new_grid_search_config = GridSearchConfig::new();
     new_grid_search_config.tunable_params = tuning_config.parameters_to_tune.clone();
     new_grid_search_config.build_array_sizes();
-
-    //println!("{:?}", new_grid_search_config.tunable_params_array_sizes);
-    //new_grid_search_config.build_configurations(tuning_config.parameters_to_tune.clone(), algo_params);
     tuning_config.tuning_type = Some(TuneType::RandomSearch(new_grid_search_config));
 
     Ok(())
