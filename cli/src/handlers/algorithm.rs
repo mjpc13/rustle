@@ -1,24 +1,53 @@
 use comfy_table::{presets::UTF8_FULL, ContentArrangement, Table};
 use log::{error, info};
-use rustle_core::{models::Algorithm, services::AlgorithmService};
+use rustle_core::{models::{Algorithm, slam_config::SLAMConfig}, 
+                  services::{AlgorithmService, params::ParamsService}, 
+                  utils::config::Config,};
+
+use rustle_core::db::params::ParamsRepo;
+
+use bollard::Docker;
+use std::sync::Arc;
+use tokio::sync::Mutex;
+use surrealdb::engine::local::RocksDb;
+
 use crate::args::{AlgoCommand, AlgoSubCommand};
 
 use serde_yaml::from_reader;
 use std::{error::Error, fs::File};
+
+use surrealdb::sql::Thing;
+
+use surrealdb::Surreal;
 
 #[derive(Debug, serde::Deserialize)]
 struct AlgorithmConfig {
     algorithms: Vec<Algorithm>,
 }
 
+#[derive(Debug, serde::Deserialize)]
+struct AlgorithmTemp {
+    pub name: String,
+    pub image_name: String,
+    pub version: String,
+    pub parameters: String,
+    pub odom_topics: Vec<String>
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct AlgorithmConfigTemp {
+    algorithms: Vec<AlgorithmTemp>,
+}
+
 pub async fn handle_algo(
     cmd: AlgoCommand,
     service: &AlgorithmService,
+    param_service: &ParamsService,
 ) -> Result<(), Box<dyn Error>> {
     match cmd.command {
         AlgoSubCommand::Add(add) => {
             let algo_config = if let Some(file_path) = add.file {
-                load_yaml_config(&file_path)?
+                load_yaml_config(&file_path, param_service).await?
             } else {
                 AlgorithmConfig {
                     algorithms: vec![Algorithm {
@@ -26,7 +55,9 @@ pub async fn handle_algo(
                         name: add.name.expect("Missing: --name"),
                         version: add.version.expect("Missing: --version"),
                         image_name: add.image_name.expect("Missing: --image-name"),
-                        parameters: add.parameters.expect("Missing: --parameters"),
+                        //current_params: add.parameters.expect("Missing: --parameters").to_string(),
+                        current_params: None,
+                        param_list: Vec::new(),
                         odom_topics: add.odom_topics,
                     }],
                 }
@@ -50,7 +81,7 @@ pub async fn handle_algo(
                 "Name", 
                 "Version", 
                 "Image", 
-                "Parameters", 
+                //"Parameters", 
                 "Odom Topics"
             ]);
 
@@ -59,7 +90,7 @@ pub async fn handle_algo(
                     algo.name,
                     algo.version,
                     algo.image_name,
-                    algo.parameters,
+                    //algo.current_params.expect("REASON").to_string(),
                     format!("{:?}", algo.odom_topics),
                 ]);
             }
@@ -76,9 +107,45 @@ pub async fn handle_algo(
     Ok(())
 }
 
-fn load_yaml_config<T: serde::de::DeserializeOwned>(path: &str) -> Result<T, Box<dyn Error>> {
-    let file = File::open(path)?;
-    Ok(from_reader(file)?)
+async fn load_yaml_config(path: &str, service: &ParamsService) -> Result<AlgorithmConfig, Box<dyn Error>> {
+    let file = File::open(path).expect("Could not open file");
+    //Ok(from_reader(file)?);
+
+    // Reade from file to a YAML object
+    // From the config path add a new SLAMConfig to database and return its ID
+    // Create a Vec<Algorithm> from the YAML data 
+
+    //let new_config: Option<SLAMConfig> = service.create_from_yaml(path);
+
+    let mut new_configs: AlgorithmConfigTemp = from_reader(file).expect("Could not read config file");
+
+    let mut new_algorithms_config = AlgorithmConfig {algorithms : Vec::new()};
+
+    //println!("read the file");
+
+
+    for algo in &mut new_configs.algorithms {
+        let current_config: SLAMConfig = service.create_from_yaml(&algo.parameters).await?;
+
+        //println!("created the config");
+
+        let mut current_algo = Algorithm {
+            id: None,
+            name: algo.name.clone(),
+            version: algo.version.clone(),
+            image_name: algo.image_name.clone(),
+            current_params: current_config.id.clone(),
+            odom_topics: algo.odom_topics.clone(),
+            param_list: Vec::new(),
+        };
+
+        new_algorithms_config.algorithms.push(current_algo);
+        //println!("Hello there");
+    }
+
+    Ok(new_algorithms_config)
+
+
 }
 
 async fn process_algorithms(service: &AlgorithmService, config: AlgorithmConfig) {
@@ -89,3 +156,4 @@ async fn process_algorithms(service: &AlgorithmService, config: AlgorithmConfig)
         }
     }
 }
+

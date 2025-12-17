@@ -1,5 +1,7 @@
-use std::{collections::HashMap, fs::{self, File}, path::{Path, PathBuf}};
-use crate::{db::DatasetRepo, models::{Dataset, Odometry, ros::{Tum, ros_msg::{self, RosMsg}}}, services::{DbError, error::RunError}, utils::rosbag_reader};
+use std::fs::File;
+use crate::{db::DatasetRepo, models::{Dataset, Odometry}, services::DbError};
+
+use surrealdb::sql::Thing;
 
 use super::error::ProcessingError;
 use directories::ProjectDirs;
@@ -147,6 +149,39 @@ impl DatasetService {
     pub async fn get_all(&self) -> Result<Vec<Dataset>, ProcessingError> {
         let results = self.repo.list_all().await?;
         Ok(results)
+    }
+
+    pub async fn get_dataset_id_by_name(&self, name: String) -> Result<Option<Thing>, ProcessingError> {
+        //println!("Trying to retrieve all records");
+        let current_datasets = self.get_all().await?;
+
+        //println!("{:?}", current_datasets);
+
+        for ds in current_datasets.clone() {
+            //let trimmed = &name.clone()[1..name.clone().len()-1];
+            //println!("Target: {}, current name: {}", trimmed.to_string(), ds.name.clone().to_string());
+
+            if ds.name.to_string() == name {
+                //println!("Found it");
+                return Ok(ds.id);
+            }
+        }
+
+        return Err(ProcessingError::NotFound(String::from("Dataset not found")));
+    }
+
+    pub async fn get_dataset_name_by_id(&self, id: &Option<Thing>) -> Result<Option<String>, DbError> {
+        match self.repo.get_by_id(id.clone()).await {
+            Ok(Some(ds)) => {
+                Ok(Some(ds.name))
+            },
+            Ok(None) => {
+                Ok(None)
+            },
+            Err(e) => {
+                Err(e)
+            }
+        }
     }
 
     pub async fn delete_dataset_by_name(&self, name: &String){

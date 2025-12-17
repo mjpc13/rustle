@@ -9,6 +9,9 @@ pub mod test_execution;
 pub mod iteration;
 pub mod stat;
 
+pub mod params;
+pub mod tuning;
+
 // Re-export repositories
 pub use self::{
     dataset::DatasetRepo,
@@ -19,5 +22,6 @@ pub use self::{
     algorithm_run::AlgorithmRunRepo,
     test_execution::TestExecutionRepo,
     iteration::IterationRepo,
-    stat::StatRepo
+    stat::StatRepo,
+    tuning::TuningRepo
 };

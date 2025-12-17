@@ -6,6 +6,7 @@ use tokio::sync::Mutex;
 use crate::{models::{test_execution::TestExecution, Algorithm, AlgorithmRun, Dataset, Iteration, TestDefinition}, services::error::DbError};
 use surrealdb::sql::Thing;
 
+#[derive(Clone)]
 pub struct TestExecutionRepo {
     conn: Arc<Mutex<Surreal<Db>>>,
 }

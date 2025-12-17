@@ -12,7 +12,7 @@ pub struct AlgorithmRun {
     pub id: Option<Thing>,
     pub algo: Algorithm,
     pub bag_speed: f32,
-    pub num_iterations: u8,
+    pub num_iterations: u64,
     pub metrics: Vec<Metric>, 
     pub cpu_load_list: Vec<StatisticalMetricsStamped>,
     pub mem_usage_list: Vec<StatisticalMetricsStamped>,
@@ -25,7 +25,7 @@ pub struct AlgorithmRun {
 }
 
 impl AlgorithmRun {
-    pub fn new(bag_speed: f32, num_iterations: u8, algo: Algorithm, test_type: TestType, exec_id: Thing) -> Self {
+    pub fn new(bag_speed: f32, num_iterations: u64, algo: Algorithm, test_type: TestType, exec_id: Thing) -> Self {
 
         Self{
             id: None,

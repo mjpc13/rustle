@@ -50,4 +50,9 @@
           if="$(eval arg('test_type') == 'cut')" output="screen">
     </node>
 
+
+    <node pkg="rustle-ros" type="cut_manager.py" name="cut_manager" 
+          if="$(eval arg('test_type') == 'cut')" output="screen">
+    </node>
+
 </launch>

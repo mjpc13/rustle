@@ -40,4 +40,7 @@
         <node pkg="rustle-ros" type="cut_manager.py" name="cut_manager" output="screen"/>
     </group>
 
+        <node pkg="rustle-ros" type="cut_manager.py" name="cut_manager" output="screen"/>
+    </group>
+
 </launch>

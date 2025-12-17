@@ -23,6 +23,9 @@ pub enum CommandType {
 
     /// Manage application configuration
     Config(ConfigCommand),
+
+    // Manage and run hyperparameter tuning experiments
+    Tune(TuneCommand),
 }
 
 // ================== DATASET COMMANDS ==================
@@ -133,6 +136,8 @@ pub struct AddAlgorithm {
     /// List of odometry topics
     #[clap(short, long)]
     pub odom_topics: Vec<String>,
+
+    pub param_list: Vec<String>,
 }
 
 /// Arguments for deleting a SLAM algorithm.
@@ -314,4 +319,45 @@ pub struct SetConfig {
 
     /// New value to assign to the key
     pub value: String,
+}
+
+// ================== TUNE COMMANDS ==================
+
+/// Command wrapper for dataset-related actions.
+#[derive(Debug, Args)]
+pub struct TuneCommand {
+    #[clap(subcommand)]
+    pub command: TuneSubCommand,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum TuneSubCommand {
+    /// Add a tuning configuration
+    Add(AddConfig),
+
+    /// Show all available tuning configurations
+    List,
+
+    Run(RunTune),
+
+    Show(ShowTune),
+}
+
+/// Arguments for running a tuning algorithm
+#[derive(Debug, Args)]
+pub struct RunTune {
+    pub tuning_instance_name: String,
+}
+
+/// Arguments for adding a tuning configuration
+#[derive(Debug, Args)]
+pub struct AddConfig {
+    /// yaml file to load tuning config from
+    #[clap(short, long)]
+    pub file: Option<String>,
+}
+
+#[derive(Debug, Args)]
+pub struct ShowTune {
+    pub name: String,
 }

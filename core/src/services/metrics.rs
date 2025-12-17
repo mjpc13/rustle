@@ -1,7 +1,7 @@
 use crate::{
     db::metric::MetricRepo,
     models::{metric::{Metric, MetricType, StatisticalMetrics}, metrics::{memory::MemoryMetrics, pose_error::{Position, APE, RPE}, CpuMetrics, PoseErrorMetrics}},
-    services::error::ProcessingError
+    services::{error::ProcessingError, DbError}
 };
 
 use surrealdb::sql::Thing;
@@ -98,6 +98,28 @@ impl MetricService {
 
         }
         Ok(())
+    }
+
+    pub async fn get_ape(&self, iteration_id: &Thing) -> Result<APE, DbError> {
+        match self.repo.load_ape(&iteration_id.clone()).await {
+            Ok(record) => {
+                Ok(record)
+            }
+            Err(e) => {
+                Err(e)
+            }
+        }
+    }
+
+    pub async fn get_all_iteration_metrics(&self, iteration_id: &Thing) -> Result<Vec<Metric>, DbError> {
+        match self.repo.load_all_iteration_metrics(&iteration_id.clone()).await {
+            Ok(record) => {
+                Ok(record)
+            }
+            Err(e) => {
+                Err(e)
+            }
+        } 
     }
 
     pub async fn create_position(

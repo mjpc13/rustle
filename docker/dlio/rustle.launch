@@ -1,6 +1,16 @@
 
+
 <launch>
 
+    <!--Don't change this file!!!-->
+    <arg name="test_type" default="simple"/>  <!-- or any default value -->
+    <arg name="algo_topic" default=""/>
+    <arg name="gt_topic" default=""/>
+    <param name="use_sim_time" value="true" />
+    <param name="algo_topic" value="$(arg algo_topic)" />
+    <param name="gt_topic" value="$(arg gt_topic)" />
+    
+    <rosparam command="load" file="/rustle/config/params.yaml"/>
     <!--Don't change this file!!!-->
     <arg name="test_type" default="simple"/>  <!-- or any default value -->
     <arg name="algo_topic" default=""/>
@@ -29,6 +39,21 @@
       <node name="dlio_map" pkg="direct_lidar_inertial_odometry_speed" type="dlio_map_node" output="screen" clear_params="true"/>
     </group>
 
+    <!-- ================== A-LOAM for the DROP TEST =========================-->
+    <group if="$(eval arg('test_type') == 'drop')">
+      <node name="dlo_odom" pkg="direct_lidar_inertial_odometry" type="dlio_odom_node" output="screen" clear_params="true"/>
+      <node name="dlio_map" pkg="direct_lidar_inertial_odometry" type="dlio_map_node" output="screen" clear_params="true"/>
+
+      <node pkg="rustle-ros" type="drop_manager.py" name="drop_manager" output="screen"/>
+    </group>
+
+    <!-- ================== A-LOAM for the Cut-Off TEST ======================-->
+    <group if="$(eval arg('test_type') == 'cut')">
+      <node name="dlo_odom" pkg="direct_lidar_inertial_odometry" type="dlio_odom_node" output="screen" clear_params="true"/>
+      <node name="dlio_map" pkg="direct_lidar_inertial_odometry" type="dlio_map_node" output="screen" clear_params="true"/>
+
+      <node pkg="rustle-ros" type="cut_manager.py" name="cut_manager" output="screen"/>
+    </group>
     <!-- ================== A-LOAM for the DROP TEST =========================-->
     <group if="$(eval arg('test_type') == 'drop')">
       <node name="dlo_odom" pkg="direct_lidar_inertial_odometry" type="dlio_odom_node" output="screen" clear_params="true"/>

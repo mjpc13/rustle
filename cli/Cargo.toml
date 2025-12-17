@@ -27,6 +27,7 @@ surrealdb = { version = "*", features = ["kv-mem", "kv-rocksdb"] }
 bollard = "0.16.0" # Manage Docker
 directories= "*"
 toml = "*"
+serde_json = "*"
 
 # Output formatting
 comfy-table = "*"

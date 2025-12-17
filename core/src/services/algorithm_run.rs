@@ -12,6 +12,7 @@ use surrealdb::sql::Thing;
 
 use super::{error::{PlotError, RunError}, DbError, IterationService};
 
+#[derive(Clone)]
 pub struct AlgorithmRunService {
     repo: AlgorithmRunRepo,
     iter_service: IterationService
@@ -25,14 +26,16 @@ impl AlgorithmRunService {
     pub async fn create_run(
         &self,
         bag_speed: f32,
-        num_iterations: u8,
+        num_iterations: u64,
         test_execution_id: &Thing,
         algorithm_id: &Thing, 
+        test_type: TestType
         test_type: TestType
     ) -> Result<AlgorithmRun, ProcessingError> {
 
         let algo = self.repo.get_algorithm(algorithm_id).await?;
 
+        let mut run = AlgorithmRun::new(bag_speed, num_iterations, algo, test_type.clone(), test_execution_id.clone());
         let mut run = AlgorithmRun::new(bag_speed, num_iterations, algo, test_type.clone(), test_execution_id.clone());
         self.repo.save(&mut run, test_execution_id, algorithm_id).await?;
 
@@ -48,9 +51,14 @@ impl AlgorithmRunService {
 
                     self.iter_service.create(i, algo, &thing, test_execution_id, test_type.clone()).await?
                 },
+                Some(thing) => {
+
+                    self.iter_service.create(i, algo, &thing, test_execution_id, test_type.clone()).await?
+                },
                 None => warn!("ID of algorithm_run was empty")
             };
         }
+        
         
         Ok(run)
     }
@@ -59,6 +67,9 @@ impl AlgorithmRunService {
 
         let metric_list = self.repo.get_metrics(run).await.unwrap(); //get metrics associated with the algo run (metrics of the iterations)
 
+        let aggregate_metrics = Metric::mean(metric_list);  //Compute the "mean for buckets of space" for CPU/Memory/APE/RPE;
+
+        let _ = self.compute_buckets(run).await;
         let aggregate_metrics = Metric::mean(metric_list);  //Compute the "mean for buckets of space" for CPU/Memory/APE/RPE;
 
         let _ = self.compute_buckets(run).await;
@@ -74,6 +85,7 @@ impl AlgorithmRunService {
     }
 
 
+    pub async fn plot(&self, run: &AlgorithmRun, path: &str, overwrite: bool, format:  &str, config: &Config) -> Result<HashMap<String, Chart>, PlotError>{
     pub async fn plot(&self, run: &AlgorithmRun, path: &str, overwrite: bool, format:  &str, config: &Config) -> Result<HashMap<String, Chart>, PlotError>{
 
         let mut hash: HashMap<String, Chart> = HashMap::new();
@@ -108,6 +120,11 @@ impl AlgorithmRunService {
                     hash.insert(filepath, c);
                 }
 
+
+                if let Ok(c) = chart {
+                    hash.insert(filepath, c);
+                }
+
             }
 
         }
@@ -116,7 +133,16 @@ impl AlgorithmRunService {
     }
 
     async fn plot_ape(&self, iterations: &Vec<Iteration>, test_def: &TestType, config: &Config) -> Result<Chart, PlotError>{
+    async fn plot_ape(&self, iterations: &Vec<Iteration>, test_def: &TestType, config: &Config) -> Result<Chart, PlotError>{
 
+        let mut algo_ape: Vec<Vec<APE>> = Vec::new();
+
+        for it in iterations{
+            match self.iter_service.get_ape(it).await {
+                Ok(ape_vec) => algo_ape.push(ape_vec),
+                Err(_) => warn!("Iteration {} of container {} does not have APE values", it.iteration_num, it.container.image_name),
+            }
+        }
         let mut algo_ape: Vec<Vec<APE>> = Vec::new();
 
         for it in iterations{
@@ -128,8 +154,11 @@ impl AlgorithmRunService {
 
         //PLOTS
         algorithm_ape_line_chart(algo_ape, test_def, config)
+        //PLOTS
+        algorithm_ape_line_chart(algo_ape, test_def, config)
     }
 
+    async fn plot_rpe(&self, iterations: &Vec<Iteration>, test_def: &TestType, config: &Config) -> Result<Chart, PlotError>{
     async fn plot_rpe(&self, iterations: &Vec<Iteration>, test_def: &TestType, config: &Config) -> Result<Chart, PlotError>{
 
         let mut algo_rpe: Vec<Vec<RPE>> = Vec::new();
@@ -140,7 +169,16 @@ impl AlgorithmRunService {
                 Err(_) => warn!("Iteration {} of container {} does not have APE values", it.iteration_num, it.container.image_name),
             }
         }
+        let mut algo_rpe: Vec<Vec<RPE>> = Vec::new();
 
+        for it in iterations{
+            match self.iter_service.get_rpe(it).await {
+                Ok(rpe_vec) => algo_rpe.push(rpe_vec),
+                Err(_) => warn!("Iteration {} of container {} does not have APE values", it.iteration_num, it.container.image_name),
+            }
+        }
+
+        algorithm_rpe_line_chart(algo_rpe, test_def,config)
         algorithm_rpe_line_chart(algo_rpe, test_def,config)
     }
 

@@ -206,3 +206,247 @@ pub enum PlotError{
     FileExists(String),
 
 }
+
+#[derive(Debug, Error)]
+pub enum TuningError {
+
+    #[error("No field called 'name' was found")]
+    NoName(),
+
+    #[error("No field called 'algo_name' was found")]
+    NoAlgoName(),
+
+    #[error("No field called \"dataset_settings\" was found")]
+    NoDatasetSettingsField(),
+
+    #[error("The \"dataset_settings\" field is not a json object")]
+    NoDatasetSettingsObject(),
+
+    #[error("No field called \"name\" was found inside \"dataset_settings\"")]
+    NoDatasetName(),
+    
+    #[error("No field called \"start\" was found inside \"dataset_settings\"")]
+    NoDatasetStart(),
+
+    #[error("No field called \"duration\" was found inside \"dataset_settings\"")]
+    NoDatasetDuration(),
+
+    #[error("No field called \"tuning_settings\" was found")]
+    NoTuningSettingsField(),
+
+    #[error("The \"tuning_settings\" field is not a json object")]
+    NoTuningSettingsObject(),
+
+    #[error("No field called \"parameters\" was found")]
+    NoParametersField(),
+
+    #[error("The \"parameters\" field is not a json object")]
+    NoParametersObject(),
+
+    #[error("No field called 'early_stopping' was found")]
+    NoEarlyStoppingField(),
+
+    #[error("The 'early_stopping' field is not a json object")]
+    NoEarlyStoppingObject(),
+
+    #[error("No field called \"tolerance\" was found inside \"early_stopping\"")]
+    EarlyStoppingNoToleranceField(),
+
+    #[error("No field called \"delta\" was found inside \"early_stopping\"")]
+    EarlyStoppingNoDeltaField(),
+
+    #[error("The \"delta\" parameter must be a float between 0 and 1")]
+    EarlyStoppingDeltaOutOfRange(),
+
+    #[error("No field called 'metric_weights' was found")]
+    NoMetricWeightsField(),
+
+    #[error("The \"metric_weights\" is not a json object")]
+    NoMetricWeightsObject(),
+
+    #[error("'{0}' is not a valid tuning algorithm('tuning_algo')")]
+    InvalidTuningAlgo(String),
+
+    #[error("The 'tuning_algo' has no value")]
+    NoTuningAlgo(),
+
+    #[error("The weight for metric '{0}' must be a positive f64")]
+    WeightNotValidValue(String),
+
+    #[error("No field called '{0}' was found")]
+    NoField(String),
+
+    #[error("The field \"{0}\" must be of type {1}")]
+    WrongTypeField(String, String),
+
+    #[error("The numeric field \"{0}\" cannot have negative values")]
+    NumericTypeNegativeValue(String),
+
+    #[error("Error while calculating best configuration: no valid iterations were found")]
+    NoMetrics(),
+
+    #[error("The field \"time_limit\" must be a positive number")]
+    InvalidTimeLimit(),
+}
+
+#[derive(Debug, Error)]
+pub enum SimulatedAnnealingError {
+
+    #[error("No field called \"temperature\" was found")]
+    NoTemperatureSettingsField(),
+
+    #[error("The \"temperature\" field is not a json object")]
+    NoTemperatureSettingsObject(),
+
+    #[error("No field called \"initial_value\" was found inside \"temperature\"")]
+    NoInitialTemperatureValueField(),
+
+    #[error("The temperature initial value must be a non negative f64 value")]
+    InvalidInitialTemperature(),
+
+    #[error("No field called \"function\" was found inside \"temperature\"")]
+    NoTemperatureFunctionField(),
+
+    #[error("Invalid temperature function")]
+    InvalidTemperatureFunction(),
+
+    #[error("No field called \"parameter_bounds\" was found inside \"tuning_settings\"")]
+    NoParameterBoundsField(),
+
+    #[error("The \"parameter_bounds\" field is not a json object")]
+    NoParameterBoundsObject(),
+
+    #[error("The algorithm \"{0}\" does not have a parameter called \"{1}\"")]
+    BoundKeyNotFound(String, String),
+
+    #[error("The \"{0}\" parameter bound must be an array")]
+    BoundNotArray(String),
+
+    #[error("The \"{0}\" parameter bound must be an array of 3 elements")]
+    BoundArrayWrongLength(String),
+
+    #[error("The \"{0}\" parameter is of the wrong type. Currently, only numeric types(i64, u64 and f64. arrays not allowed) are allowed")]
+    BoundParameterForbiddenType(String),
+
+    #[error("The \"{0}\" parameter array must contain 3 values of type {1}")]
+    BoundParameterDifferentTypes(String, String),
+
+    #[error("The \"{0}\" parameter's lower bound must be lower than its upper bound")]
+    BoundParameterInvalidBounds(String),
+
+    #[error("No field called \"max_iterations\" was found inside \"tuning_settings\"")]
+    NoMaxIterationsField(),
+
+    #[error("The field \"max_iterations\" must be a non negative integer(> 0)")]
+    MaxIterationsNotValidInteger(),
+}
+
+#[derive(Debug, Error)]
+pub enum ParameterSpaceError {
+
+    #[error("There exists no parameter '{0}' for this SLAM algorithm")]
+    InvalidKey(String),
+
+    #[error(transparent)]
+    BoolParsing(#[from] BoolParsingError),
+
+    #[error(transparent)]
+    StringParsing(#[from] StringParsingError),
+
+    #[error(transparent)]
+    NumberParsing(#[from] NumberParsingError),
+
+    #[error("The parameter {0} has repeated values, which is not permitted.")]
+    RepeatedFields(String),
+
+    #[error("The parameter {0} cannot have higher bound {2} lower than or equal to lower bound {1}.")]
+    BoundsProblem(String, String, String),
+
+    #[error("The parameter {0} is out of bounds({1})")]
+    OutOfBoundsIndex(String, i32),
+
+    #[error("A parameter of type {0} was asked, but you provided something else")]
+    IncompatibleTypes(String),
+
+    #[error("You have repeated values of type {0} in an array, which is not allowed")]
+    RepeatedValuesInArray(String),
+
+    #[error("The number array you specified has too many/few values. The correct format is: (first value, step, total number of values)")]
+    NumberArrayWrongFormat(),
+
+    #[error("'{0}' is supposed to be an array of {1} values, but value(s) of other type(s) were supplied")]
+    WrongTypeInArray(String, String),
+
+    #[error("In a number array, the total number of values cannot be zero")]
+    NoValuesInVector(),
+
+    #[error("'{0}' is supposed to be an array of {1} elements, but {2} elements were supplied")]
+    WrongArraySize(String, usize, usize),
+
+    #[error("'{0}' is supposed to be an array, but a value of another typed was supplied")]
+    NotAnArray(String)
+
+}
+
+#[derive(Debug, Error)]
+pub enum BoolParsingError {
+
+    #[error("In boolean Parameter '{0}': the value must be a boolean.")]
+    NotABoolean(String),
+
+    #[error("In array for boolean parameter '{0}': the array must not be empty.")]
+    EmptyBoolArray(String),
+
+    #[error("In array for boolean parameter '{0}': repeated values are not allowed. At most, the array may contain both 'true' and 'false' values.")]
+    RepeatedValues(String),
+
+    #[error("In array for boolean parameter '{0}': the array must not have more than 2 values. At most, it may have 2 values(true and false).")]
+    TooManyValuesInArray(String),
+
+    #[error("In array for boolean parameter '{0}': the array contains at least 1 value that is not a boolean.")]
+    WrongTypeInArray(String)
+
+}
+
+#[derive(Debug, Error)]
+pub enum StringParsingError {
+
+    #[error("In String parameter '{0}': the value must be a String.")]
+    NotAString(String),
+
+    #[error("In array for String parameter '{0}': the array must not be empty.")]
+    EmptyStringArray(String),
+
+    #[error("In array for String parameter '{0}': the array contains at least 1 value that is not a String.")]
+    WrongTypeInArray(String),
+
+    #[error("In array for String parameter '{0}': repeated values are not allowed")]
+    RepeatedValues(String)
+
+}
+
+#[derive(Debug, Error)]
+pub enum NumberParsingError {
+
+    #[error("In {0} parameter '{1}': the value must be a {0}.")]
+    NotANumber(String, String),
+
+    #[error("In array for {0} parameter '{1}': the array must not be empty.")]
+    EmptyNumberArray(String, String),
+
+    #[error("In array for numeric parameter '{0}': the supplied array has too many/little values. The correct format is [start, step, number_of_elements].")]
+    WrongArrayFormat(String),
+
+    #[error("In array for {0} parameter '{1}': the array contains at least 1 value that is not a {0}.")]
+    WrongTypeInarray(String, String),
+
+    #[error("In array for {0} parameter '{1}': the 'start' value must be a {0}.")]
+    WrongFirstValue(String, String),
+
+    #[error("In array for {0} parameter '{1}': the 'step' value must be a {0}.")]
+    WrongStepType(String, String),
+
+    #[error("In array for {0} parameter '{1}': the 'number_of_elements' value must be a u64.")]
+    WrongNumElementsType(String, String)
+
+}

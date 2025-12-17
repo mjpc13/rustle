@@ -4,7 +4,7 @@ use log::{warn};
 // db/iteration.rs
 use surrealdb::{Surreal, engine::local::Db, sql::Thing};
 use tokio::sync::Mutex;
-use crate::{models::{iteration::Iteration, metric::Metric, metrics::pose_error::{APE, RPE}, Algorithm, AlgorithmRun, Dataset, Odometry, TestDefinition, TestExecution}, services::DbError};
+use crate::{models::{iteration::Iteration, metric::Metric, metrics::pose_error::{APE, RPE}, slam_config::SLAMConfig, Algorithm, AlgorithmRun, Dataset, Odometry, TestDefinition, TestExecution}, services::DbError};
 
 #[derive(Clone)]
 pub struct IterationRepo {

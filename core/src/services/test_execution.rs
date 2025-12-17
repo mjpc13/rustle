@@ -19,6 +19,12 @@ use crate::models::test_definitions::{simple, Cut};
 use crate::models::test_definitions::test_definition::RobustnessType;
 use crate::models::{AlgorithmRun, ProgressMessage};
 use crate::services::DbError;
+use crate::models::metrics::tes::TemporalEfficiencyMetric;
+use crate::models::metrics::{PoseErrorMetrics, RobustnessMetric};
+use crate::models::test_definitions::{simple, Cut};
+use crate::models::test_definitions::test_definition::RobustnessType;
+use crate::models::{AlgorithmRun, ProgressMessage};
+use crate::services::DbError;
 use crate::utils::config::Config;
 
 use crate::utils::plots::{GraphType, test_adp_chart, test_ape_line_chart, test_memory_usage_line_chart, test_plot, test_rdp_chart, test_rpe_line_chart};
@@ -28,8 +34,9 @@ use crate::{db::{TestExecutionRepo}, models::{metrics::ContainerStats, test_defi
 use super::{error::PlotError, AlgorithmRunService, IterationService};
 use surrealdb::sql::Thing;
 
+#[derive(Clone)]
 pub struct TestExecutionService {
-    execution_repo: TestExecutionRepo,
+    pub execution_repo: TestExecutionRepo,
     algorithm_run_service: AlgorithmRunService,
     iteration_service: IterationService,
 }

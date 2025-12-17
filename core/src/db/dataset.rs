@@ -25,6 +25,7 @@ impl DatasetRepo {
 
             if let Some(created) = created {
                 dataset.id = created.id;
+                //println!("Dataset created: {:?}", dataset.id);
             }
 
         Ok(())
@@ -63,6 +64,15 @@ impl DatasetRepo {
 
     pub async fn load(&self, id: &str) -> Result<Option<Dataset>, surrealdb::Error> {
         self.conn.lock().await.select(("dataset", id)).await
+    }
+
+    pub async fn get_by_id(&self, id:Option<Thing>) -> Result<Option<Dataset>, DbError> {
+        self.conn.lock().await
+            .query("SELECT * FROM dataset WHERE id = $id")
+            .bind(("id", id))
+            .await?
+            .take(0)
+            .map_err(|e| DbError::Operation(e))
     }
 
     pub async fn list_all(&self) -> Result<Vec<Dataset>, surrealdb::Error> {

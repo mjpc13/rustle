@@ -7,7 +7,7 @@ use crate::models::{TestExecution, TestType};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Iteration {
     pub id: Option<Thing>,
-    pub iteration_num: u8,
+    pub iteration_num: u64,
     pub test_type: TestType,
     pub container: DockerContainer,
     pub created_at: DateTime<Utc>,
@@ -21,7 +21,7 @@ pub struct DockerContainer{
 }
 
 impl Iteration {
-    pub fn new(iteration_num: u8, container: DockerContainer, test_type: TestType, exec: TestExecution) -> Self {
+    pub fn new(iteration_num: u64, container: DockerContainer, test_type: TestType, exec: TestExecution) -> Self {
 
         Self {
             id: None,
