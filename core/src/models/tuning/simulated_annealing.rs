@@ -20,7 +20,7 @@ pub struct SimulatedAnnealingConfig {
     pub temp_func: TemperatureFunction,
 
     /// number of iterations used for the calculation of the next temperature values. used for re-annealing(re-heating)
-    temp_iter: u64,
+    pub temp_iter: u64,
 
     /// Number of iterations since the last accepted solution
     pub stall_iter_accepted: u64,
@@ -38,19 +38,19 @@ pub struct SimulatedAnnealingConfig {
     reanneal_fixed: u64,
 
     /// Number of iterations since beginning or last reannealing
-    reanneal_iter_fixed: u64,
+    pub reanneal_iter_fixed: u64,
 
     /// Reanneal after no accepted solution has been found for `reanneal_accepted` iterations
     reanneal_accepted: u64,
 
     /// Similar to `stall_iter_accepted`, but will be reset to 0 when reannealing  is performed
-    reanneal_iter_accepted: u64,
+    pub reanneal_iter_accepted: u64,
 
     /// Reanneal after no new best solution has been found for `reanneal_best` iterations
     reanneal_best: u64,
 
     /// Similar to `stall_iter_best`, but will be reset to 0 when reannealing is performed
-    reanneal_iter_best: u64,
+    pub reanneal_iter_best: u64,
 
     /// current temperature
     pub current_temp: f64,
@@ -58,6 +58,10 @@ pub struct SimulatedAnnealingConfig {
     pub parameter_bounds: Option<HashMap<String, (Value, Value, Value)>>, // (starting value, lower bound, upper bound)
 
     pub max_iterations: Option<usize>,
+
+    pub integer_delta_max: i64,
+    pub float_mean: f64,
+    pub float_std_dev: f64,
 }
 
 impl SimulatedAnnealingConfig {
@@ -74,18 +78,21 @@ impl SimulatedAnnealingConfig {
                         temp_func: TemperatureFunction::Boltzman, 
                         temp_iter: 0, 
                         stall_iter_accepted: 0, 
-                        stall_iter_accepted_limit: 10, // u64::MAX
+                        stall_iter_accepted_limit: 10,
                         stall_iter_best: 0, 
-                        stall_iter_best_limit: 5, 
+                        stall_iter_best_limit: 10, 
                         reanneal_fixed: 10, 
                         reanneal_iter_fixed: 0, 
-                        reanneal_accepted: 10, 
+                        reanneal_accepted: 5, 
                         reanneal_iter_accepted: 0, 
-                        reanneal_best: 10, 
+                        reanneal_best: 5, 
                         reanneal_iter_best: 0, 
                         current_temp: value, 
                         parameter_bounds: None, 
-                        max_iterations: None}
+                        max_iterations: None,
+                        integer_delta_max: 3,
+                        float_mean: -0.5,
+                        float_std_dev: 0.4}
                 )     
             }
             None => {
@@ -95,7 +102,7 @@ impl SimulatedAnnealingConfig {
                         temp_func: TemperatureFunction::Boltzman, 
                         temp_iter: 0, 
                         stall_iter_accepted: 0, 
-                        stall_iter_accepted_limit: 10, // u64::MAX
+                        stall_iter_accepted_limit: 10,
                         stall_iter_best: 0, 
                         stall_iter_best_limit: 5, 
                         reanneal_fixed: 10, 
@@ -106,7 +113,10 @@ impl SimulatedAnnealingConfig {
                         reanneal_iter_best: 0, 
                         current_temp: 1.0, 
                         parameter_bounds: None, 
-                        max_iterations: None}
+                        max_iterations: None,
+                        integer_delta_max: 3,
+                        float_mean: -0.5,
+                        float_std_dev: 0.4}
                 )     
             }
         }
@@ -126,34 +136,66 @@ impl SimulatedAnnealingConfig {
         }
     }
 
-    pub fn update_variables(&mut self) {
-        self.temp_iter += 1;
+    pub fn update_variables(&mut self, accepted: bool, new_best: bool) {
+        /*
+        (self.stall_iter_accepted, self.reanneal_iter_accepted) = if accepted {
+            (0, 0)
+        } else {
+            (
+                self.stall_iter_accepted + 1,
+                self.reanneal_iter_accepted + 1,
+            )
+        };
+
+        (self.stall_iter_best, self.reanneal_iter_best) = if new_best {
+            (0, 0)
+        } else {
+            (self.stall_iter_best + 1, self.reanneal_iter_best + 1)
+        };
+        */
+
+        if accepted {
+            
+        }
     }
 
     pub fn update_slam_parameters(&self, current_params: &mut HashMap<String, Value>, params_bounds: &Option<HashMap<String, (Value, Value, Value)>>) {
         if let Some(bounds_map) = params_bounds {
             for (key, values) in bounds_map.iter() {
-                //let bounds: (Value, Value, Value) = (value.as_array().unwrap()[0].clone(), value.as_array().unwrap()[1].clone(), value.as_array().unwrap()[2].clone());
                 let bounds: (Value, Value, Value) = (values.0.clone(), values.1.clone(), values.2.clone());
 
                 if bounds.0.is_f64() {
                     let old_value = current_params.get(key).unwrap().as_f64().unwrap();
-                    let new_value: f64 = gaussian_perturbation(old_value, 0.5, (bounds.1.as_f64().unwrap(), bounds.2.as_f64().unwrap()));
-                    current_params.insert(key.clone(), Value::from(new_value));
-
-                    //println!("{} -> {}", old_value, new_value);
-                }
-                else if bounds.0.is_u64() {
-                    let old_value: u64 = current_params.get(key).unwrap().as_u64().unwrap();
-                    let new_value: u64 = integer_perturbation(old_value as i64, self.current_temp, 3, (bounds.1.as_u64().unwrap() as i64, bounds.2.as_u64().unwrap() as i64)) as u64;
+                    let new_value: f64 = self.gaussian_perturbation(old_value, (bounds.1.as_f64().unwrap(), bounds.2.as_f64().unwrap()));
                     current_params.insert(key.clone(), Value::from(new_value));
                 }
                 else if bounds.0.is_i64() {
                     let old_value: i64 = current_params.get(key).unwrap().as_i64().unwrap();
-                    let new_value: i64 = integer_perturbation(old_value, self.current_temp, 3, (bounds.1.as_i64().unwrap(), bounds.2.as_i64().unwrap()));
+                    let new_value: i64 = self.integer_perturbation(old_value, (bounds.1.as_i64().unwrap(), bounds.2.as_i64().unwrap()));
+                    current_params.insert(key.clone(), Value::from(new_value));
+                }
+                else if bounds.0.is_u64() {
+                    let old_value: u64 = current_params.get(key).unwrap().as_u64().unwrap();
+                    let new_value: u64 = self.integer_perturbation(old_value as i64, (bounds.1.as_u64().unwrap() as i64, bounds.2.as_u64().unwrap() as i64)) as u64;
                     current_params.insert(key.clone(), Value::from(new_value));
                 }
             }
+        }
+    }
+
+    pub fn reanneal(&mut self) {
+        let out = (
+            self.reanneal_iter_fixed >= self.reanneal_fixed,
+            self.reanneal_iter_accepted >= self.reanneal_accepted,
+            self.reanneal_iter_best >= self.reanneal_best,
+        );
+        if out.0 || out.1 || out.2 {
+            self.reanneal_iter_fixed = 0;
+            self.reanneal_iter_accepted = 0;
+            self.reanneal_iter_best = 0;
+            // reset temperature and temperature function iterations variable
+            self.current_temp = self.initial_temp;
+            self.temp_iter = 0;
         }
     }
 
@@ -170,10 +212,30 @@ impl SimulatedAnnealingConfig {
         initial_params
     }
 
-    pub fn accept_new_solution(&self, previous_iteration: &(f32, f32), current_iteration: &(f32, f32), metrics_weights: &(f32, f32)) -> bool {
-        let previous_fitness = previous_iteration.0 * metrics_weights.0 + previous_iteration.1 * metrics_weights.1;
-        let current_fitness = current_iteration.0 * metrics_weights.0 + current_iteration.1 * metrics_weights.1;
-        let delta_solutions = current_fitness - previous_fitness;
+    pub fn gaussian_perturbation(&self, x: f64, bounds: (f64, f64)) -> f64 {
+        let normal = Normal::new(self.float_mean, self.float_std_dev).unwrap();
+        let mut rng = thread_rng();
+
+        (x + normal.sample(&mut rng)).clamp(bounds.0, bounds.1)
+    }
+
+    pub fn integer_perturbation(&self, x: i64, bounds: (i64, i64)) -> i64 {
+        let max_step = (self.current_temp * (self.integer_delta_max as f64)).ceil() as i64;
+
+        if max_step == 0 {
+            return x;
+        }
+
+        let k = thread_rng().gen_range(-max_step..=max_step);
+        (x + k).clamp(bounds.0, bounds.1)
+    }
+
+    pub fn accept_new_solution(&self, current_fitness: &f32, proposed_fitness: &f32) -> bool {
+        if *current_fitness < 0.0 {
+            return true;
+        }
+
+        let delta_solutions = (proposed_fitness - current_fitness) as f64;
 
         if delta_solutions < 0.0 {
             true
@@ -181,11 +243,12 @@ impl SimulatedAnnealingConfig {
         else {
             let mut rng = thread_rng();
             let niu = rng.gen();
-            let p = (((-1 as f64) * (delta_solutions as f64)) / self.current_temp).exp();
+            let p = (((-1 as f64) * delta_solutions) / self.current_temp).exp();
 
-            p > niu  
+            p > niu
         }
     }
+
 }
 
 #[derive(Clone, PartialEq, Debug, serde::Serialize, serde::Deserialize)]
@@ -196,42 +259,3 @@ pub enum TemperatureFunction {
 
     Exponential,
 }
-
-pub fn cost_function(x: &f64, y: &f64) -> f64 {
-    x * x + y * y
-}
-
-pub fn gaussian_perturbation(x: f64, sigma: f64, bounds: (f64, f64)) -> f64 {
-    let normal = Normal::new(0.0, sigma).unwrap();
-    let mut rng = thread_rng();
-
-    (x + normal.sample(&mut rng)).clamp(bounds.0, bounds.1)
-}
-
-pub fn integer_perturbation(x: i64, temperature: f64, delta_max: i64, bounds: (i64, i64)) -> i64 {
-    let max_step = (temperature * (delta_max as f64)).ceil() as i64;
-
-    if max_step == 0 {
-        return x;
-    }
-
-    let k = thread_rng().gen_range(-max_step..=max_step);
-    (x + k).clamp(bounds.0, bounds.1)
-}
-
-/*
-pub fn accept_new_solution(current_x: &f64, current_y: &f64, new_x: &f64, new_y: &f64, current_temperature: &f64) -> bool {
-    let delta_solutions = cost_function(new_x, new_y) - cost_function(current_x, current_y);
-
-    if delta_solutions < 0.0 {
-        true
-    }
-    else {
-        let mut rng = thread_rng();
-        let niu = rng.gen();
-        let p = (((-1 as f64) * delta_solutions) / current_temperature).exp();
-
-        p > niu
-    }
-}
-*/

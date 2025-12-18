@@ -93,21 +93,6 @@ pub async fn handle_tune(tune_cmd: TuneCommand, tuning_service: &mut TuningServi
         }
 
         TuneSubCommand::Run(tuning_method) => {
-            /*
-            let file = File::open("examples/test_file.yaml")?;
-            let reader = BufReader::new(file);
-            let test_map: Map<String, Value> = serde_yaml::from_reader(reader)?;
-            println!("{:?}", test_map);
-
-            let yaml = serde_yaml::to_string(&test_map)?;
-            //let yaml_pretty = yaml.replace("\"[", "[").replace("]\"", "]").replace("\'[", "[").replace("]\'", "]");
-
-            let mut file = File::create("examples/test_file_output.yaml")?;
-            file.write_all(yaml.as_bytes());        
-            */
-            //let mut config = SLAMConfig {params: HashMap::new(), id: None, created_at: Utc::now() };
-            //config.params = serde_yaml::from_reader(reader)?;
-
             match tuning_service.get_by_name(tuning_method.tuning_instance_name.clone()).await {
                 Ok(Some(mut cfg)) => {
                     let _ = tuning_service.run_tuning_algo(&mut cfg).await.unwrap();
@@ -331,7 +316,9 @@ async fn load_random_search_config(input_file_params: &HashMap<String, Value>, t
     let mut new_grid_search_config = GridSearchConfig::new();
     new_grid_search_config.tunable_params = tuning_config.parameters_to_tune.clone();
     new_grid_search_config.build_array_sizes();
-    tuning_config.tuning_type = Some(TuneType::RandomSearch(new_grid_search_config));
+    tuning_config.tuning_type = Some(TuneType::RandomSearch(new_grid_search_config.clone()));
+
+    //println!("{:?}", new_grid_search_config.tunable_params_array_sizes.clone());
 
     Ok(())
 }
@@ -363,6 +350,25 @@ async fn load_simulated_annealing_config(input_file_params: &HashMap<String, Val
             return Err(Box::new(SimulatedAnnealingError::InvalidTemperatureFunction()));
         }
     };
+
+    let perturbation_functions_map = tuning_settings_map.get("perturbation_functions").ok_or(SimulatedAnnealingError::NoPerturbationFunctionsField())?
+                                                           .as_object().ok_or(SimulatedAnnealingError::NoPerturbationFunctionsObject())?;
+
+    sa_config.integer_delta_max = perturbation_functions_map.get("integer_delta_max").ok_or(SimulatedAnnealingError::NoIntegerDeltaMaxField())?
+                                                     .as_i64().ok_or(TuningError::WrongTypeField(String::from("integer_delta_max"), String::from("u64")))?;
+
+    if sa_config.integer_delta_max < 0 {
+        return Err(Box::new(SimulatedAnnealingError::InvalidIntegerDeltaMaxValue()));
+    }
+    println!("integer_delta_max: {}", sa_config.integer_delta_max.clone());
+
+    sa_config.float_mean = perturbation_functions_map.get("float_mean").ok_or(SimulatedAnnealingError::NoFloatMeanField())?
+                                              .as_f64().ok_or(TuningError::WrongTypeField(String::from("float_mean"), String::from("f64")))?;
+    println!("float_mean: {}", sa_config.float_mean.clone());
+
+    sa_config.float_std_dev = perturbation_functions_map.get("float_std_dev").ok_or(SimulatedAnnealingError::NoFloatStdDevField())?
+                                              .as_f64().ok_or(TuningError::WrongTypeField(String::from("float_std_dev"), String::from("f64")))?;
+    println!("float_std_dev: {}", sa_config.float_std_dev.clone());
 
     let algo: Algorithm = algo_service.get_by_id(tuning_config.algo_id.clone()).await?.unwrap();
     let gt_parameters: HashMap<String, Value> = params_service.get_by_id(algo.current_params).await?.unwrap().params;

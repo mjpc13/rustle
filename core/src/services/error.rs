@@ -333,6 +333,24 @@ pub enum SimulatedAnnealingError {
 
     #[error("The field \"max_iterations\" must be a non negative integer(> 0)")]
     MaxIterationsNotValidInteger(),
+
+    #[error("No field called \"perturbation_functions\" was found inside \"tuning_settings\"")]
+    NoPerturbationFunctionsField(),
+
+    #[error("The \"perturbation_functions\" field is not a json object")]
+    NoPerturbationFunctionsObject(),
+
+    #[error("No field called \"integer_delta_max\" was found inside \"perturbation_functions\"")]
+    NoIntegerDeltaMaxField(),
+
+    #[error("The field \"integer_delta_max\" must be a positive integer")]
+    InvalidIntegerDeltaMaxValue(),
+
+    #[error("No field called \"float_mean\" was found inside \"perturbation_functions\"")]
+    NoFloatMeanField(),
+
+    #[error("No field called \"float_std_dev\" was found inside \"perturbation_functions\"")]
+    NoFloatStdDevField(),
 }
 
 #[derive(Debug, Error)]
