@@ -1,59 +1,30 @@
 algorithms:
-  - name: "ig-LIO"
-    version: "1.0"
-    image_name: "mjpc13/rustle:ig-lio"
-    parameters: "/home/francisco/Desktop/rustle/examples/config/ig-lio/params.yaml"
-    odom_topics: ["/lio_odom"]
-
-  - name: "point-lio"
-    version: "1.0"
-    image_name: "mjpc13/rustle:point-lio"
-    parameters: "/home/mjpc13/Documents/rustle/test/config/point-lio/params.yaml"
-    odom_topics: ["/aft_mapped_to_init"]
-
-  - name: "a-loam"
-    version: "1.0"
-    image_name: "mjpc13/rustle:a-loam"
-    parameters: "/home/mjpc13/Documents/rustle/test/config/a-loam/params.yaml"
-    odom_topics: ["/aft_mapped_to_init"]
-
-  - name: "fast-lio"
-    version: "1.1.1"
-    image_name: "mjpc13/rustle:fast-lio"
-    parameters: "/home/mjpc13/Documents/rustle/test/config/fast-lio/params.yaml"
-    odom_topics: ["/Odometry"]
-    
-  - name: "faster-lio"
-    version: "1.1.1"
-    image_name: "mjpc13/rustle:faster-lio"
-    parameters: "/home/mjpc13/Documents/rustle/test/config/faster-lio/params.yaml"
-    odom_topics: ["/Odometry"]
-
-  - name: "fast-livo2"
-    version: "7e88460"
-    image_name: "mjpc13/rustle:fast-livo2"
-    parameters: "/home/mjpc13/Documents/rustle/test/config/fast-livo2/params.yaml"
-    odom_topics: ["/aft_mapped_to_init"]
-#  - name: "point-lio"
+#  - name: "ig-LIO"
 #    version: "1.0"
-#    image_name: "mjpc13/rustle:point-lio"
-#    parameters: "/home/mjpc13/Documents/rustle/test/config/point-lio/params.yaml"
-#    odom_topics: ["/aft_mapped_to_init"]
-#
+#    image_name: "mjpc13/rustle:ig-lio"
+#    parameters: "/home/francisco/Desktop/rustle/examples/config/ig-lio/params.yaml"
+#    odom_topics: ["/lio_odom"]
+
+#  - name: "fast-lio"
+#    version: "1.1.1"
+#    image_name: "mjpc13/rustle:fast-lio"
+#    parameters: "/home/francisco/Desktop/rustle/examples/config/fast-lio/params.yaml"
+#    odom_topics: ["/Odometry"]
+
 #  - name: "a-loam"
 #    version: "1.0"
 #    image_name: "mjpc13/rustle:a-loam"
 #    parameters: "/home/mjpc13/Documents/rustle/test/config/a-loam/params.yaml"
-#   odom_topics: ["/aft_mapped_to_init"]
-#
-#  - name: "fast-lio"
-#    version: "1.1.1"
-#    image_name: "mjpc13/rustle:fast-lio"
-#    parameters: "/home/mjpc13/Documents/rustle/test/config/fast-lio/params.yaml"
-#    odom_topics: ["/Odometry"]
-#    
-#  - name: "faster-lio"
-#    version: "1.1.1"
-#    image_name: "mjpc13/rustle:faster-lio"
-#    parameters: "/home/mjpc13/Documents/rustle/test/config/faster-lio/params.yaml"
-#    odom_topics: ["/Odometry"]
+#    odom_topics: ["/aft_mapped_to_init"]
+    
+  - name: "faster-lio"
+    version: "1.1.1"
+    image_name: "mjpc13/rustle:faster-lio"
+    parameters: "/home/francisco/Desktop/rustle/examples/config/faster-lio/params.yaml"
+    odom_topics: ["/Odometry"]
+    
+  - name: "fast-livo2"
+    version: "7e88460"
+    image_name: "mjpc13/rustle:fast-livo2"
+    parameters: "/home/francisco/Desktop/rustle/examples/config/fast-livo2/params.yaml"
+    odom_topics: ["/aft_mapped_to_init"]

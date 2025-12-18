@@ -9,8 +9,7 @@ use crate::db::TuningRepo;
 use crate::models::metrics::memory::MemoryMetrics;
 use crate::models::slam_config::SLAMConfig;
 use crate::models::tuning::tuning_config::{self, TuningConfig, format_hashmap};
-use crate::models::tuning::simulated_annealing::{cost_function, gaussian_perturbation, integer_perturbation};
-use crate::models::tuning::{SimulatedAnnealingConfig, TuneType};
+use crate::models::tuning::{GridSearchConfig, SimulatedAnnealingConfig, TuneType};
 use crate::models::{Iteration, Pose, TestDefinition, TestExecution, TestType};
 use crate::services::params::ParamsService;
 use crate::services::{AlgorithmRunService, AlgorithmService, DatasetService, DbError, IterationService, MetricService, TestExecutionService};
@@ -113,7 +112,7 @@ impl TuningService {
         Ok(())
     }
 
-    async fn run_grid_search(&mut self, tuning_test: &TuningConfig) -> Result<(), Box<dyn std::error::Error>> {
+    async fn run_grid_search(&mut self, tuning_test: &mut TuningConfig) -> Result<(), Box<dyn std::error::Error>> {
 
         if let Some(start) = tuning_test.dataset_settings.0 {
             self.iteration_service.config.rustle.dataset_start = start;
@@ -127,6 +126,17 @@ impl TuningService {
         if let Some(TuneType::GridSearch(gs_config)) = &tuning_test.tuning_type {
             total_iterations = (gs_config.get_param_array_size_by_index(None).unwrap() as usize);
         }
+
+        let params_array_sizes = match &tuning_test.tuning_type {
+            Some(TuneType::GridSearch(gs_config)) => gs_config.tunable_params_array_sizes.clone(),
+            _ => Vec::new(),
+        };
+
+
+        let mut gs_config = match &mut tuning_test.tuning_type {
+            Some(TuneType::GridSearch(rs_config)) => rs_config,
+            _ => &mut GridSearchConfig::new(),
+        };
 
         let mut test_def = TestDefinition{
             id: None,
@@ -192,9 +202,10 @@ impl TuningService {
 
         let mut all_iterations_metrics: Vec<(Vec<Metric>, Vec<(String, u64)>)> = Vec::new();
 
-        let initial_grid_point = tuning_test.generate_initial_grid_point().unwrap();
-        let mut current_grid_point = initial_grid_point.clone();
-        let mut current_grid_point_index = tuning_test.get_grid_point_index(&current_grid_point).unwrap();
+        let initial_grid_point = gs_config.generate_initial_grid_point().unwrap();
+        let mut current_grid_point = initial_grid_point;
+
+        let mut current_grid_point_index = gs_config.get_grid_point_index(&current_grid_point).unwrap();
         let initial_params = &self.params_service.get_by_id(algo.current_params.clone()).await?.unwrap().params.clone();
         //println!("{:?}", initial_params.clone());
 
@@ -211,9 +222,10 @@ impl TuningService {
         csv_header.push(String::from("rpe"));
         writer.write_record(&csv_header)?;
 
+        let mut time_limit_seconds = 0;
         let limit = match tuning_test.time_limit {
             Some(limit) => {
-                let time_limit_seconds = (limit * (3600 as f64)) as u64;
+                time_limit_seconds = (limit * (3600 as f64)) as u64;
                 Duration::from_secs(time_limit_seconds)
             },
             None => Duration::from_secs(0),
@@ -222,7 +234,10 @@ impl TuningService {
 
         for i in 0..total_iterations {
 
-            let current_params = tuning_test.get_current_params(&current_grid_point, initial_params).unwrap();
+            //println!("iter {}, grid_point: {:?}", i, current_grid_point);
+            //println!("hello there");
+
+            let current_params = gs_config.get_current_params(&current_grid_point, initial_params).unwrap();
             self.params_service.update_params(algo.current_params.clone(), &current_params).await?;
 
             let iter_job = self.iteration_service.run(list_iterations[current_grid_point_index as usize].clone(), Some(msg_tx.clone())).await;
@@ -233,7 +248,7 @@ impl TuningService {
 
                     let mut current_iter_metrics: (usize, f32, f32) = (0 as usize, 3.0 as f32, 2.0 as f32);
                     if let Some(current_pose_errors) = self.get_pose_error(&iter_metrics) {
-                        if let (Some(iter), Some(ape), Some(rpe)) = (tuning_test.get_grid_point_index(&current_grid_point), current_pose_errors.ape.rmse, current_pose_errors.rpe.rmse) {
+                        if let (Some(iter), Some(ape), Some(rpe)) = (gs_config.get_grid_point_index(&current_grid_point), current_pose_errors.ape.rmse, current_pose_errors.rpe.rmse) {
                             current_iter_metrics.0 = iter as usize;
                             current_iter_metrics.1 = ape;
                             current_iter_metrics.2 = rpe;
@@ -244,7 +259,7 @@ impl TuningService {
                             }
                             current_iter_data.push(current_iter_metrics.1.to_string());
                             current_iter_data.push(current_iter_metrics.2.to_string());
-                            tuning_test.save_tuning_progress(&mut writer, &current_iter_metrics, &current_iter_data)?;
+                            writer.write_record(&current_iter_data)?;
                         }
                     }
 
@@ -260,22 +275,32 @@ impl TuningService {
                             break; 
                         }
                         else {
-                            current_grid_point = tuning_test.generate_next_grid_point(current_grid_point).unwrap();
-                            current_grid_point_index = tuning_test.get_grid_point_index(&current_grid_point).unwrap();                            
+                            current_grid_point = gs_config.generate_next_grid_point(Some(current_grid_point)).unwrap();
+                            current_grid_point_index = gs_config.get_grid_point_index(&current_grid_point).unwrap();                          
                         }
                     }
+                    /*
                     else {
-                        current_grid_point = tuning_test.generate_next_grid_point(current_grid_point).unwrap();
-                        current_grid_point_index = tuning_test.get_grid_point_index(&current_grid_point).unwrap();
+                        current_grid_point = gs_config.generate_next_grid_point(Some(current_grid_point)).unwrap();
+                        current_grid_point_index = gs_config.get_grid_point_index(&current_grid_point).unwrap();
                     }
+                    */
+
+                    current_grid_point = gs_config.generate_next_grid_point(Some(current_grid_point)).unwrap();
+                    current_grid_point_index = gs_config.get_grid_point_index(&current_grid_point).unwrap();
+
+                    //println!("");
 
                 },
                 Err(e) => {
                     warn!("Iteration number {} from algorithm has produced an error: {}", list_iterations[current_grid_point_index as usize].iteration_num, e);
-                    current_grid_point = tuning_test.generate_next_grid_point(current_grid_point).unwrap();
-                    current_grid_point_index = tuning_test.get_grid_point_index(&current_grid_point).unwrap();
+                    current_grid_point = gs_config.generate_next_grid_point(Some(current_grid_point)).unwrap();
+                    //current_grid_point_index = tuning_test.get_grid_point_index(&current_grid_point, &params_array_sizes).unwrap();
+                    current_grid_point_index = gs_config.get_grid_point_index(&current_grid_point).unwrap();
                 },
             };
+
+            println!("Time: {:?}/{:?}", start.elapsed(), limit);
 
         }
 
@@ -283,7 +308,7 @@ impl TuningService {
 
         let best_index = self.compute_best_config(&all_iterations_metrics, 
                                                      &tuning_test.metrics_weights.unwrap(), 
-                                                                      &tuning_test)?;
+                                                                      &gs_config)?;
 
         let mut best_params = tuning_test.get_current_params(&best_index, initial_params).unwrap();
         format_hashmap(&mut best_params);
@@ -313,6 +338,11 @@ impl TuningService {
         if let Some(TuneType::RandomSearch(rs_config)) = &tuning_test.tuning_type {
             total_iterations = (rs_config.get_param_array_size_by_index(None).unwrap() as usize);
         }
+
+        let mut rs_config = match &mut tuning_test.tuning_type {
+            Some(TuneType::RandomSearch(rs_config)) => rs_config,
+            _ => &mut GridSearchConfig::new(),
+        };
 
         let mut test_def = TestDefinition{
             id: None,
@@ -379,7 +409,7 @@ impl TuningService {
         let mut all_iterations_metrics: Vec<(Vec<Metric>, Vec<(String, u64)>)> = Vec::new();
         let mut rng = rand::thread_rng();
 
-        let all_configs: &Vec<HashMap<String, Value>> = &tuning_test.tuning_type.as_ref().unwrap().as_random_search().unwrap().configs;
+        //let all_configs: &Vec<HashMap<String, Value>> = &tuning_test.tuning_type.as_ref().unwrap().as_random_search().unwrap().configs;
         let initial_params = &self.params_service.get_by_id(algo.current_params.clone()).await?.unwrap().params;
 
         let mut writer = Writer::from_path(format!("results/{}/random_search.csv", algo.name))?;
@@ -404,11 +434,20 @@ impl TuningService {
         };
         let start = Instant::now();
 
+        let mut current_random_point: Vec<(String, u64)> = Vec::new();
+        let mut current_random_index: u64 = 0;
+
         loop {
 
-            let current_random_point = tuning_test.generate_random_point().unwrap();
-            let current_random_index = tuning_test.get_grid_point_index(&current_random_point).unwrap();
-            let current_params = tuning_test.get_current_params(&current_random_point, initial_params).unwrap();
+            current_random_point = rs_config.generate_random_point().unwrap();
+            current_random_index = rs_config.get_grid_point_index(&current_random_point).unwrap();
+
+            //println!("params_sizes: {:?}", rs_config.tunable_params_array_sizes.clone());
+            //println!("random_point: {:?}", current_random_point.clone());
+            //println!("random_point_index: {:?}", current_random_index.clone());
+
+            //let current_params = tuning_test.get_current_params(&current_random_point, initial_params).unwrap();
+            let current_params = rs_config.get_current_params(&current_random_point, initial_params).unwrap();
             self.params_service.update_params(algo.current_params.clone(), &current_params).await?;
 
             let iter_job = self.iteration_service.run(list_iterations[current_random_index as usize].clone(), Some(msg_tx.clone())).await;
@@ -419,7 +458,7 @@ impl TuningService {
 
                     let mut current_iter_metrics: (usize, f32, f32) = (0 as usize, 3.0 as f32, 2.0 as f32);
                     if let Some(current_pose_errors) = self.get_pose_error(&iter_metrics) {
-                        if let (Some(iter), Some(ape), Some(rpe)) = (tuning_test.get_grid_point_index(&current_random_point), current_pose_errors.ape.rmse, current_pose_errors.rpe.rmse) {
+                        if let (Some(iter), Some(ape), Some(rpe)) = (rs_config.get_grid_point_index(&current_random_point), current_pose_errors.ape.rmse, current_pose_errors.rpe.rmse) {
                             current_iter_metrics.0 = iter as usize;
                             current_iter_metrics.1 = ape;
                             current_iter_metrics.2 = rpe;
@@ -430,7 +469,8 @@ impl TuningService {
                             }
                             current_iter_data.push(current_iter_metrics.1.to_string());
                             current_iter_data.push(current_iter_metrics.2.to_string());
-                            tuning_test.save_tuning_progress(&mut writer, &current_iter_metrics, &current_iter_data)?;
+                            //tuning_test.save_tuning_progress(&mut writer, &current_iter_metrics, &current_iter_data)?;
+                            writer.write_record(&current_iter_data)?;
                         }
                     }
 
@@ -461,7 +501,7 @@ impl TuningService {
 
         let best_index = self.compute_best_config(&all_iterations_metrics, 
                                                      &tuning_test.metrics_weights.unwrap(), 
-                                                                      &tuning_test)?;
+                                                                      &rs_config)?;
 
         let mut best_params = tuning_test.get_current_params(&best_index, initial_params).unwrap();
         format_hashmap(&mut best_params);
@@ -613,7 +653,7 @@ impl TuningService {
 
         let mut best_things: Option<f64> = None;
 
-        let mut writer = Writer::from_path("examples/simulated_annealing.csv")?;
+        let mut writer = Writer::from_path("results/simulated_annealing.csv")?;
         let mut csv_header: Vec<String> = Vec::new();
         let mut csv_header_keys: Vec<String> = Vec::new();
 
@@ -628,20 +668,32 @@ impl TuningService {
         csv_header.push(String::from("rpe"));
         writer.write_record(&csv_header)?;
 
+        let mut current_fitness: f32 = -1 as f32;
+        let mut proposed_fitness: f32 = -1 as f32;
+        let mut best_fitness: f32 = -1 as f32;
+
+        let mut current_params: HashMap<String, Value> = HashMap::new();
+        let mut proposed_params: HashMap<String, Value> = HashMap::new();
+        let mut best_params: HashMap<String, Value> = HashMap::new();
+
 
         for i in 0..sa_config.max_iterations.clone().unwrap() {
             sa_config.update_slam_parameters(&mut current_parameters, &sa_config.parameter_bounds);
             self.params_service.update_params(algo.current_params.clone(), &current_parameters).await?;
+            proposed_params = current_parameters.clone();
+
+            println!("point_filter_num: {}", proposed_params.get("point_filter_num").unwrap());
 
             let iter_job = self.iteration_service.run(list_iterations[i].clone(), Some(msg_tx.clone())).await;
+
+            let mut accepted = false;
+            let mut new_best_found = false;
+
             match iter_job {
                 Ok(_) => {
                     let iter_metrics = self.metrics_service.get_all_iteration_metrics(&list_iterations[i].id.clone().unwrap()).await.unwrap();
                     all_iterations_metrics.push((iter_metrics.clone(), i));
                     let pose_metrics = self.get_pose_error(&iter_metrics.clone()).unwrap();
-                    all_things.push(compute_fitness_function_value(&(pose_metrics.ape.rmse.unwrap(), 
-                                                                            pose_metrics.rpe.rmse.unwrap()), 
-                                                                            &tuning_test.metrics_weights.clone().unwrap()) as f64);
 
                     let mut current_iter_metrics: (usize, f32, f32) = (0 as usize, 3.0 as f32, 2.0 as f32);
                     if let Some(current_pose_errors) = self.get_pose_error(&iter_metrics) {
@@ -660,6 +712,57 @@ impl TuningService {
                         }
                     }
 
+                    proposed_fitness = compute_fitness_function_value(&(pose_metrics.ape.rmse.unwrap(), pose_metrics.rpe.rmse.unwrap()), &tuning_test.metrics_weights.clone().unwrap());
+                    all_things.push(compute_fitness_function_value(&(pose_metrics.ape.rmse.unwrap(), 
+                                                                            pose_metrics.rpe.rmse.unwrap()), 
+                                                                            &tuning_test.metrics_weights.clone().unwrap()) as f64);
+
+                    if sa_config.accept_new_solution(&current_fitness, &proposed_fitness) {
+                        //print!("Solution accepted, stall_iter_accepted: {}/{}", sa_config.stall_iter_accepted, sa_config.stall_iter_accepted_limit);
+                        //print!("stall_iter_accepted: {}");
+                        sa_config.stall_iter_accepted = 0;
+                        sa_config.reanneal_iter_accepted = 0;
+                        current_params = proposed_params.clone();
+                        current_fitness = proposed_fitness;
+                        accepted = true;
+
+                        if best_params.is_empty() {
+                            //print!("New best solution found, stall_iter_best: {}/{}", sa_config.stall_iter_best, sa_config.stall_iter_best_limit);
+                            best_params = current_params.clone();
+                            best_fitness = current_fitness.clone();
+                            sa_config.stall_iter_best = 0;
+                            sa_config.reanneal_iter_best = 0;
+                            new_best_found = true;
+                        }
+                        else {
+                            if current_fitness < best_fitness {
+                                best_params = current_params.clone();
+                                best_fitness = current_fitness.clone();
+                                sa_config.stall_iter_best = 0;
+                                new_best_found = true;
+                            }
+                            else {
+                                sa_config.stall_iter_best += 1;
+                                sa_config.reanneal_iter_best = 0;
+                                sa_config.reanneal_iter_best += 1;
+                                //println!("");
+                                //print!("stall_iter_best: {}/{}", sa_config.stall_iter_best, sa_config.stall_iter_best_limit);
+                                if sa_config.stall_iter_best > sa_config.stall_iter_best_limit {
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    else {
+                        sa_config.stall_iter_accepted += 1;
+                        sa_config.reanneal_iter_accepted += 1;
+                        //print!("stall_iter_accepted: {}/{}", sa_config.stall_iter_accepted, sa_config.stall_iter_accepted_limit);
+                        if sa_config.stall_iter_accepted > sa_config.stall_iter_accepted_limit {
+                            break;
+                        }
+                    }
+
+                    /*
                     if let None = best_things {
                         let pose_metrics = self.get_pose_error(&iter_metrics).unwrap();
                         best_things = Some(compute_fitness_function_value(&(pose_metrics.ape.rmse.unwrap(), pose_metrics.rpe.rmse.unwrap()), &(0.0, 1.0)) as f64);
@@ -672,18 +775,24 @@ impl TuningService {
                             best_parameters = Some(current_parameters.clone());
                         }
                     }
+                    */
                 }
                 Err(e) => {
                     warn!("Iteration number {} from algorithm has produced an error: {}", list_iterations[i as usize].iteration_num, e); 
                 }
             }
 
+            //sa_config.update_variables(accepted, new_best_found);
+            sa_config.reanneal();
+
+            sa_config.temp_iter += 1;
+            sa_config.reanneal_iter_fixed += 1;
+
             sa_config.update_temperature();
-            sa_config.update_variables();
         }
 
         let mut final_best_parameters: HashMap<String, Value> = HashMap::new();
-        let mut best_parameters: HashMap<String, Value> = best_parameters.unwrap().clone();
+        let mut best_parameters: HashMap<String, Value> = best_params.clone();
         format_hashmap(&mut best_parameters);
         final_best_parameters.insert(String::from("best_parameters"), json!(best_parameters));
 
@@ -692,7 +801,7 @@ impl TuningService {
         Ok(())
     }
 
-    fn compute_best_config(&self, all_iterations_metrics: &Vec<(Vec<Metric>, Vec<(String, u64)>)>, metrics_weights: &(f32, f32), tuning_config: &TuningConfig) -> Result<Vec<(String, u64)>, Box<dyn std::error::Error>> {
+    fn compute_best_config(&self, all_iterations_metrics: &Vec<(Vec<Metric>, Vec<(String, u64)>)>, metrics_weights: &(f32, f32), gs_config: &GridSearchConfig) -> Result<Vec<(String, u64)>, Box<dyn std::error::Error>> {
         if all_iterations_metrics.len() == 0 {
             return Err(Box::new(TuningError::NoMetrics()));
         }
@@ -700,19 +809,19 @@ impl TuningService {
             return Ok(all_iterations_metrics[0].1.clone());
         }
         else {
-            let mut best_index: Vec<(String, u64)> = all_iterations_metrics[0].1.clone();
+            let mut best_index: usize = 0;
             for i in 1..all_iterations_metrics.len() {
-                let current_index_relevant_metrics = &self.get_metrics(all_iterations_metrics, &all_iterations_metrics[i].1, tuning_config);
-                let best_index_relevant_metrics = &self.get_metrics(all_iterations_metrics, &best_index, tuning_config);
+                let current_index_relevant_metrics = &self.get_metrics(all_iterations_metrics, &i);
+                let best_index_relevant_metrics = &self.get_metrics(all_iterations_metrics, &best_index);
 
                 let current_fitness = compute_fitness_function_value(current_index_relevant_metrics, metrics_weights);
                 let best_fitness = compute_fitness_function_value(best_index_relevant_metrics, metrics_weights);
 
                 if current_fitness < best_fitness {
-                    best_index = all_iterations_metrics[i].1.clone();
+                    best_index = i;
                 }
             }
-            Ok(best_index)   
+            Ok(all_iterations_metrics[best_index].1.clone())   
         }
     }
 
@@ -736,9 +845,20 @@ impl TuningService {
         None
     }
 
-    fn get_metrics(&self, all_metrics: &Vec<(Vec<Metric>, Vec<(String, u64)>)>, grid_point: &Vec<(String, u64)>, tuning_config: &TuningConfig) -> (f32, f32) {
-        let current_ape = self.get_pose_error(&all_metrics[get_grid_point_index(grid_point, tuning_config).unwrap() as usize].0.clone()).unwrap().ape.rmse.unwrap();
-        let current_rpe = self.get_pose_error(&all_metrics[get_grid_point_index(grid_point, tuning_config).unwrap() as usize].0.clone()).unwrap().rpe.rmse.unwrap();
+    fn get_metrics(&self, all_metrics: &Vec<(Vec<Metric>, Vec<(String, u64)>)>, index: &usize) -> (f32, f32) {
+        /*
+        if type.0 == "random_search" {
+            let current_ape = self.get_pose_error(&all_metrics[type.1].0.clone()).unwrap().ape.rmse.unwrap();
+            let current_rpe = self.get_pose_error(&all_metrics[type.1].0.clone()).unwrap().rpe.rmse.unwrap();            
+        }
+        else {
+            let current_ape = self.get_pose_error(&all_metrics[gs_config.get_grid_point_index(grid_point).unwrap() as usize].0.clone()).unwrap().ape.rmse.unwrap();
+            let current_rpe = self.get_pose_error(&all_metrics[gs_config.get_grid_point_index(grid_point).unwrap() as usize].0.clone()).unwrap().rpe.rmse.unwrap();
+        }
+        */
+
+        let current_ape = self.get_pose_error(&all_metrics[*index].0.clone()).unwrap().ape.rmse.unwrap();
+        let current_rpe = self.get_pose_error(&all_metrics[*index].0.clone()).unwrap().rpe.rmse.unwrap();
 
         (current_ape, current_rpe)
     }

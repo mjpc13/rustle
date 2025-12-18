@@ -51,6 +51,7 @@ impl AlgorithmRunService {
                 },
                 None => warn!("ID of algorithm_run was empty")
             };
+            //println!("created iter {}", i.clone());
         }
         
         

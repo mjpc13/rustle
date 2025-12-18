@@ -23,7 +23,9 @@
     in {
       devShells.${system}.default = pkgs.mkShell {
         buildInputs = with pkgs; [
-          rustup
+          # rustup
+          rustc
+          cargo
           rust-analyzer # LSP Server
           rustfmt       # Formatter
           clippy        # Linter
