@@ -11,6 +11,12 @@ use yaml_rust2::YamlLoader;
 use std::error::Error;
 use std::io::Write;
 use csv::ReaderBuilder;
+use std::path::Path;
+use std::fs;
+
+use crate::utils::rosbag_reader;
+use crate::models::ros::Tum;
+use crate::models::ros::ros_msg::RosMsg;
 
 
 #[derive(Clone)]

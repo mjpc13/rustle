@@ -47,7 +47,6 @@ pub async fn build_app() -> Result<AppContext, Box<dyn std::error::Error>> {
     // Services
     let algo_service = AlgorithmService::new(algo_repo, docker.clone());
     let dataset_service = DatasetService::new(dataset_repo);
-    let ros_service = RosService::new(odom_repo);
     let stat_service = StatService::new(stat_repo);
     let metric_service = MetricService::new(metric_repo);
     let params_service = ParamsService::new(params_repo, docker.clone());

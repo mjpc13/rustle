@@ -196,8 +196,9 @@ impl TuningService {
         let mut current_grid_point = initial_grid_point.clone();
         let mut current_grid_point_index = tuning_test.get_grid_point_index(&current_grid_point).unwrap();
         let initial_params = &self.params_service.get_by_id(algo.current_params.clone()).await?.unwrap().params.clone();
+        //println!("{:?}", initial_params.clone());
 
-        let mut writer = Writer::from_path("examples/grid_search.csv")?;
+        let mut writer = Writer::from_path(format!("results/{}/grid_search.csv", algo.name))?;
         let mut csv_header: Vec<String> = Vec::new();
         let mut csv_header_keys: Vec<String> = Vec::new();
 
@@ -293,7 +294,7 @@ impl TuningService {
         tuning_results_report.insert(String::from("tested configurations"), Value::Number(all_iterations_metrics.len().into()));
         tuning_results_report.insert(String::from("best_parameters"), Value::Object(best_params.clone().into_iter().collect()));
 
-        self.save_results_to_file("results/grid_search_results.yaml", &tuning_results_report)?;
+        self.save_results_to_file(format!("results/{}/grid_search_results.yaml", algo.name).as_str(), &tuning_results_report)?;
 
         Ok(())
     }
@@ -381,7 +382,7 @@ impl TuningService {
         let all_configs: &Vec<HashMap<String, Value>> = &tuning_test.tuning_type.as_ref().unwrap().as_random_search().unwrap().configs;
         let initial_params = &self.params_service.get_by_id(algo.current_params.clone()).await?.unwrap().params;
 
-        let mut writer = Writer::from_path("examples/random_search.csv")?;
+        let mut writer = Writer::from_path(format!("results/{}/random_search.csv", algo.name))?;
         let mut csv_header: Vec<String> = Vec::new();
         let mut csv_header_keys: Vec<String> = Vec::new();
 
@@ -471,7 +472,7 @@ impl TuningService {
         tuning_results_report.insert(String::from("tested configurations"), Value::Number(all_iterations_metrics.len().into()));
         tuning_results_report.insert(String::from("best_parameters"), Value::Object(best_params.clone().into_iter().collect()));
 
-        self.save_results_to_file("results/random_search_results.yaml", &tuning_results_report)?;
+        self.save_results_to_file(format!("results/{}/random_search_results.yaml", algo.name).as_str(), &tuning_results_report)?;
 
         Ok(())
     }    

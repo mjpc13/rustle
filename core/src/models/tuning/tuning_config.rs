@@ -348,10 +348,6 @@ impl TuningConfig {
         else { None }
     }
 
-    pub fn index_to_grid_point(&self) {
-        
-    }
-
     /// only for grid search
     pub fn generate_next_grid_point(&self, previous_point: Vec<(String, u64)>) -> Option<Vec<(String, u64)>> {
         if let Some(gs_config_type) = &self.tuning_type {
@@ -447,15 +443,19 @@ impl TuningConfig {
 
     /// only for grid/random search
     pub fn get_current_params(&self, grid_point: &Vec<(String, u64)>, initial_params: &HashMap<String, Value>) -> Option<HashMap<String, Value>> {
-        if let Some(rs_config_type) = &self.tuning_type {
-            match rs_config_type {
+        //println!("{:?}", grid_point.clone());
+        //println!("{:?}", &self.tuning_type);
+        if let Some(config_type) = &self.tuning_type {
+            //println!("Its something");
+            match config_type {
                 TuneType::RandomSearch(rs_config) => {
                     let tunable_params = &rs_config.tunable_params;
                     let mut current_params = &mut initial_params.clone();
 
                     for (key, value) in tunable_params {
-                        match current_params.get(key).unwrap() {
-                            Value::Number(n) => {
+                        //match current_params.get(key).unwrap() {
+                        match find_key_in_hash_map(current_params, &key) {
+                            Some(Value::Number(n)) => {
                                 if n.is_u64() {
                                     let unsigned_int_tuple = u64_array_tuple(value);
                                     //let next_value: u64 = unsigned_int_tuple.0 + grid_point.get(key).unwrap().clone() * unsigned_int_tuple.1;
@@ -481,13 +481,17 @@ impl TuningConfig {
                     return Some(current_params.clone());
                 }
                 TuneType::GridSearch(gs_config) => {
+                    //println!("Its grid search");
                     let tunable_params: HashMap<String, Value> = gs_config.tunable_params.clone();
                     let mut current_params = &mut initial_params.clone();
 
                     for (key, value) in tunable_params {
-                        match current_params.get(&key) {
+                        //println!("{:?}", value.clone());
+                        //match current_params.get(&key) {
+                        match find_key_in_hash_map(current_params, &key) {
                             Some(Value::Number(n)) => {
                                 if n.is_u64() {
+                                    //println!("{} is u64", key.clone());
                                     let unsigned_int_tuple = u64_array_tuple(&value);
                                     //let next_value: u64 = unsigned_int_tuple.0 + point.get(&key).unwrap().clone() * unsigned_int_tuple.1;
                                     //println!("{:?}: {}", grid_point.clone(), key.clone());
@@ -495,27 +499,38 @@ impl TuningConfig {
                                     current_params.insert(key.clone(), Value::from(next_value));
                                 }
                                 else if n.is_i64() {
+                                    //println!("{} is i64", key.clone());
                                     let int_tuple = i64_array_tuple(&value);
                                     //let next_value: i64 = (int_tuple.0) + (point.get(&key).unwrap().clone() as i64 * int_tuple.1);
                                     let next_value: i64 = int_tuple.0 + (get_parameter_array_current_index(grid_point.clone(), key.clone()).unwrap() as i64) * int_tuple.1;
                                     current_params.insert(key.clone(), Value::from(next_value));
                                 }
                                 else if n.is_f64() {
+                                    //println!("{} is f64", key.clone());
                                     let float_tuple = f64_array_tuple(&value);
                                     //let next_value: f64 = float_tuple.0 + (point.get(&key).unwrap().clone() as f64) * float_tuple.1;
                                     let next_value: f64 = float_tuple.0 + (get_parameter_array_current_index(grid_point.clone(), key.clone()).unwrap() as f64) * float_tuple.1;
                                     current_params.insert(key.clone(), Value::from(next_value));
                                 }
                             }
-                            _ => return None
+                            _ => {
+                                //println!("Not a number");
+                                return None
+                            }
                         }
                     }
+                    //println!("After getting the params");
                     return Some(current_params.clone());
                 }
-                _ => { return None; }
+                _ => {
+                    //println!("Something else");
+                    return None
+                }
             }
         }
-        None
+        else {
+            None
+        }
     }
 
     pub fn save_tuning_progress(&self, writer: &mut Writer<File>, current_iter_data: &(usize, f32, f32), iter_data: &Vec<String>) -> Result<(), Box<dyn std::error::Error>>{

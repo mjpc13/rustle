@@ -49,12 +49,11 @@ use directories::ProjectDirs;
 
 use super::error::{EvoError, PlotError};
 use super::{MetricService};
-use super::{error::RunError, DatasetService, RosService, StatService};
+use super::{error::RunError, DatasetService, StatService};
 #[derive(Clone)]
 pub struct IterationService {
     repo: IterationRepo,
     pub config: Config,
-    ros_service: RosService,
     dataset_service: DatasetService,
     stat_service: StatService,
     metric_service: MetricService,
@@ -64,12 +63,12 @@ pub struct IterationService {
 }
 
 impl IterationService {
-    pub fn new(repo: IterationRepo, odom_repo: OdometryRepo, docker: Arc<Docker>, ros_service: RosService, dataset_service: DatasetService, stat_service: StatService, metric_service: MetricService, params_service: ParamsService) -> Self {
+    pub fn new(repo: IterationRepo, odom_repo: OdometryRepo, docker: Arc<Docker>, dataset_service: DatasetService, stat_service: StatService, metric_service: MetricService, params_service: ParamsService) -> Self {
         let config = Config::load().expect("Missing Configuration");
-        Self { repo, docker, ros_service, dataset_service, stat_service, metric_service, config, params_service, odom_repo }
+        Self { repo, docker, dataset_service, stat_service, metric_service, config, params_service, odom_repo }
     }
 
-    pub async fn create(&self, iter_number: u8, algo:Algorithm, algorithm_run_id: &Thing, test_type: String) -> Result<(), DbError> {
+    pub async fn create(&self, iter_number: u64, algo:Algorithm, algorithm_run_id: &Thing, exec_id: &Thing, test_type: TestType) -> Result<(), DbError> {
         
         let sanitized = algo.name.replace(|c: char| !c.is_alphanumeric(), "_")
         .to_lowercase();
@@ -184,28 +183,7 @@ impl IterationService {
             }
         });
 
-        //Only add the groundtruth if there is no GT in the Dataset Object
-        let dataset = self.repo.get_dataset(&iter).await.unwrap(); //get the dataset
-
-        let is_gt_empty = match dataset.ground_truth{
-            Some(_) => false,
-            None => {
-                true
-            },
-        };
-
-        let topic_list = match is_gt_empty{
-            true => {
-                let topic = dataset.ground_truth_topic.clone()  // Clone the Option<String> first
-                    .ok_or_else(|| ProcessingError::MissingField("ground_truth_topic".into())).unwrap();
-                let mut topics = algorithm.odom_topics;
-                topics.push(topic);
-                topics
-            },
-            false => algorithm.odom_topics
-        };
-        let gt_topic = dataset.ground_truth_topic.clone()  // Clone the Option<String> first
-         .ok_or_else(|| ProcessingError::MissingField("ground_truth_topic".into())).unwrap();
+        let topic_list = algorithm.odom_topics;
         
         //TODO: OPTIMIZE THIS, THINK OF A BETTER WAY TO SAVE THE GT TOPIC
         let _res_tasks: Vec<_> = topic_list
@@ -318,11 +296,15 @@ impl IterationService {
         //CLEAN RESIDUAL CONTAINERS
         let _ = self.remove_container(&iter.container.container_name).await;
 
+        //If the dataset duration was not set before set it now
+        let _ = self.dataset_service.set_duration(&dataset).await;
+
+        warn!("Computing frequency...");
 
         //Compute the frequency
-        let freq = self.repo.get_odom_frequency(&iter).await.unwrap();
-        let freq_metric = StatisticalMetrics::from_single_value(freq);
-
+        let freq = self.repo.get_odom_frequency(&iter).await.map_err(|_e| RunError::Evo("Unable to find odometries".to_owned()))?;
+        
+        let freq_metric = StatisticalMetrics::from_single_value(freq as f32);
         let _ = self.metric_service.create_freq_metric(iteration_id_clone.clone(), freq_metric).await; // add to DB
 
         warn!("Computing stats...");
@@ -389,8 +371,9 @@ impl IterationService {
                 ..Default::default()
             };
 
-            let ape = self.compute_metrics(&iter, &ape_args, &full_path, &full_dataset_path).await.unwrap();
-            let rpe = self.compute_metrics(&iter, &rpe_args, &full_path, &full_dataset_path).await.unwrap();
+
+            let _ape = self.compute_metrics(&iter, &ape_args, &full_path, &full_dataset_path).await.map_err(|e| RunError::Evo(format!("Failed to compute APE {e}")))?;
+            let _rpe = self.compute_metrics(&iter, &rpe_args, &full_path, &full_dataset_path).await.map_err(|e| RunError::Evo(format!("Failed to compute RPE {e}")))?;
 
             warn!("Read from file!");
             let mut ape_list = APE::read_from_file(&format!("{full_path}/ape.txt")).map_err(|e| RunError::Evo("Failure to load poses".to_owned()))?;
@@ -545,18 +528,14 @@ impl IterationService {
             crate::models::TestType::Simple => {
                 hm.insert("/rustle/config/params.yaml", &temp_file_name);
             },
-            crate::models::TestType::Speed(speed_test_params) => {
-                hm.insert("/rustle/config/params.yaml", &algorithm.parameters);
+            crate::models::TestType::Speed(_) => {
+                hm.insert("/rustle/config/params.yaml", &temp_file_name);
             },
             crate::models::TestType::Drop(drop_params) => {
                 //Add to the cache!
                 if let Some(proj_dirs) = ProjectDirs::from("org", "FRUC",  "RUSTLE") {
                     let cache_dir = proj_dirs.cache_dir();
                     let cache_dir_str = cache_dir.to_str().ok_or(RunError::Execution("Unable to find application path".to_owned())).unwrap();
-
-                    let mut params_string = fs::read_to_string(&algorithm.parameters).unwrap();
-
-                    let drop_yaml = drop_params.update_file(&params_string);
 
                     let file_name = format!("{}_drop.yaml",&iteration.container.container_name);
 
@@ -574,10 +553,6 @@ impl IterationService {
                 if let Some(proj_dirs) = ProjectDirs::from("org", "FRUC",  "RUSTLE") {
                     let cache_dir = proj_dirs.cache_dir();
                     let cache_dir_str = cache_dir.to_str().ok_or(RunError::Execution("Unable to find application path".to_owned())).unwrap();
-
-                    let mut params_string = fs::read_to_string(&algorithm.parameters).unwrap();
-
-                    let cut_yaml = cut_params.update_file(&params_string);
 
                     let file_name = format!("{}_cut.yaml",&iteration.container.container_name);
 
@@ -640,166 +615,199 @@ impl IterationService {
         Ok(())
     }
 
-    async fn record_task(ros_service: RosService, docker: Arc<Docker>, container_id: String, topic: &str, cancelation_token: Arc<CancellationToken>, iteration_id: Thing){
 
-        let cmd = format!("rostopic echo {topic}");
-
-        // Check how I'm gonna record the localization
-        let record_options_future = docker
-            .create_exec(
-            &container_id,
-            CreateExecOptions {
-                attach_stdout: Some(true),
-                attach_stderr: Some(true),
-                cmd: Some(vec!["/bin/bash", "-l", "-c", &cmd]), //need a different way to pass the topics to record
-                ..Default::default()
-            },
-        );
-
-        let record_exec_id = record_options_future.await.unwrap().id; 
-
-        if let StartExecResults::Attached { mut output, .. } = docker.start_exec(&record_exec_id, None).await.unwrap() {
-
-                loop{
-                    select!{
-                        Some(Ok(msg)) = output.next() => {
-
-                            match Self::convert_to_ros(msg.to_string()){
-                                Ok(r) => {
-                                    //let odom = r.as_odometry().unwrap();
-                                    let _ = ros_service.process_message(r, &iteration_id).await;
-                                }
-                                Err(e) => {
-                                    info!("{e:}");
-                                }
-                            }
-
-                        },
-                        _ = cancelation_token.cancelled()=>{
-                            
-                            let record_options_future = docker
-                                .create_exec(
-                                &container_id,
-                                CreateExecOptions {
-                                    attach_stderr: Some(true),
-                                    cmd: Some(vec!["/bin/bash", "-l", "-c", "rosnode", "kill", "-a", "2>/dev/null"]),
-                                    ..Default::default()
-                                },
-                            ).await.unwrap();
-
-                            docker.start_exec(&record_options_future.id, None).await.unwrap();
+    async fn record_task_ws(topic: &str, iteration_id: &Thing, odom_repo: OdometryRepo){
 
         let ten_sec = time::Duration::from_secs(5);
         thread::sleep(ten_sec);
 
-                            break;
-                        }
-                    }
-                }
+        let (mut ws, _) = connect_async("ws://localhost:57331").await.unwrap();
+        let topic_type = Self::resolve_topic_type(&mut ws, topic, 10).await.unwrap();
 
-            }
+        // Subscribe to a topic
+        let msg = json!({
+            "op": "subscribe",
+            "topic": topic,
+            "type": topic_type
+        });
+        ws.send(tungstenite::Message::Text(msg.to_string())).await.unwrap();
 
+        // Receive messages
+        while let Some(Ok(msg)) = ws.next().await {
+            if let tungstenite::Message::Text(data) = msg {
 
-    }
+                match Self::convert_to_ros_msg(data.to_string()){
+                    Ok(r) => {
 
-    async fn record_ground_truth(dataset_service: DatasetService, docker: Arc<Docker>, container_id: String, topic: &str, cancelation_token: Arc<CancellationToken>, dataset: &Dataset){
+                        let odometry_repo = odom_repo.clone();
+                        let it_thing = iteration_id.clone();
 
-        let cmd = format!("rostopic echo {topic}");
-
-        // Check how I'm gonna record the localization
-        let record_options_future = docker
-            .create_exec(
-            &container_id,
-            CreateExecOptions {
-                attach_stdout: Some(true),
-                attach_stderr: Some(true),
-                cmd: Some(vec!["/bin/bash", "-l", "-c", &cmd]), //need a different way to pass the topics to record
-                ..Default::default()
-            },
-        );
-
-        let record_exec_id = record_options_future.await.unwrap().id; 
-
-
-        if let StartExecResults::Attached { mut output, .. } = docker.start_exec(&record_exec_id, None).await.unwrap() {
-
-                loop{
-                    select!{
-                        Some(Ok(msg)) = output.next() => {
-
-                            match Self::convert_to_ros(msg.to_string()){
-                                Ok(r) => {
-
-                                    let odom = r.as_odometry().unwrap();
-                                    let mut db_odom = Odometry::new(odom.header);
-                                    
-                                    // Copy relevant fields
-                                    db_odom.child_frame_id = odom.child_frame_id;
-                                    db_odom.pose = odom.pose;
-                                    db_odom.twist = odom.twist;
-
-                                    //let odom = r.as_odometry().unwrap();
-                                    //WRITE CODE TO ADD TO GROUNDTRUTH
-                                    let _ = dataset_service.add_ground_truth(&dataset, db_odom).await;
-                                    //let _ = dataset_service.add_ground_truth
-                                }
-                                Err(e) => {
-                                    warn!("{e:}");
-                                }
+                        // Spawn background task (does not block the loop)
+                        tokio::spawn(async move {
+                            if let Err(e) = Self::process_message(&odometry_repo, r, &it_thing).await {
+                                warn!("Error processing messages: {e}");
                             }
+                        });            
 
-                        },
-                        _ = cancelation_token.cancelled()=>{
-                            
-                            let record_options_future = docker
-                                .create_exec(
-                                &container_id,
-                                CreateExecOptions {
-                                    attach_stderr: Some(true),
-                                    cmd: Some(vec!["/bin/bash", "-l", "-c", "rosnode", "kill", "-a", "2>/dev/null"]),
-                                    ..Default::default()
-                                },
-                            ).await.unwrap();
-
-                            docker.start_exec(&record_options_future.id, None).await.unwrap();
-
-                            let ten_sec = time::Duration::from_secs(5);
-                            thread::sleep(ten_sec);
-
-                            break;
-                        }
+                    }
+                    Err(e) => {
+                        warn!("{e:}");
                     }
                 }
-
             }
+        }
 
     }
 
 
-    fn convert_to_ros(msg: String) -> Result<RosMsg, RosError> {
-
-        let yaml = match YamlLoader::load_from_str(&msg.replace("\n---\n", "")){
-            Ok(y) => y,
-            Err(e) => {
-                return Err(RosError::FormatError(msg.into()))
-            },
-        };
-        
-        let ros_msg = yaml[0].as_hash().ok_or_else(|| RosError::FormatError(format!("YAML msg: {:?}", yaml[0])))?;
 
 
 
-        let top_fields: Vec<_> = ros_msg
+
+
+
+    // Call rosapi/topic_type repeatedly until we get a non-empty type.
+    async fn resolve_topic_type(
+        ws: &mut tokio_tungstenite::WebSocketStream<MaybeTlsStream<TcpStream>>,
+        topic: &str,
+        max_attempts: usize,
+    ) -> Result<String, RosError> {
+        for attempt in 0..max_attempts {
+            // generate a unique id for this request
+            let millis = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis();
+            let id = format!("topic_type_{}_{}", millis, attempt);
+
+            let req = json!({
+                "op": "call_service",
+                "service": "/rosapi/topic_type",
+                "args": { "topic": topic },
+                "id": id
+            });
+
+            let txt = req.to_string();
+            warn!("Sending topic_type request (attempt {}): {}", attempt + 1, txt);
+            ws.send(tungstenite::Message::Text(txt)).await.unwrap();
+
+            // wait for response matching our id; allow multiple incoming messages and short timeouts
+            let mut got_type: Option<String> = None;
+            let deadline = Duration::from_secs(1); // wait up to 2s per attempt
+
+            // Loop reading messages until timeout or we find the response for our id
+            loop {
+                match timeout(deadline, ws.next()).await {
+                    Ok(Some(Ok(tungstenite::Message::Text(data)))) => {
+
+                        let parsed: serde_json::Value = serde_json::from_str(&data).unwrap_or_default();
+
+                        // response may be: { "op":"service_response", "id": "<id>", "values": {"type": "..."}, ... }
+                        if parsed.get("id") == Some(&json!(id)) {
+                            let t = parsed
+                                .get("values")
+                                .and_then(|v| v.get("type"))
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("")
+                                .to_string();
+
+                            if !t.is_empty() {
+                                got_type = Some(t);
+                                break;
+                            } else {
+                                warn!("Rosapi returned empty type for {}, will retry", topic);
+                                break; // break inner loop and retry
+                            }
+                        } else {
+                            // not our response; continue reading
+                            debug!("Not our service response (id mismatch).");
+                            continue;
+                        }
+                    }
+
+                    Ok(Some(Ok(tungstenite::Message::Ping(_)))) => {
+                        debug!("Ping (while waiting)");
+                        // respond automatically, tungstenite may handle pong automatically, but you can reply if needed
+                    }
+
+                    Ok(Some(Ok(other_msg))) => {
+                        debug!("Other message while resolving type: {:?}", other_msg);
+                        // continue reading for our id
+                    }
+
+                    Ok(Some(Err(e))) => {
+                        return Err(RosError::Query("Unable to find ROS topic type".to_owned()));
+                    }
+
+                    Ok(None) => {
+                        return Err(RosError::Query("Unable to find ROS topic type".to_owned()));
+                    }
+
+                    Err(_) => {
+                        // timeout waiting for messages matching our id — break to retry
+                        debug!("Timed out waiting for service response (attempt {})", attempt + 1);
+                        break;
+                    }
+                }
+            }
+
+            if let Some(t) = got_type {
+                return Ok(t);
+            }
+
+            // small delay before retrying
+            sleep(Duration::from_millis(500)).await;
+        }
+
+        Err(RosError::Query(format!(
+            "Could not resolve type for topic '{}' after {} attempts",
+            topic,
+            max_attempts
+        )))
+    }
+
+
+
+
+
+
+
+
+    fn convert_to_ros_msg(data: String) -> Result<RosMsg, RosError> {
+        // Parse JSON
+        let v: Value = serde_json::from_str(&data)
+            .map_err(|_| RosError::FormatError(data.clone()))?;
+
+        let inner_msg = v.get("msg")
+            .ok_or_else(|| RosError::FormatError(format!("Missing 'msg' field: {}", data)))?;
+
+        // Determine top-level keys
+        let top_fields: Vec<&str> = inner_msg.as_object()
+            .ok_or_else(|| RosError::FormatError(format!("Expected object in 'msg': {}", inner_msg)))?
             .keys()
             .map(|s| s.as_str())
             .collect();
 
         // Create RosMsg
         let ros = RosMsg::new(top_fields)?;
+        let ros = ros.from_json(inner_msg)?;
 
-        return ros.from_yaml(yaml[0].clone());
+        Ok(ros)
     }
 
+    async fn process_message(
+        odom_repo: &OdometryRepo,
+        msg: RosMsg,
+        iteration_id: &Thing
+    ) -> Result<(), ProcessingError> {
+        let odom = msg.as_odometry().unwrap();
+        let mut db_odom = Odometry::new(odom.header);
+        
+        // Copy relevant fields
+        db_odom.child_frame_id = odom.child_frame_id;
+        db_odom.pose = odom.pose;
+        db_odom.twist = odom.twist;
+
+        odom_repo.save(&mut db_odom, iteration_id).await?;
+        Ok(())
+    }
 
     async fn remove_container(&self, container_name:&str){
         //Remove the containers
@@ -817,23 +825,20 @@ impl IterationService {
 
     async fn compute_metrics<R: EvoArg>(&self, iter: &Iteration, args: &R, result_path: &String, dataset_path: &String) -> Result<StatisticalMetrics, EvoError>{
 
-        //WRITE GT TO A FILE -> THIS SHOULD NOT BE NEEDED IF THERE IS ALREADY A GT FILE. TODO
-
-        let ground_truth_data = self.repo.get_dataset(iter)
-            .await.unwrap()
-            .ground_truth  // Clone the Option first
-            .ok_or_else(|| ProcessingError::NotFound("Dataset Odometries were not found".into())).unwrap();
+        //let ground_truth_data = self.repo.get_dataset(iter)
+        //    .await.unwrap()
+        //    .ground_truth  // Clone the Option first
+        //    .ok_or_else(|| ProcessingError::NotFound("Dataset Odometries were not found".into())).unwrap();
         
-        Self::write_file(&ground_truth_data, "groundtruth", &mut PathBuf::from_str(&dataset_path).unwrap());
+        //let _ = Self::write_file(&ground_truth_data, "groundtruth", &mut PathBuf::from_str(&dataset_path).unwrap());
 
         let odoms: Vec<Odometry> = self.repo.get_odometries(iter).await.unwrap();
+        let _ = Self::write_file(&odoms, &iter.container.container_name, &mut PathBuf::from_str(&result_path).unwrap());
         let _ = Self::write_file(&odoms, &iter.container.container_name, &mut PathBuf::from_str(&result_path).unwrap());
 
         let evo_ape_str = args.compute(&format!("{dataset_path}/groundtruth"), &format!("{result_path}/{}",&iter.container.container_name))?;
         
-        run_metrics_py(&format!("{dataset_path}/groundtruth"), &format!("{result_path}/{}",&iter.container.container_name), 0.1, &result_path);
-
-
+        let _ = run_metrics_py(&format!("{dataset_path}/groundtruth"), &format!("{result_path}/{}",&iter.container.container_name), &self.config, &result_path);
 
         let metric = StatisticalMetrics::from_str(&evo_ape_str); //TODO Dont unwrap() this
         metric
@@ -856,4 +861,16 @@ impl IterationService {
     }
 
 
+}
+
+pub fn parse_rosbag_line(line: &str, iter_num: u64, algo: String) -> Option<ProgressMessage> {
+    let re = regex::Regex::new(r"Bag Time: (\d+\.\d+)\s+Duration: (\d+\.\d+) / (\d+\.\d+)").ok()?;
+    let caps = re.captures(line)?;
+    Some(ProgressMessage {
+        iteration_num: iter_num,
+        bag_time: caps.get(1)?.as_str().parse().ok()?,
+        duration: caps.get(2)?.as_str().parse().ok()?,
+        total_duration: caps.get(3)?.as_str().parse().ok()?,
+        algo,
+    })
 }
