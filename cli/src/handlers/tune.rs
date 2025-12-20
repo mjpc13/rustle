@@ -351,6 +351,27 @@ async fn load_simulated_annealing_config(input_file_params: &HashMap<String, Val
         }
     };
 
+    let reanneal_map = tuning_settings_map.get("reanneal").ok_or(SimulatedAnnealingError::NoReannealField())?
+                                                             .as_object().ok_or(SimulatedAnnealingError::NoReannealObject())?;
+
+    sa_config.reanneal_fixed = reanneal_map.get("fixed").ok_or(SimulatedAnnealingError::NoFixedReanneal())?
+                                                        .as_u64().ok_or(SimulatedAnnealingError::InvalidReannealValue(String::from("fixed")))?;
+
+    sa_config.reanneal_accepted = reanneal_map.get("accepted").ok_or(SimulatedAnnealingError::NoAcceptedReanneal())?
+                                                        .as_u64().ok_or(SimulatedAnnealingError::InvalidReannealValue(String::from("accepted")))?;
+
+    sa_config.reanneal_best = reanneal_map.get("best").ok_or(SimulatedAnnealingError::NoBestReanneal())?
+                                                        .as_u64().ok_or(SimulatedAnnealingError::InvalidReannealValue(String::from("best")))?;
+
+    let halting_conditions_map = tuning_settings_map.get("halting_conditions").ok_or(SimulatedAnnealingError::NoHaltingConditionsField())?
+                                                                                 .as_object().ok_or(SimulatedAnnealingError::NoHaltingConditionsObject())?;
+
+    sa_config.stall_iter_accepted_limit = halting_conditions_map.get("accepted").ok_or(SimulatedAnnealingError::NoAcceptedField())?
+                                                                                .as_u64().ok_or(SimulatedAnnealingError::InvalidHaltingCondition(String::from("accepted")))?;
+
+    sa_config.stall_iter_best_limit = halting_conditions_map.get("best").ok_or(SimulatedAnnealingError::NoBestField())?
+                                                                                .as_u64().ok_or(SimulatedAnnealingError::InvalidHaltingCondition(String::from("best")))?;
+
     let perturbation_functions_map = tuning_settings_map.get("perturbation_functions").ok_or(SimulatedAnnealingError::NoPerturbationFunctionsField())?
                                                            .as_object().ok_or(SimulatedAnnealingError::NoPerturbationFunctionsObject())?;
 
@@ -360,15 +381,12 @@ async fn load_simulated_annealing_config(input_file_params: &HashMap<String, Val
     if sa_config.integer_delta_max < 0 {
         return Err(Box::new(SimulatedAnnealingError::InvalidIntegerDeltaMaxValue()));
     }
-    println!("integer_delta_max: {}", sa_config.integer_delta_max.clone());
 
     sa_config.float_mean = perturbation_functions_map.get("float_mean").ok_or(SimulatedAnnealingError::NoFloatMeanField())?
                                               .as_f64().ok_or(TuningError::WrongTypeField(String::from("float_mean"), String::from("f64")))?;
-    println!("float_mean: {}", sa_config.float_mean.clone());
 
     sa_config.float_std_dev = perturbation_functions_map.get("float_std_dev").ok_or(SimulatedAnnealingError::NoFloatStdDevField())?
                                               .as_f64().ok_or(TuningError::WrongTypeField(String::from("float_std_dev"), String::from("f64")))?;
-    println!("float_std_dev: {}", sa_config.float_std_dev.clone());
 
     let algo: Algorithm = algo_service.get_by_id(tuning_config.algo_id.clone()).await?.unwrap();
     let gt_parameters: HashMap<String, Value> = params_service.get_by_id(algo.current_params).await?.unwrap().params;
@@ -408,7 +426,6 @@ async fn load_simulated_annealing_config(input_file_params: &HashMap<String, Val
         }
 
         new_parameter_bounds.insert(key.clone(), (value_arr[0].clone(), value_arr[1].clone(), value_arr[2].clone()));
-        // (get_value_type(gt_parameters.get(&key.clone()).unwrap()) != get_value_type(&value)) 
     }
 
     let new_max_iterations: i64 = tuning_settings_map.get("max_iterations").ok_or(SimulatedAnnealingError::NoMaxIterationsField())?
@@ -476,16 +493,4 @@ fn are_bounds_valid(lower_bound: &Value, upper_bound: &Value) -> bool {
     else {
         lower_bound.as_f64().unwrap() < upper_bound.as_f64().unwrap()
     }
-}
-
-fn format_string(arr: Vec<Value>) -> String {
-    let mut final_string = String::from("[");
-    for i in 0..arr.len() {
-        final_string.push_str(&arr[i].to_string());
-        if i < arr.len() - 1 {
-            final_string.push_str(", ");
-        }
-    }
-    final_string.push_str("]");
-    final_string
 }

@@ -35,19 +35,19 @@ pub struct SimulatedAnnealingConfig {
     pub stall_iter_best_limit: u64,
 
     /// Reanneal after this number of iterations is reached
-    reanneal_fixed: u64,
+    pub reanneal_fixed: u64,
 
     /// Number of iterations since beginning or last reannealing
     pub reanneal_iter_fixed: u64,
 
     /// Reanneal after no accepted solution has been found for `reanneal_accepted` iterations
-    reanneal_accepted: u64,
+    pub reanneal_accepted: u64,
 
     /// Similar to `stall_iter_accepted`, but will be reset to 0 when reannealing  is performed
     pub reanneal_iter_accepted: u64,
 
     /// Reanneal after no new best solution has been found for `reanneal_best` iterations
-    reanneal_best: u64,
+    pub reanneal_best: u64,
 
     /// Similar to `stall_iter_best`, but will be reset to 0 when reannealing is performed
     pub reanneal_iter_best: u64,
@@ -81,7 +81,7 @@ impl SimulatedAnnealingConfig {
                         stall_iter_accepted_limit: 10,
                         stall_iter_best: 0, 
                         stall_iter_best_limit: 10, 
-                        reanneal_fixed: 10, 
+                        reanneal_fixed: 6, 
                         reanneal_iter_fixed: 0, 
                         reanneal_accepted: 5, 
                         reanneal_iter_accepted: 0, 
@@ -183,7 +183,7 @@ impl SimulatedAnnealingConfig {
         }
     }
 
-    pub fn reanneal(&mut self) {
+    pub fn reanneal(&mut self, i: usize, iter_last_reset: &mut usize) {
         let out = (
             self.reanneal_iter_fixed >= self.reanneal_fixed,
             self.reanneal_iter_accepted >= self.reanneal_accepted,
@@ -196,6 +196,9 @@ impl SimulatedAnnealingConfig {
             // reset temperature and temperature function iterations variable
             self.current_temp = self.initial_temp;
             self.temp_iter = 0;
+
+            // new stuff
+            *iter_last_reset = i;
         }
     }
 

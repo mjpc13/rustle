@@ -357,6 +357,39 @@ pub enum SimulatedAnnealingError {
 
     #[error("No field called \"float_std_dev\" was found inside \"perturbation_functions\"")]
     NoFloatStdDevField(),
+
+    #[error("No field called \"reanneal\" was found inside \"tuning_settings\"")]
+    NoReannealField(),
+
+    #[error("The \"reanneal\" field is not a json object")]
+    NoReannealObject(),
+
+    #[error("No field called \"fixed\" was found inside \"reanneal\"")]
+    NoFixedReanneal(),
+
+    #[error("No field called \"accepted\" was found inside \"reanneal\"")]
+    NoAcceptedReanneal(),
+
+    #[error("No field called \"best\" was found inside \"reanneal\"")]
+    NoBestReanneal(),
+
+    #[error("The field \"{0}\" must be a positive integer(u64)")]
+    InvalidReannealValue(String),
+
+    #[error("No field called \"halting_conditions\" was found inside \"tuning_settings\"")]
+    NoHaltingConditionsField(),
+
+    #[error("The \"halting_conditions\" field is not a json object")]
+    NoHaltingConditionsObject(),
+
+    #[error("No field called \"accepted\" was found inside \"halting_conditions\"")]
+    NoAcceptedField(),
+
+    #[error("No field called \"best\" was found inside \"halting_conditions\"")]
+    NoBestField(),
+
+    #[error("The field \"{0}\" must be a positive integer(u64)")]
+    InvalidHaltingCondition(String),
 }
 
 #[derive(Debug, Error)]

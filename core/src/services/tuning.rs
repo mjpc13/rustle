@@ -519,8 +519,13 @@ impl TuningService {
 
     async fn run_simulated_annealing(&mut self, tuning_test: &TuningConfig, sa_config: &mut SimulatedAnnealingConfig) -> Result<(), Box<dyn std::error::Error>> {
 
-        self.iteration_service.config.rustle.dataset_start = 30.0;
-        self.iteration_service.config.rustle.dataset_duration = 5.0;
+        if let Some(start) = tuning_test.dataset_settings.0 {
+            self.iteration_service.config.rustle.dataset_start = start;
+        }
+
+        if let Some(duration) = tuning_test.dataset_settings.1 {
+            self.iteration_service.config.rustle.dataset_duration = duration;
+        }
 
         //let sa_config = tuning_test.tuning_type.clone().unwrap().as_simulated_annealing_as_mut().unwrap();
         //let initial_parameters: HashMap<String, Value> = HashMap::new();
@@ -640,24 +645,16 @@ impl TuningService {
         let mut new_parameters = current_parameters.clone();
         let mut best_parameters: Option<HashMap<String, Value>> = None;
         let mut all_iterations_metrics: Vec<(Vec<Metric>, usize)> = Vec::new();
-        //println!("{:?}", initial_parameters.params);
-
-        //let mut current_value = 5.0;
-        //initial_parameters.params.insert(String::from("scan_resolution"), json!(current_value));
-        //let all_values: Vec<Value> = Vec::new();
 
         let mut all_things: Vec<f64> = Vec::new();
-
-        //let mut best_value: Option<f64> = None;
-        //let mut best_fitness: Option<f64> = None;
-
         let mut best_things: Option<f64> = None;
 
-        let mut writer = Writer::from_path("results/simulated_annealing.csv")?;
+        let mut writer = Writer::from_path(format!("results/{}/simulated_annealing.csv", algo.name))?;
         let mut csv_header: Vec<String> = Vec::new();
         let mut csv_header_keys: Vec<String> = Vec::new();
 
         csv_header.push(String::from("iter"));
+        csv_header.push(String::from("temperature"));
         if let Some(params_bounds) = &sa_config.parameter_bounds {
             for (key, v) in params_bounds {
                 csv_header.push(key.clone());
@@ -676,13 +673,14 @@ impl TuningService {
         let mut proposed_params: HashMap<String, Value> = HashMap::new();
         let mut best_params: HashMap<String, Value> = HashMap::new();
 
+        let mut iter_last_reset = 0;
 
         for i in 0..sa_config.max_iterations.clone().unwrap() {
             sa_config.update_slam_parameters(&mut current_parameters, &sa_config.parameter_bounds);
             self.params_service.update_params(algo.current_params.clone(), &current_parameters).await?;
             proposed_params = current_parameters.clone();
 
-            println!("point_filter_num: {}", proposed_params.get("point_filter_num").unwrap());
+            //println!("point_filter_num: {}", proposed_params.get("point_filter_num").unwrap());
 
             let iter_job = self.iteration_service.run(list_iterations[i].clone(), Some(msg_tx.clone())).await;
 
@@ -703,6 +701,7 @@ impl TuningService {
                             current_iter_metrics.2 = rpe;
                             let mut current_iter_data: Vec<String> = Vec::new();
                             current_iter_data.push(current_iter_metrics.0.to_string());
+                            current_iter_data.push(sa_config.current_temp.to_string());
                             for key in &csv_header_keys {
                                 current_iter_data.push(current_parameters.get(key).unwrap().to_string());
                             }
@@ -718,8 +717,6 @@ impl TuningService {
                                                                             &tuning_test.metrics_weights.clone().unwrap()) as f64);
 
                     if sa_config.accept_new_solution(&current_fitness, &proposed_fitness) {
-                        //print!("Solution accepted, stall_iter_accepted: {}/{}", sa_config.stall_iter_accepted, sa_config.stall_iter_accepted_limit);
-                        //print!("stall_iter_accepted: {}");
                         sa_config.stall_iter_accepted = 0;
                         sa_config.reanneal_iter_accepted = 0;
                         current_params = proposed_params.clone();
@@ -727,7 +724,6 @@ impl TuningService {
                         accepted = true;
 
                         if best_params.is_empty() {
-                            //print!("New best solution found, stall_iter_best: {}/{}", sa_config.stall_iter_best, sa_config.stall_iter_best_limit);
                             best_params = current_params.clone();
                             best_fitness = current_fitness.clone();
                             sa_config.stall_iter_best = 0;
@@ -745,8 +741,6 @@ impl TuningService {
                                 sa_config.stall_iter_best += 1;
                                 sa_config.reanneal_iter_best = 0;
                                 sa_config.reanneal_iter_best += 1;
-                                //println!("");
-                                //print!("stall_iter_best: {}/{}", sa_config.stall_iter_best, sa_config.stall_iter_best_limit);
                                 if sa_config.stall_iter_best > sa_config.stall_iter_best_limit {
                                     break;
                                 }
@@ -761,34 +755,51 @@ impl TuningService {
                             break;
                         }
                     }
-
-                    /*
-                    if let None = best_things {
-                        let pose_metrics = self.get_pose_error(&iter_metrics).unwrap();
-                        best_things = Some(compute_fitness_function_value(&(pose_metrics.ape.rmse.unwrap(), pose_metrics.rpe.rmse.unwrap()), &(0.0, 1.0)) as f64);
-                    }
-                    else {
-                        let pose_metrics = self.get_pose_error(&iter_metrics).unwrap();
-                        let current_fitness = compute_fitness_function_value(&(pose_metrics.ape.rmse.unwrap(), pose_metrics.rpe.rmse.unwrap()), &(0.0, 1.0));
-                        if current_fitness < best_things.unwrap() as f32 {
-                            best_things = Some(current_fitness as f64);
-                            best_parameters = Some(current_parameters.clone());
-                        }
-                    }
-                    */
                 }
                 Err(e) => {
                     warn!("Iteration number {} from algorithm has produced an error: {}", list_iterations[i as usize].iteration_num, e); 
                 }
             }
 
-            //sa_config.update_variables(accepted, new_best_found);
-            sa_config.reanneal();
+            warn!("iter: {}", sa_config.temp_iter);
+            warn!("current_temp: {:3}", sa_config.current_temp);
+            warn!("stop_iter_accepted: {}/{}", sa_config.stall_iter_accepted, sa_config.stall_iter_accepted_limit);
+            warn!("stop_iter_best: {}/{}", sa_config.stall_iter_best, sa_config.stall_iter_best_limit);
+            warn!("reanneal_iter_fixed: {}/{}", sa_config.reanneal_iter_fixed, sa_config.reanneal_fixed);
+            warn!("reanneal_iter_accepted: {}/{}", sa_config.reanneal_iter_accepted, sa_config.reanneal_accepted);
+            warn!("reanneal_iter_best: {}/{}", sa_config.reanneal_iter_best, sa_config.reanneal_best);
 
-            sa_config.temp_iter += 1;
-            sa_config.reanneal_iter_fixed += 1;
+            sa_config.reanneal(i, &mut iter_last_reset);
 
-            sa_config.update_temperature();
+            /*
+            if (sa_config.current_temp == sa_config.initial_temp && (i == iter_last_reset + 1 && iter_last_reset != 0)){
+                sa_config.temp_iter += 1;
+                sa_config.reanneal_iter_fixed += 1; 
+                sa_config.update_temperature();
+                continue;
+            }
+            */
+
+            if sa_config.current_temp == sa_config.initial_temp {
+                if i == 0 {
+                    sa_config.temp_iter += 1;
+                    sa_config.reanneal_iter_fixed += 1; 
+                    sa_config.update_temperature();         
+                }
+                else {
+                    if i == (iter_last_reset + 1) && iter_last_reset != 0 {
+                        sa_config.temp_iter += 1;
+                        sa_config.reanneal_iter_fixed += 1; 
+                        sa_config.update_temperature();   
+                    }
+                }
+            }
+            else {
+                sa_config.temp_iter += 1;
+                sa_config.reanneal_iter_fixed += 1; 
+                sa_config.update_temperature();   
+            }
+
         }
 
         let mut final_best_parameters: HashMap<String, Value> = HashMap::new();
@@ -796,7 +807,7 @@ impl TuningService {
         format_hashmap(&mut best_parameters);
         final_best_parameters.insert(String::from("best_parameters"), json!(best_parameters));
 
-        self.save_results_to_file("examples/sa_test_results.yaml", &final_best_parameters);
+        self.save_results_to_file(format!("results/{}/sa_test_results.yaml", algo.name).as_str(), &final_best_parameters);
 
         Ok(())
     }
