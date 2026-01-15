@@ -24,6 +24,10 @@ use rustle_core::models::Algorithm;
 
 use std::io::Write;
 
+use rustle_core::models::tuning_config::find_key_in_hash_map;
+
+use serde_json::json;
+
 
 pub async fn handle_tune(tune_cmd: TuneCommand, tuning_service: &mut TuningService, algo_service: &AlgorithmService, dataset_service: &DatasetService, params_service: &ParamsService) -> Result<(), Box<dyn Error>> {
     match tune_cmd.command {
@@ -372,6 +376,7 @@ async fn load_simulated_annealing_config(input_file_params: &HashMap<String, Val
     sa_config.stall_iter_best_limit = halting_conditions_map.get("best").ok_or(SimulatedAnnealingError::NoBestField())?
                                                                                 .as_u64().ok_or(SimulatedAnnealingError::InvalidHaltingCondition(String::from("best")))?;
 
+    /*
     let perturbation_functions_map = tuning_settings_map.get("perturbation_functions").ok_or(SimulatedAnnealingError::NoPerturbationFunctionsField())?
                                                            .as_object().ok_or(SimulatedAnnealingError::NoPerturbationFunctionsObject())?;
 
@@ -387,56 +392,145 @@ async fn load_simulated_annealing_config(input_file_params: &HashMap<String, Val
 
     sa_config.float_std_dev = perturbation_functions_map.get("float_std_dev").ok_or(SimulatedAnnealingError::NoFloatStdDevField())?
                                               .as_f64().ok_or(TuningError::WrongTypeField(String::from("float_std_dev"), String::from("f64")))?;
+    */
 
     let algo: Algorithm = algo_service.get_by_id(tuning_config.algo_id.clone()).await?.unwrap();
-    let gt_parameters: HashMap<String, Value> = params_service.get_by_id(algo.current_params).await?.unwrap().params;
-    let mut new_parameter_bounds: HashMap<String, (Value, Value, Value)> = HashMap::new();
+    let mut gt_parameters: HashMap<String, Value> = params_service.get_by_id(algo.current_params).await?.unwrap().params;
+    let mut new_parameter_bounds: HashMap<String, (Value, Value, Value, Value, Option<Value>)> = HashMap::new();
 
     let parameter_bounds_map = tuning_settings_map.get("parameter_bounds").ok_or(SimulatedAnnealingError::NoParameterBoundsField())?
                                                      .as_object().ok_or(SimulatedAnnealingError::NoParameterBoundsObject())?;
 
     for (key, value) in parameter_bounds_map.clone() {
-        if !gt_parameters.contains_key(&key) {
+        //if !gt_parameters.contains_key(&key) {
+        if let None = find_key_in_hash_map(&mut gt_parameters, key.as_str()) {
             return Err(Box::new(SimulatedAnnealingError::BoundKeyNotFound(String::from(algo.name.clone()), String::from(key.clone()))));
         }
+        else if !value.is_object() {
+            return Err(Box::new(SimulatedAnnealingError::BoundNotObject(String::from(key.clone()))));
+        }
+        else {
+            if find_key_in_hash_map(&mut gt_parameters, key.as_str()).unwrap().is_f64() {
+                if value.clone().as_object().unwrap().len() != 5 {
+                    return Err(Box::new(SimulatedAnnealingError::FloatArrayWrongLength(key.clone())));
+                }
+            }
+            else if find_key_in_hash_map(&mut gt_parameters, key.as_str()).unwrap().is_u64() {
+                if value.clone().as_object().unwrap().len() != 4 {
+                    return Err(Box::new(SimulatedAnnealingError::IntBoundArrayWrongLength(key.clone())));
+                }
+            }
+        }
+
+        /*
         else if !value.is_array() {
             return Err(Box::new(SimulatedAnnealingError::BoundNotArray(key.clone())));
         }
-        else if value.clone().as_array().unwrap().len() != 3 {
-            return Err(Box::new(SimulatedAnnealingError::BoundArrayWrongLength(key.clone())));
+        else if value.clone().as_array().unwrap()[0].is_u64() && value.clone().as_array().unwrap().len() != 4 {
+            return Err(Box::new(SimulatedAnnealingError::IntBoundArrayWrongLength(key.clone())));
         }
-        else if !gt_parameters.get(&key.clone()).unwrap().is_number() {
+        else if value.clone().as_array().unwrap()[0].is_f64() && value.clone().as_array().unwrap().len() != 3 {
+            return Err(Box::new(SimulatedAnnealingError::FloatArrayWrongLength(key.clone())));
+        }
+        else if !find_key_in_hash_map(&mut gt_parameters, key.as_str()).unwrap().is_number() {
             return Err(Box::new(SimulatedAnnealingError::BoundParameterForbiddenType(key.clone())));
         }
+        */
 
-        let value_arr = value.as_array().unwrap();
+        let bounds_map = value.as_object().unwrap();
 
-        if get_value_type(gt_parameters.get(&key.clone()).unwrap()) != get_value_type(&value_arr[0]) {
-            return Err(Box::new(SimulatedAnnealingError::BoundParameterDifferentTypes(key.clone(), get_numeric_type_string(gt_parameters.get(&key.clone()).unwrap()))));
+        if find_key_in_hash_map(&mut gt_parameters, key.as_str()).unwrap().is_f64() {
+            let mut new_bounds: (Value, Value, Value, Value, Option<Value>) = (json!(1), json!(1), json!(1), json!(1), Some(json!(1)));
+
+            new_bounds.0 = Value::from(bounds_map.get("initial_value").ok_or(SimulatedAnnealingError::BoundsNoInitialValue(String::from(key.clone())))?
+                                       .as_f64().ok_or(SimulatedAnnealingError::BoundsWrongTypeField(String::from("initial_value"), String::from(key.clone()), String::from("f64")))?);
+
+            new_bounds.1 = Value::from(bounds_map.get("lower_bound").ok_or(SimulatedAnnealingError::BoundsNoLowerBound(String::from(key.clone())))?
+                                       .as_f64().ok_or(SimulatedAnnealingError::BoundsWrongTypeField(String::from("lower_bound"), String::from(key.clone()), String::from("f64")))?);
+
+            new_bounds.2 = Value::from(bounds_map.get("upper_bound").ok_or(SimulatedAnnealingError::BoundsNoUpperBound(String::from(key.clone())))?
+                                       .as_f64().ok_or(SimulatedAnnealingError::BoundsWrongTypeField(String::from("lower_bound"), String::from(key.clone()), String::from("f64")))?);
+
+            if new_bounds.1.as_f64().unwrap() > new_bounds.2.as_f64().unwrap() {
+                return Err(Box::new(SimulatedAnnealingError::BoundsWrongBounds(key.clone())));
+            }
+
+            new_bounds.3 = Value::from(bounds_map.get("mean").ok_or(SimulatedAnnealingError::BoundsNoMean(String::from(key.clone())))?
+                                       .as_f64().ok_or(SimulatedAnnealingError::BoundsWrongTypeField(String::from("mean"), String::from(key.clone()), String::from("f64")))?);
+
+            new_bounds.4 = Some(Value::from(bounds_map.get("std_dev").ok_or(SimulatedAnnealingError::BoundsNoStdDev(String::from(key.clone())))?
+                                       .as_f64().ok_or(SimulatedAnnealingError::BoundsWrongTypeField(String::from("std_dev"), String::from(key.clone()), String::from("f64")))?));
+
+            /*
+            if get_value_type(find_key_in_hash_map(&mut gt_parameters, key.as_str()).unwrap()) != get_value_type(&value_arr[0]) {
+                return Err(Box::new(SimulatedAnnealingError::BoundParameterDifferentTypes(key.clone(), String::from("3"), get_numeric_type_string(gt_parameters.get(&key.clone()).unwrap()))));
+            }
+            else if get_value_type(find_key_in_hash_map(&mut gt_parameters, key.as_str()).unwrap()) != get_value_type(&value_arr[1]) {
+                return Err(Box::new(SimulatedAnnealingError::BoundParameterDifferentTypes(key.clone(), String::from("3"), get_numeric_type_string(gt_parameters.get(&key.clone()).unwrap()))));
+            }
+            else if get_value_type(find_key_in_hash_map(&mut gt_parameters, key.as_str()).unwrap()) != get_value_type(&value_arr[2]) {
+                return Err(Box::new(SimulatedAnnealingError::BoundParameterDifferentTypes(key.clone(), String::from("3"), get_numeric_type_string(gt_parameters.get(&key.clone()).unwrap()))));
+            }
+            */
+
+
+
+            //new_parameter_bounds.insert(key.clone(), (value_arr[0].clone(), value_arr[1].clone(), value_arr[2].clone(), None));
+            new_parameter_bounds.insert(key.clone(), new_bounds);
         }
-        else if get_value_type(gt_parameters.get(&key.clone()).unwrap()) != get_value_type(&value_arr[1]) {
-            return Err(Box::new(SimulatedAnnealingError::BoundParameterDifferentTypes(key.clone(), get_numeric_type_string(gt_parameters.get(&key.clone()).unwrap()))));
-        }
-        else if get_value_type(gt_parameters.get(&key.clone()).unwrap()) != get_value_type(&value_arr[2]) {
-            return Err(Box::new(SimulatedAnnealingError::BoundParameterDifferentTypes(key.clone(), get_numeric_type_string(gt_parameters.get(&key.clone()).unwrap()))));
+        else if find_key_in_hash_map(&mut gt_parameters, key.as_str()).unwrap().is_u64() {
+            let mut new_bounds: (Value, Value, Value, Value, Option<Value>) = (json!(1), json!(1), json!(1), json!(1), None);
+            
+            new_bounds.0 = Value::from(bounds_map.get("initial_value").ok_or(SimulatedAnnealingError::BoundsNoInitialValue(String::from(key.clone())))?
+                                       .as_u64().ok_or(SimulatedAnnealingError::BoundsWrongTypeField(String::from("initial_value"), String::from(key.clone()), String::from("u64")))?);
+
+            new_bounds.1 = Value::from(bounds_map.get("lower_bound").ok_or(SimulatedAnnealingError::BoundsNoLowerBound(String::from(key.clone())))?
+                                       .as_u64().ok_or(SimulatedAnnealingError::BoundsWrongTypeField(String::from("lower_bound"), String::from(key.clone()), String::from("u64")))?);
+
+            new_bounds.2 = Value::from(bounds_map.get("upper_bound").ok_or(SimulatedAnnealingError::BoundsNoUpperBound(String::from(key.clone())))?
+                                       .as_u64().ok_or(SimulatedAnnealingError::BoundsWrongTypeField(String::from("lower_bound"), String::from(key.clone()), String::from("u64")))?);
+
+            if new_bounds.1.as_u64().unwrap() > new_bounds.2.as_u64().unwrap() {
+                return Err(Box::new(SimulatedAnnealingError::BoundsWrongBounds(key.clone())));
+            }
+
+            new_bounds.3 = Value::from(bounds_map.get("delta_max").ok_or(SimulatedAnnealingError::BoundsNoDeltaMax(String::from(key.clone())))?
+                                       .as_u64().ok_or(SimulatedAnnealingError::BoundsWrongTypeField(String::from("delta_max"), String::from(key.clone()), String::from("u64")))?);
+                                       
+            new_parameter_bounds.insert(key.clone(), new_bounds);
+            /*
+            if get_value_type(find_key_in_hash_map(&mut gt_parameters, key.as_str()).unwrap()) != get_value_type(&value_arr[0]) {
+                return Err(Box::new(SimulatedAnnealingError::BoundParameterDifferentTypes(key.clone(), String::from("4"), get_numeric_type_string(gt_parameters.get(&key.clone()).unwrap()))));
+            }
+            else if get_value_type(find_key_in_hash_map(&mut gt_parameters, key.as_str()).unwrap()) != get_value_type(&value_arr[1]) {
+                return Err(Box::new(SimulatedAnnealingError::BoundParameterDifferentTypes(key.clone(), String::from("4"), get_numeric_type_string(gt_parameters.get(&key.clone()).unwrap()))));
+            }
+            else if get_value_type(find_key_in_hash_map(&mut gt_parameters, key.as_str()).unwrap()) != get_value_type(&value_arr[2]) {
+                return Err(Box::new(SimulatedAnnealingError::BoundParameterDifferentTypes(key.clone(), String::from("4"), get_numeric_type_string(gt_parameters.get(&key.clone()).unwrap()))));
+            }
+            else if get_value_type(find_key_in_hash_map(&mut gt_parameters, key.as_str()).unwrap()) != get_value_type(&value_arr[3]) {
+                return Err(Box::new(SimulatedAnnealingError::BoundParameterDifferentTypes(key.clone(), String::from("4"), get_numeric_type_string(gt_parameters.get(&key.clone()).unwrap()))));
+            }      
+
+            new_parameter_bounds.insert(key.clone(), (value_arr[0].clone(), value_arr[1].clone(), value_arr[2].clone(), Some(value_arr[3].clone())));
+            */
         }
 
+        /*
         if !are_bounds_valid(&value_arr[1], &value_arr[2]) {
             return Err(Box::new(SimulatedAnnealingError::BoundParameterInvalidBounds(key.clone())));
         }
-
-        new_parameter_bounds.insert(key.clone(), (value_arr[0].clone(), value_arr[1].clone(), value_arr[2].clone()));
+        */
     }
 
-    let new_max_iterations: i64 = tuning_settings_map.get("max_iterations").ok_or(SimulatedAnnealingError::NoMaxIterationsField())?
-                                                     .as_i64().ok_or(SimulatedAnnealingError::MaxIterationsNotValidInteger())?;
-    if new_max_iterations <= 0 {
+    //println!("{:?}", new_parameter_bounds.clone());
+
+    let new_max_iterations: u64 = tuning_settings_map.get("max_iterations").ok_or(SimulatedAnnealingError::NoMaxIterationsField())?
+                                                     .as_u64().ok_or(SimulatedAnnealingError::MaxIterationsNotValidInteger())?;
+    if new_max_iterations == 0 {
         return Err(Box::new(SimulatedAnnealingError::MaxIterationsNotValidInteger()));
     }
     sa_config.max_iterations = Some(new_max_iterations as usize);
-
-    //println!("{:?}", gt_parameters);
-    //println!("{:?}", new_parameter_bounds);
 
     sa_config.parameter_bounds = Some(new_parameter_bounds);
     tuning_config.tuning_type = Some(TuneType::SimulatedAnnealing(sa_config));

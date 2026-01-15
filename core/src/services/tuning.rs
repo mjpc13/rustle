@@ -518,6 +518,7 @@ impl TuningService {
     }    
 
     async fn run_simulated_annealing(&mut self, tuning_test: &TuningConfig, sa_config: &mut SimulatedAnnealingConfig) -> Result<(), Box<dyn std::error::Error>> {
+        //println!("Started simulated annealing function");
 
         if let Some(start) = tuning_test.dataset_settings.0 {
             self.iteration_service.config.rustle.dataset_start = start;
@@ -526,57 +527,6 @@ impl TuningService {
         if let Some(duration) = tuning_test.dataset_settings.1 {
             self.iteration_service.config.rustle.dataset_duration = duration;
         }
-
-        //let sa_config = tuning_test.tuning_type.clone().unwrap().as_simulated_annealing_as_mut().unwrap();
-        //let initial_parameters: HashMap<String, Value> = HashMap::new();
-        /*
-        let delta_max = 5;
-
-        let mut best_x = 100.0;
-        let mut current_x = 20.0;
-
-        let mut best_y = 100.0;
-        let mut current_y = 20.0;
-
-        let mut new_x = 0.0;
-        let mut new_y = 0.0;
-
-        for i in 0..100 {
-            new_x = integer_perturbation(current_x as i64, sa_config.current_temp.clone(), delta_max, -7, 7) as f64;
-            new_y = gaussian_perturbation(current_y, 0.5);
-
-            println!("x = {}, y = {}", new_x.clone(), new_y.clone());
-
-            if accept_new_solution(&current_x, &current_y, &new_x, &new_y, &sa_config.current_temp) {
-                sa_config.stall_iter_accepted = 0;
-                current_x = new_x;
-                current_y = new_y; 
-                if cost_function(&current_x, &current_y) < cost_function(&best_x, &best_y) {
-                    sa_config.stall_iter_best = 0;
-                    best_x = current_x;
-                    best_y = current_y;
-                }
-                else {
-                    sa_config.stall_iter_best += 1;
-                    if sa_config.stall_iter_best > sa_config.stall_iter_best_limit {
-                        break;
-                    }
-                }
-            }
-            else {
-                sa_config.stall_iter_accepted += 1;
-                if sa_config.stall_iter_accepted > sa_config.stall_iter_accepted_limit {
-                    break;
-                }
-            }
-
-            sa_config.update_temperature();
-            sa_config.update_variables();
-
-        }
-
-        println!("Final solution: f({},{}) -> {}", best_x, best_y, cost_function(&best_x, &best_y));
-        */
 
         let mut test_def = TestDefinition{
             id: None,
@@ -675,12 +625,11 @@ impl TuningService {
 
         let mut iter_last_reset = 0;
 
+        //println!("Gonna start the Simulated Annealing algorithm");
         for i in 0..sa_config.max_iterations.clone().unwrap() {
             sa_config.update_slam_parameters(&mut current_parameters, &sa_config.parameter_bounds);
             self.params_service.update_params(algo.current_params.clone(), &current_parameters).await?;
             proposed_params = current_parameters.clone();
-
-            //println!("point_filter_num: {}", proposed_params.get("point_filter_num").unwrap());
 
             let iter_job = self.iteration_service.run(list_iterations[i].clone(), Some(msg_tx.clone())).await;
 
@@ -750,7 +699,6 @@ impl TuningService {
                     else {
                         sa_config.stall_iter_accepted += 1;
                         sa_config.reanneal_iter_accepted += 1;
-                        //print!("stall_iter_accepted: {}/{}", sa_config.stall_iter_accepted, sa_config.stall_iter_accepted_limit);
                         if sa_config.stall_iter_accepted > sa_config.stall_iter_accepted_limit {
                             break;
                         }
@@ -770,15 +718,6 @@ impl TuningService {
             warn!("reanneal_iter_best: {}/{}", sa_config.reanneal_iter_best, sa_config.reanneal_best);
 
             sa_config.reanneal(i, &mut iter_last_reset);
-
-            /*
-            if (sa_config.current_temp == sa_config.initial_temp && (i == iter_last_reset + 1 && iter_last_reset != 0)){
-                sa_config.temp_iter += 1;
-                sa_config.reanneal_iter_fixed += 1; 
-                sa_config.update_temperature();
-                continue;
-            }
-            */
 
             if sa_config.current_temp == sa_config.initial_temp {
                 if i == 0 {

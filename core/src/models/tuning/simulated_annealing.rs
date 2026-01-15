@@ -55,7 +55,7 @@ pub struct SimulatedAnnealingConfig {
     /// current temperature
     pub current_temp: f64,
 
-    pub parameter_bounds: Option<HashMap<String, (Value, Value, Value)>>, // (starting value, lower bound, upper bound)
+    pub parameter_bounds: Option<HashMap<String, (Value, Value, Value, Value, Option<Value>)>>, // (starting value, lower bound, upper bound)
 
     pub max_iterations: Option<usize>,
 
@@ -159,24 +159,28 @@ impl SimulatedAnnealingConfig {
         }
     }
 
-    pub fn update_slam_parameters(&self, current_params: &mut HashMap<String, Value>, params_bounds: &Option<HashMap<String, (Value, Value, Value)>>) {
+    pub fn update_slam_parameters(&self, current_params: &mut HashMap<String, Value>, params_bounds: &Option<HashMap<String, (Value, Value, Value, Value, Option<Value>)>>) {
         if let Some(bounds_map) = params_bounds {
             for (key, values) in bounds_map.iter() {
-                let bounds: (Value, Value, Value) = (values.0.clone(), values.1.clone(), values.2.clone());
+                //println!("Gonna update \"{}\"", key.clone());
+                let bounds: (Value, Value, Value, Value, Option<Value>) = (values.0.clone(), values.1.clone(), values.2.clone(), values.3.clone(), values.4.clone());
 
                 if bounds.0.is_f64() {
                     let old_value = current_params.get(key).unwrap().as_f64().unwrap();
-                    let new_value: f64 = self.gaussian_perturbation(old_value, (bounds.1.as_f64().unwrap(), bounds.2.as_f64().unwrap()));
-                    current_params.insert(key.clone(), Value::from(new_value));
-                }
-                else if bounds.0.is_i64() {
-                    let old_value: i64 = current_params.get(key).unwrap().as_i64().unwrap();
-                    let new_value: i64 = self.integer_perturbation(old_value, (bounds.1.as_i64().unwrap(), bounds.2.as_i64().unwrap()));
+                    let new_value: f64 = self.gaussian_perturbation(old_value, (bounds.1.as_f64().unwrap(), bounds.2.as_f64().unwrap()), 
+                                                                                bounds.3.as_f64().unwrap(), bounds.4.unwrap().as_f64().unwrap());
                     current_params.insert(key.clone(), Value::from(new_value));
                 }
                 else if bounds.0.is_u64() {
                     let old_value: u64 = current_params.get(key).unwrap().as_u64().unwrap();
-                    let new_value: u64 = self.integer_perturbation(old_value as i64, (bounds.1.as_u64().unwrap() as i64, bounds.2.as_u64().unwrap() as i64)) as u64;
+                    let new_value: u64 = self.integer_perturbation(old_value as i64, (bounds.1.as_u64().unwrap() as i64, bounds.2.as_u64().unwrap() as i64), 
+                                                                   bounds.3.as_u64().unwrap() as i64) as u64;
+                    current_params.insert(key.clone(), Value::from(new_value));
+                }
+                else if bounds.0.is_i64() {
+                    let old_value: i64 = current_params.get(key).unwrap().as_i64().unwrap();
+                    let new_value: i64 = self.integer_perturbation(old_value, (bounds.1.as_i64().unwrap(), bounds.2.as_i64().unwrap()), 
+                                                                   bounds.3.as_u64().unwrap() as i64);
                     current_params.insert(key.clone(), Value::from(new_value));
                 }
             }
@@ -215,15 +219,16 @@ impl SimulatedAnnealingConfig {
         initial_params
     }
 
-    pub fn gaussian_perturbation(&self, x: f64, bounds: (f64, f64)) -> f64 {
-        let normal = Normal::new(self.float_mean, self.float_std_dev).unwrap();
+    pub fn gaussian_perturbation(&self, x: f64, bounds: (f64, f64), mean: f64, std_dev: f64) -> f64 {
+        //let normal = Normal::new(self.float_mean, self.float_std_dev).unwrap();
+        let normal = Normal::new(mean, std_dev).unwrap();
         let mut rng = thread_rng();
 
         (x + normal.sample(&mut rng)).clamp(bounds.0, bounds.1)
     }
 
-    pub fn integer_perturbation(&self, x: i64, bounds: (i64, i64)) -> i64 {
-        let max_step = (self.current_temp * (self.integer_delta_max as f64)).ceil() as i64;
+    pub fn integer_perturbation(&self, x: i64, bounds: (i64, i64), delta_max: i64) -> i64 {
+        let max_step = (self.current_temp * (delta_max as f64)).ceil() as i64;
 
         if max_step == 0 {
             return x;

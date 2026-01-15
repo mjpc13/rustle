@@ -319,17 +319,20 @@ pub enum SimulatedAnnealingError {
     #[error("The algorithm \"{0}\" does not have a parameter called \"{1}\"")]
     BoundKeyNotFound(String, String),
 
-    #[error("The \"{0}\" parameter bound must be an array")]
-    BoundNotArray(String),
+    #[error("The \"{0}\" parameter bound must be a json object")]
+    BoundNotObject(String),
 
-    #[error("The \"{0}\" parameter bound must be an array of 3 elements")]
-    BoundArrayWrongLength(String),
+    #[error("The \"{0}\" float parameter bound must be a Hashmap with 5 key-value pairs(initial value, lower bound, upper bound, mean, standard_deviation)")]
+    FloatArrayWrongLength(String),
+
+    #[error("The \"{0}\" integer parameter bound must be a Hashmap with 4 key-value pairs(initial value, lower bound, upper bound, max_step_size)")]
+    IntBoundArrayWrongLength(String),
 
     #[error("The \"{0}\" parameter is of the wrong type. Currently, only numeric types(i64, u64 and f64. arrays not allowed) are allowed")]
     BoundParameterForbiddenType(String),
 
-    #[error("The \"{0}\" parameter array must contain 3 values of type {1}")]
-    BoundParameterDifferentTypes(String, String),
+    #[error("The \"{0}\" parameter array must contain {1} values of type {2}")]
+    BoundParameterDifferentTypes(String, String, String),
 
     #[error("The \"{0}\" parameter's lower bound must be lower than its upper bound")]
     BoundParameterInvalidBounds(String),
@@ -390,6 +393,30 @@ pub enum SimulatedAnnealingError {
 
     #[error("The field \"{0}\" must be a positive integer(u64)")]
     InvalidHaltingCondition(String),
+
+    #[error("No field called \"initial_value\" was found inside \"{0}\"")]
+    BoundsNoInitialValue(String),
+
+    #[error("No \"lower_bound\" field was found inside \"{0}\"")]
+    BoundsNoLowerBound(String),
+
+    #[error("No \"upper_bound\" field was found inside \"{0}\"")]
+    BoundsNoUpperBound(String),
+
+    #[error("Inside \"{0}\", lower bound cannot be higher than upper bound")]
+    BoundsWrongBounds(String),
+
+    #[error("No field called \"mean\" was found inside \"{0}\"")]
+    BoundsNoMean(String),
+
+    #[error("No field called \"std_dev\" was found inside \"{0}\"")]
+    BoundsNoStdDev(String),
+
+    #[error("No field called \"delta_max\" was found inside \"{0}\"")]
+    BoundsNoDeltaMax(String),
+
+    #[error("The field \"{0}\" inside \"{1}\" must be of type {2}")]
+    BoundsWrongTypeField(String, String, String),
 }
 
 #[derive(Debug, Error)]
