@@ -10,6 +10,7 @@ use rand_distr::{Normal, Distribution, Uniform};
 use serde_json::{Value, json, Map};
 
 use crate::models::slam_config::SLAMConfig;
+use crate::models::tuning_config::find_key_in_hash_map;
 
 #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
 pub struct SimulatedAnnealingConfig {
@@ -136,52 +137,31 @@ impl SimulatedAnnealingConfig {
         }
     }
 
-    pub fn update_variables(&mut self, accepted: bool, new_best: bool) {
-        /*
-        (self.stall_iter_accepted, self.reanneal_iter_accepted) = if accepted {
-            (0, 0)
-        } else {
-            (
-                self.stall_iter_accepted + 1,
-                self.reanneal_iter_accepted + 1,
-            )
-        };
-
-        (self.stall_iter_best, self.reanneal_iter_best) = if new_best {
-            (0, 0)
-        } else {
-            (self.stall_iter_best + 1, self.reanneal_iter_best + 1)
-        };
-        */
-
-        if accepted {
-            
-        }
-    }
-
     pub fn update_slam_parameters(&self, current_params: &mut HashMap<String, Value>, params_bounds: &Option<HashMap<String, (Value, Value, Value, Value, Option<Value>)>>) {
         if let Some(bounds_map) = params_bounds {
             for (key, values) in bounds_map.iter() {
-                //println!("Gonna update \"{}\"", key.clone());
                 let bounds: (Value, Value, Value, Value, Option<Value>) = (values.0.clone(), values.1.clone(), values.2.clone(), values.3.clone(), values.4.clone());
 
                 if bounds.0.is_f64() {
-                    let old_value = current_params.get(key).unwrap().as_f64().unwrap();
-                    let new_value: f64 = self.gaussian_perturbation(old_value, (bounds.1.as_f64().unwrap(), bounds.2.as_f64().unwrap()), 
+                    let mut current_value = find_key_in_hash_map(current_params, key).unwrap();
+                    let new_value: f64 = self.gaussian_perturbation(current_value.clone().as_f64().unwrap(), (bounds.1.as_f64().unwrap(), bounds.2.as_f64().unwrap()), 
                                                                                 bounds.3.as_f64().unwrap(), bounds.4.unwrap().as_f64().unwrap());
-                    current_params.insert(key.clone(), Value::from(new_value));
+
+                    *current_value = Value::from(new_value);
                 }
                 else if bounds.0.is_u64() {
-                    let old_value: u64 = current_params.get(key).unwrap().as_u64().unwrap();
-                    let new_value: u64 = self.integer_perturbation(old_value as i64, (bounds.1.as_u64().unwrap() as i64, bounds.2.as_u64().unwrap() as i64), 
+                    let mut current_value = find_key_in_hash_map(current_params, key).unwrap();
+                    let new_value: u64 = self.integer_perturbation(current_value.as_u64().unwrap() as i64, (bounds.1.as_u64().unwrap() as i64, bounds.2.as_u64().unwrap() as i64), 
                                                                    bounds.3.as_u64().unwrap() as i64) as u64;
-                    current_params.insert(key.clone(), Value::from(new_value));
+
+                    *current_value = Value::from(new_value);
                 }
                 else if bounds.0.is_i64() {
-                    let old_value: i64 = current_params.get(key).unwrap().as_i64().unwrap();
-                    let new_value: i64 = self.integer_perturbation(old_value, (bounds.1.as_i64().unwrap(), bounds.2.as_i64().unwrap()), 
+                    let mut current_value = find_key_in_hash_map(current_params, key).unwrap();
+                    let new_value: i64 = self.integer_perturbation(current_value.as_i64().unwrap(), (bounds.1.as_i64().unwrap(), bounds.2.as_i64().unwrap()), 
                                                                    bounds.3.as_u64().unwrap() as i64);
-                    current_params.insert(key.clone(), Value::from(new_value));
+
+                    *current_value = Value::from(new_value);
                 }
             }
         }
@@ -206,13 +186,13 @@ impl SimulatedAnnealingConfig {
         }
     }
 
-    /// if parameteters are specified in `parameter_bounds`, adjust their initial values
     pub fn get_initial_config(&self, params: &HashMap<String, Value>) -> HashMap<String, Value> {
         let mut initial_params = params.clone();
 
         if let Some(bounds_map) = self.parameter_bounds.clone() {
             for (key, values) in bounds_map.iter() {
-                initial_params.insert(key.clone(), values.0.clone());
+                let mut new_param = find_key_in_hash_map(&mut initial_params, key).unwrap();
+                *new_param = Value::from(values.0.clone());
             }   
         }
 

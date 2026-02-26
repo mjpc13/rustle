@@ -42,6 +42,7 @@ use csv::Writer;
 
 use std::time::{Duration, Instant};
 
+use crate::services::tuning::tuning_config::find_key_in_hash_map;
 
 pub struct TuningService {
     pub repo: TuningRepo,
@@ -518,7 +519,6 @@ impl TuningService {
     }    
 
     async fn run_simulated_annealing(&mut self, tuning_test: &TuningConfig, sa_config: &mut SimulatedAnnealingConfig) -> Result<(), Box<dyn std::error::Error>> {
-        //println!("Started simulated annealing function");
 
         if let Some(start) = tuning_test.dataset_settings.0 {
             self.iteration_service.config.rustle.dataset_start = start;
@@ -625,7 +625,6 @@ impl TuningService {
 
         let mut iter_last_reset = 0;
 
-        //println!("Gonna start the Simulated Annealing algorithm");
         for i in 0..sa_config.max_iterations.clone().unwrap() {
             sa_config.update_slam_parameters(&mut current_parameters, &sa_config.parameter_bounds);
             self.params_service.update_params(algo.current_params.clone(), &current_parameters).await?;
@@ -652,7 +651,7 @@ impl TuningService {
                             current_iter_data.push(current_iter_metrics.0.to_string());
                             current_iter_data.push(sa_config.current_temp.to_string());
                             for key in &csv_header_keys {
-                                current_iter_data.push(current_parameters.get(key).unwrap().to_string());
+                                current_iter_data.push(find_key_in_hash_map(&mut current_parameters, key).unwrap().to_string());
                             }
                             current_iter_data.push(current_iter_metrics.1.to_string());
                             current_iter_data.push(current_iter_metrics.2.to_string());
