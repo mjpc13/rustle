@@ -46,7 +46,7 @@ pub struct TestDefinition {
     pub id: Option<Thing>,
     pub name: String,
     pub workers: u8,
-    pub iterations: u8,
+    pub iterations: u64,
     pub dataset_name: String,
     pub algo_list: Vec<String>,
     #[serde(rename = "test_type")]

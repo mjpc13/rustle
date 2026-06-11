@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use log::warn;
 use surrealdb::{Surreal, engine::local::Db, sql::Thing};
 use tokio::sync::Mutex;
 use crate::{models::{ros::odometry::Odometry}, services::DbError};

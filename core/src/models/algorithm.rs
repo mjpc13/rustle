@@ -1,7 +1,15 @@
+use std::fmt::Error;
 use std::hash::{DefaultHasher, Hash, Hasher};
 
 use serde::{Serialize, Deserialize};
 use surrealdb::sql::Thing;
+
+// new imports
+use std::collections::HashMap;
+use serde_json::Value;
+use chrono::{DateTime, Utc};
+use std::fs::{File, self};
+use std::io::{BufReader, Write, BufRead};
 
 #[derive(Debug, Clone, Serialize, Deserialize,Eq, Hash, PartialEq)]
 pub struct Algorithm {
@@ -9,7 +17,8 @@ pub struct Algorithm {
     pub name: String,
     pub image_name: String,
     pub version: String,
-    pub parameters: String,    // Change to YAML
+    pub current_params: Option<Thing>, 
+    pub param_list: Vec<Thing>,
     pub odom_topics: Vec<String>
 }
 
@@ -20,13 +29,15 @@ impl Algorithm {
 
         //Logic to parse file to a YAML object!
         //YAML_obj
+        //let config = parse_yaml(&parameters).unwrap();
 
         Self {
             id: None,
             name,
             image_name,
             version,
-            parameters,
+            current_params: None,
+            param_list: Vec::new(),
             odom_topics
         }
     }

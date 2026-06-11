@@ -1,7 +1,7 @@
 use std::{collections::{BTreeMap, HashMap}, fs, path::Path};
 
 use crate::{
-    db::AlgorithmRunRepo, models::{algorithm_run::AlgorithmRun, metric::{Metric, StatisticalMetrics, StatisticalMetricsStamped}, metrics::{pose_error::{APE, RPE}, ContainerStats, CpuMetrics}, Algorithm, Iteration, TestDefinition, TestType}, services::error::ProcessingError, utils::{config::Config, plots::{algorithm_ape_line_chart, algorithm_cpu_load_chart, algorithm_memory_usage_chart, algorithm_rpe_line_chart}}
+    db::AlgorithmRunRepo, models::{algorithm_run::AlgorithmRun, metric::{Metric, StatisticalMetrics, StatisticalMetricsStamped}, metrics::{pose_error::{APE, RPE}, ContainerStats, CpuMetrics}, Algorithm, Iteration, TestDefinition, TestType}, services::error::ProcessingError, utils::{config::Config, plots::{algorithm_ape_line_chart, algorithm_cpu_load_chart, algorithm_memory_usage_chart, algorithm_plot, algorithm_rpe_line_chart, GraphType}}
 };
 
 use charming::Chart;
@@ -12,6 +12,7 @@ use surrealdb::sql::Thing;
 
 use super::{error::{PlotError, RunError}, DbError, IterationService};
 
+#[derive(Clone)]
 pub struct AlgorithmRunService {
     repo: AlgorithmRunRepo,
     iter_service: IterationService
@@ -25,7 +26,7 @@ impl AlgorithmRunService {
     pub async fn create_run(
         &self,
         bag_speed: f32,
-        num_iterations: u8,
+        num_iterations: u64,
         test_execution_id: &Thing,
         algorithm_id: &Thing, 
         test_type: TestType
@@ -50,7 +51,9 @@ impl AlgorithmRunService {
                 },
                 None => warn!("ID of algorithm_run was empty")
             };
+            //println!("created iter {}", i.clone());
         }
+        
         
         Ok(run)
     }
@@ -72,7 +75,6 @@ impl AlgorithmRunService {
         let iteration_list = self.repo.get_iterations(run).await;
         iteration_list
     }
-
 
     pub async fn plot(&self, run: &AlgorithmRun, path: &str, overwrite: bool, format:  &str, config: &Config) -> Result<HashMap<String, Chart>, PlotError>{
 
@@ -97,12 +99,13 @@ impl AlgorithmRunService {
                 return Err(PlotError::FileExists(filepath));
             } else {
                 let chart = match f {
-                    "aggregated_cpu_load" => self.plot_cpu_load(&iterations, config).await,
-                    "aggregated_memory_usage" => self.plot_memory_usage(&iterations, config).await,
-                    "aggregated_ape" => self.plot_ape(&iterations, &run.test_type, config).await,
-                    "aggregated_rpe" => self.plot_rpe(&iterations, &run.test_type, config).await,
-                    &_ => todo!("This should be fine")
+                    "aggregated_cpu_load" => algorithm_plot(&run.cpu_load_list, config, GraphType::CPU),
+                    "aggregated_memory_usage" => algorithm_plot(&run.mem_usage_list, config, GraphType::Memory),
+                    "aggregated_ape" => algorithm_plot(&run.ape_list, config, GraphType::APE),
+                    "aggregated_rpe" => algorithm_plot(&run.rpe_list, config, GraphType::RPE),
+                    &_ => todo!("")
                 };
+
 
                 if let Ok(c) = chart {
                     hash.insert(filepath, c);
@@ -117,6 +120,14 @@ impl AlgorithmRunService {
 
     async fn plot_ape(&self, iterations: &Vec<Iteration>, test_def: &TestType, config: &Config) -> Result<Chart, PlotError>{
 
+        let mut algo_ape: Vec<Vec<APE>> = Vec::new();
+
+        for it in iterations{
+            match self.iter_service.get_ape(it).await {
+                Ok(ape_vec) => algo_ape.push(ape_vec),
+                Err(_) => warn!("Iteration {} of container {} does not have APE values", it.iteration_num, it.container.image_name),
+            }
+        }
         let mut algo_ape: Vec<Vec<APE>> = Vec::new();
 
         for it in iterations{
@@ -140,31 +151,28 @@ impl AlgorithmRunService {
                 Err(_) => warn!("Iteration {} of container {} does not have APE values", it.iteration_num, it.container.image_name),
             }
         }
+        let mut algo_rpe: Vec<Vec<RPE>> = Vec::new();
+
+        for it in iterations{
+            match self.iter_service.get_rpe(it).await {
+                Ok(rpe_vec) => algo_rpe.push(rpe_vec),
+                Err(_) => warn!("Iteration {} of container {} does not have APE values", it.iteration_num, it.container.image_name),
+            }
+        }
 
         algorithm_rpe_line_chart(algo_rpe, test_def,config)
     }
 
-    async fn plot_cpu_load(&self, iterations: &Vec<Iteration>, config: &Config) -> Result<Chart, PlotError>{
+    async fn plot_cpu_load(&self, iterations: &Vec<StatisticalMetricsStamped>, config: &Config) -> Result<Chart, PlotError>{
 
-        let algo_stats: Vec<Vec<ContainerStats>> = join_all(
-            iterations.iter().map(|iter| async {
-                self.iter_service.get_stats(iter).await.unwrap()
-            })
-        ).await;
-
-        algorithm_cpu_load_chart(algo_stats, config)
+        algorithm_cpu_load_chart(iterations, config)
 
     }
 
-    async fn plot_memory_usage(&self, iterations: &Vec<Iteration>, config: &Config) -> Result<Chart, PlotError>{
+    async fn plot_memory_usage(&self, iterations: &Vec<StatisticalMetricsStamped>, config: &Config) -> Result<Chart, PlotError>{
 
-        let algo_stats: Vec<Vec<ContainerStats>> = join_all(
-            iterations.iter().map(|iter| async {
-                self.iter_service.get_stats(iter).await.unwrap()
-            })
-        ).await;
 
-        algorithm_memory_usage_chart(algo_stats, config)
+        algorithm_memory_usage_chart(iterations, config)
     }
 
     async fn compute_buckets(&self, algo_run: &AlgorithmRun) -> Result<(), RunError> {

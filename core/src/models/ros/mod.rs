@@ -5,6 +5,7 @@ pub mod pose;
 pub mod twist;
 pub mod path;
 pub mod ros_msg;
+pub mod tum;
 
 // Re-export repositories
 pub use self::{
@@ -13,4 +14,5 @@ pub use self::{
     twist::Twist,
     pose::{Pose, PoseStamped},
     path::Path,
+    tum::Tum,
 };

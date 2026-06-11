@@ -4,7 +4,7 @@ use log::{warn};
 // db/iteration.rs
 use surrealdb::{Surreal, engine::local::Db, sql::Thing};
 use tokio::sync::Mutex;
-use crate::{models::{iteration::Iteration, metric::Metric, metrics::pose_error::{APE, RPE}, Algorithm, AlgorithmRun, Dataset, Odometry, TestDefinition, TestExecution}, services::DbError};
+use crate::{models::{iteration::Iteration, metric::Metric, metrics::pose_error::{APE, RPE}, slam_config::SLAMConfig, Algorithm, AlgorithmRun, Dataset, Odometry, TestDefinition, TestExecution}, services::DbError};
 
 #[derive(Clone)]
 pub struct IterationRepo {
@@ -361,9 +361,6 @@ impl IterationRepo {
             ")
             .bind(("iteration_id", iteration_id.clone()))
             .await.unwrap();
-
-
-
 
         // Handle nested array structure from graph query
         let nested_odoms_min: Vec<Vec<Odometry>> = result_min.take("odometry").unwrap();

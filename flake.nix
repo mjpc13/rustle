@@ -23,10 +23,13 @@
     in {
       devShells.${system}.default = pkgs.mkShell {
         buildInputs = with pkgs; [
-          rustup
+          # rustup
+          rustc
+          cargo
           rust-analyzer # LSP Server
           rustfmt       # Formatter
           clippy        # Linter
+          samply
           clang
           surrealdb     # Database
           pkg-config
@@ -86,7 +89,7 @@
           export LD_LIBRARY_PATH="${pkgs.zlib}/lib:${pkgs.gcc.cc.lib}/lib:${pkgs.stdenv.cc.cc.lib}/lib:$LD_LIBRARY_PATH"
           python -m venv .venv
           source .venv/bin/activate
-          pip install evo
+          pip install evo rosbags
         '';
       };
     };

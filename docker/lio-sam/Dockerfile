@@ -17,6 +17,7 @@ RUN apt-get update \
   ros-$ROS_DISTRO-robot-state-publisher \
   ros-$ROS_DISTRO-xacro \
   ros-$ROS_DISTRO-topic-tools \
+  ros-${ROS_DISTRO}-rosbridge-server \
   python-catkin-tools \
   && rm -rf /var/lib/apt/lists/* \
   && mkdir -p /rustle/catkin_ws/src
@@ -56,15 +57,18 @@ RUN sed -i 's/lio_sam/lio_sam_speed/g'   src/LIO-SAM_speed/src/mapOptmization.cp
 RUN catkin config --extend /opt/ros/$ROS_DISTRO
 
 RUN git clone --depth 1 --recurse-submodules https://github.com/mjpc13/rustle-ros.git  src/rustle-ros
+RUN catkin config --extend /opt/ros/$ROS_DISTRO
+
+RUN git clone --depth 1 --recurse-submodules https://github.com/mjpc13/rustle-ros.git  src/rustle-ros
 
 #Copy custom launch file into our package
+COPY ./rustle.launch /rustle/catkin_ws/src/rustle-ros/launch/rustle.launch
 COPY ./rustle.launch /rustle/catkin_ws/src/rustle-ros/launch/rustle.launch
 
 #Compile packages
 RUN catkin build -s
 
 RUN chmod +x /rustle/catkin_ws/src/rustle-ros/scripts/cut_manager.py /rustle/catkin_ws/src/rustle-ros/scripts/drop_manager.py 
-
 
 # source catkin workspace
 RUN echo "source /rustle/catkin_ws/devel/setup.bash" >> /root/.profile

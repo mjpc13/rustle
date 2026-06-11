@@ -1,9 +1,11 @@
 use chrono::Utc;
+use log::warn;
+use nalgebra::{Point3, Quaternion};
 use serde::{Deserialize, Serialize};
 use yaml_rust2::Yaml;
 
 
-use crate::services::error::RosError;
+use crate::{models::ros::Tum, services::error::RosError};
 
 use super::{Header, Pose, PoseStamped, Twist, Path, Odometry};
 
@@ -14,38 +16,31 @@ pub enum RosMsg{
     PoseStamped(PoseStamped),
     Twist(Twist),
     Path(Path),
-    Odometry(Odometry)
+    Odometry(Odometry),
+    Tum(Tum)
 }
 
 pub trait Ros1: Sized{
     fn empty() -> Self;
     fn from_yaml(yaml: Yaml) -> Result<Self, RosError>;
+    fn from_json(value: &serde_json::Value) -> Result<Self, RosError>;
 }
 
 impl RosMsg{
     pub fn new(top_fields: Vec<&str>) -> Result<RosMsg, RosError>{
-        match top_fields[..]{
-            [
-                "position",
-                "orientation"
-            ] => Ok(RosMsg::Pose(Pose::empty())),
-            [
-                "header",
-                "pose"
-            ] => Ok(RosMsg::PoseStamped(PoseStamped::empty())),
-            [
-                "header",
-                "poses",
-            ] => Ok(RosMsg::Path(Path::empty())),
-            [
-                "header",
-                "child_frame_id",
-                "pose",
-                "twist"
-            ] => Ok(RosMsg::Odometry(Odometry::empty())),
 
-            _ => return Err(RosError::ParseError{from: format!("{:?}",top_fields).into(), to: "Header.timestamp".into()})
+        if top_fields.contains(&"twist"){
+            return Ok(RosMsg::Odometry(Odometry::empty()));
+        } else if top_fields.contains(&"orientation") && top_fields.contains(&"position")  {
+            return Ok(RosMsg::Pose(Pose::empty()));
+        } else if top_fields.contains(&"poses")  {
+            return Ok(RosMsg::Path(Path::empty()));
+        } else if top_fields.contains(&"pose") {
+            return Ok(RosMsg::PoseStamped(PoseStamped::empty()))
+        } else {
+            return Err(RosError::ParseError{from: format!("{:?}",top_fields).into(), to: "Header.timestamp".into()})
         }
+
     }
 
     pub fn as_odometry(self) -> Result<Odometry, RosError>{
@@ -79,6 +74,24 @@ impl RosMsg{
                 )
             },
             RosMsg::Odometry(o) => Ok(o),
+            RosMsg::Tum(t) => Ok(
+                Odometry { 
+                    id: None, 
+                    header: Header { 
+                        seq: 0, 
+                        time: t.time, 
+                        frame_id: None
+                    }, 
+                    child_frame_id: None, 
+                    pose: Some( Pose{
+                        position: Point3::new(t.x, t.y, t.z),
+                        orientation: Quaternion::new(t.qw, t.qx, t.qy, t.qz),
+                        covariance: None,
+                    }), 
+                    twist: None, 
+                    created_at: Utc::now()
+                }
+            ),
         };
         odom
 
@@ -92,7 +105,13 @@ impl RosMsg{
             RosMsg::Twist(_twist) => Err(RosError::MissingHeader { rostype: "Twist".into() }),
             RosMsg::Path(path) => Ok(path.header),
             RosMsg::Odometry(odometry) => Ok(odometry.header),
-
+            RosMsg::Tum(tum) => Ok(
+                Header { 
+                        seq: 0, 
+                        time: tum.time, 
+                        frame_id: None
+                    }
+            ),
         }
     }
 
@@ -128,6 +147,43 @@ impl RosMsg{
                     Odometry::from_yaml(yaml)?
                 )
             ),
+            RosMsg::Tum(_) => Ok(
+                RosMsg::Tum(Tum::from_yaml(yaml)?)
+            )
         }
     }
+
+
+
+    pub fn from_json(&self, value: &serde_json::Value) -> Result<RosMsg, RosError> {
+        match self {
+            RosMsg::Header(_) => Ok(RosMsg::Header(
+                Header::from_json(value)?
+            )),
+            RosMsg::Pose(_) => Ok(RosMsg::Pose(
+                Pose::from_json(value)?
+            )),
+            RosMsg::PoseStamped(_) => Ok(RosMsg::PoseStamped(
+                PoseStamped::from_json(value)?
+            )),
+            RosMsg::Twist(_) => Ok(RosMsg::Twist(
+                Twist::from_json(value)?
+            )),
+            RosMsg::Path(_) => Ok(RosMsg::Path(
+                Path::from_json(value)?
+            )),
+            RosMsg::Odometry(_) => Ok(RosMsg::Odometry(
+                Odometry::from_json(value)?
+            )),
+            RosMsg::Tum(_) => Ok(
+                RosMsg::Tum(Tum::from_json(value)?)
+            )
+        }
+    }
+
+
+
+
+
+
 }

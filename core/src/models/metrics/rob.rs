@@ -9,7 +9,7 @@ use super::metric::StatisticalMetrics;
 
 
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct RobustnessMetric {
     pub sev: f32,                       // Severety of the cut//drop.
     pub adp: DegradationMetric,                      // Absolute Degradation;
@@ -18,13 +18,13 @@ pub struct RobustnessMetric {
     pub rrt: RecoveryTime,                      // Relative Recovery Time;
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct DegradationMetric{
     pub metric: StatisticalMetrics,
     pub values_list: Vec<(f32,f32)>, //(timestamp, degradation vs the baseline)
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct RecoveryTime{
     pub hash_list_period: HashMap<String, Vec<Option<f32>>>,
     pub hash_list_sensor: HashMap<String, Option<StatisticalMetrics>>,

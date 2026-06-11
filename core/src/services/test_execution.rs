@@ -11,7 +11,7 @@ use tokio::sync::Mutex;
 use yaml_rust2::yaml::Hash;
 
 use crate::db::metric;
-use crate::models::metric::{Metric, StatisticalMetrics, MetricType};
+use crate::models::metric::{Metric, MetricType, StatisticalMetrics, StatisticalMetricsStamped};
 use crate::models::metrics::pose_error::{APE, RPE};
 use crate::models::metrics::tes::TemporalEfficiencyMetric;
 use crate::models::metrics::{PoseErrorMetrics, RobustnessMetric};
@@ -21,15 +21,16 @@ use crate::models::{AlgorithmRun, ProgressMessage};
 use crate::services::DbError;
 use crate::utils::config::Config;
 
-use crate::utils::plots::{test_adp_chart, test_ape_line_chart, test_memory_usage_line_chart, test_rdp_chart, test_rpe_line_chart};
+use crate::utils::plots::{GraphType, test_adp_chart, test_ape_line_chart, test_memory_usage_line_chart, test_plot, test_rdp_chart, test_rpe_line_chart};
 use crate::{db::{TestExecutionRepo}, models::{metrics::ContainerStats, test_definitions::{test_definition::{TestDefinition, TestType}, CutParams, DropParams}, test_execution::{TestExecution, TestExecutionStatus}, Algorithm, Iteration, SpeedTestParams}, services::error::ProcessingError, utils::plots::test_cpu_load_line_chart
 };
 
 use super::{error::PlotError, AlgorithmRunService, IterationService};
 use surrealdb::sql::Thing;
 
+#[derive(Clone)]
 pub struct TestExecutionService {
-    execution_repo: TestExecutionRepo,
+    pub execution_repo: TestExecutionRepo,
     algorithm_run_service: AlgorithmRunService,
     iteration_service: IterationService,
 }
@@ -491,19 +492,19 @@ impl TestExecutionService {
             } else {
                 let chart = match f {
                     "test_cpu_load" => {
-                        let chart = self.plot_cpu_load(&algo_run_list, config).await;
+                        let chart = self.plot_tests(&algo_run_list, config, GraphType::CPU).await;
                         hash.insert(filepath, chart?);
                     },
                     "test_memory_usage" => {
-                        let chart = self.plot_memory_usage(&algo_run_list, config).await;
+                        let chart = self.plot_tests(&algo_run_list, config, GraphType::Memory).await;
                         hash.insert(filepath, chart?);
                     },
                     "test_ape" => {
-                        let chart = self.plot_ape(&algo_run_list, config).await;
+                        let chart = self.plot_tests(&algo_run_list, config, GraphType::APE).await;
                         hash.insert(filepath, chart?);
                     },
                     "test_rpe" => {
-                        let chart = self.plot_rpe(&algo_run_list, config).await;
+                        let chart = self.plot_tests(&algo_run_list, config, GraphType::RPE).await;
                         hash.insert(filepath, chart?);
                     },
                     "test_drop" => {
@@ -552,12 +553,38 @@ impl TestExecutionService {
 
 
                     },
-                    &_ => todo!()
+                    &_ => {
+                        let chart = self.plot_cpu_load(&algo_run_list, config).await;
+                        hash.insert(filepath, chart?);
+                    }
                 };
             }
         }
         
         Ok(hash)
+    }
+
+    pub async fn plot_tests(&self, algo_run_list: &Vec<AlgorithmRun>, config: &Config, graph_type: GraphType) -> Result<Chart, PlotError>{
+
+        let mut algo_cs_hashmap: HashMap<AlgorithmRun, Vec<StatisticalMetricsStamped>> = HashMap::new();
+
+        for algo_run in algo_run_list{
+
+            let data = match graph_type{
+                GraphType::Memory => &algo_run.mem_usage_list,
+                GraphType::APE => &algo_run.ape_list,
+                GraphType::RPE => &algo_run.rpe_list,
+                GraphType::CPU => &algo_run.cpu_load_list,
+            };
+
+            if !data.is_empty(){
+                algo_cs_hashmap.insert(algo_run.clone(), data.to_vec());
+            }
+
+        };
+
+        let chart = test_plot(&algo_cs_hashmap, config, graph_type);
+        chart
     }
 
     pub async fn plot_cpu_load(&self, algo_run_list: &Vec<AlgorithmRun>, config: &Config) -> Result<Chart, PlotError>{
@@ -569,6 +596,7 @@ impl TestExecutionService {
             
             //For each AlgorithmRun I need the container stats
             let container_stats = self.algorithm_run_service.get_all_container_stats(&algo_run).await;
+            
 
             if !container_stats.is_empty(){
                 algo_cs_hashmap.insert(algo_run.clone(), container_stats);

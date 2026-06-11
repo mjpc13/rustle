@@ -4,7 +4,7 @@ use core::f32;
 use std::collections::{BTreeMap, HashMap};
 
 use chrono::{DateTime, Utc};
-use crate::{models::{metric::{self, Metric}, metrics::{pose_error::{APE, RPE}, ContainerStats, RobustnessMetric}, Algorithm, AlgorithmRun, TestType}, services::error::PlotError};
+use crate::{models::{metric::{self, Metric, StatisticalMetricsStamped}, metrics::{pose_error::{APE, RPE}, ContainerStats, RobustnessMetric}, Algorithm, AlgorithmRun, TestType}, services::error::PlotError};
 
 use charming::{
     component::{Axis, Legend}, element::{AreaStyle, AxisLabel, AxisType, ItemStyle, Label, LabelPosition, LineStyle, LineStyleType, MarkArea, MarkAreaData, MarkLine, MarkLineData, MarkLineVariant, Orient, Symbol, TextStyle}, series::Line, Chart
@@ -21,8 +21,30 @@ struct DataItem{
     u: f32
 }
 
-//PLOTS FOR A SINGLE ITERATION!!!
+pub enum GraphType {
+    Memory,
+    APE,
+    RPE,
+    CPU
+}
 
+impl GraphType {
+    fn to_string(self) -> &'static str {
+        match self{
+            GraphType::Memory => "Mean Memory Usage",
+            GraphType::APE => "Mean APE",
+            GraphType::RPE => "Mean RPE ",
+            GraphType::CPU => "Mean CPU Load",
+        }
+    }
+}
+
+
+//I might need to create a Units struct, for now it is fine
+
+
+
+//PLOTS FOR A SINGLE ITERATION!!!
 pub fn cpu_load_line_chart(data: &Vec<ContainerStats>, config: &Config) -> Result<Chart, PlotError> {
     let data_ts: Vec<DateTime<Utc>> = data.iter().map(|cs| cs.created_at).collect();
     let start_ts = data_ts[0];
@@ -208,7 +230,7 @@ pub fn ape_line_chart(data: &Vec<APE>, test_type: &TestType, config: &Config) ->
         0.0
     };
 
-    let area_data = get_area_from_def(test_type);
+    let area_data = get_area_from_def(test_type, config);
 
     let xy_data: Vec<Vec<f32>> = time
         .iter()
@@ -286,7 +308,7 @@ pub fn rpe_line_chart(data: &Vec<RPE>, test_type: &TestType, config: &Config) ->
         0.0
     };
 
-    let area_data = get_area_from_def(&test_type);
+    let area_data = get_area_from_def(&test_type, config);
 
     let xy_data: Vec<Vec<f32>> = time
         .iter()
@@ -355,74 +377,132 @@ pub fn rpe_line_chart(data: &Vec<RPE>, test_type: &TestType, config: &Config) ->
 
 
 /// PLOTS FOR THE MULTIPLE ITERATIONS
-pub fn algorithm_memory_usage_chart(iterations: Vec<Vec<ContainerStats>>, config: &Config) -> Result<Chart, PlotError> {
+pub fn algorithm_plot(iterations: &Vec<StatisticalMetricsStamped>, config: &Config, graph_type: GraphType) -> Result<Chart, PlotError> {
 
-    // Process each iteration to get Memory load percentages
-    let mut time_buckets: BTreeMap<i64, Vec<f32>> = BTreeMap::new(); // To put multiple memory usages in the approx the same time;
+    let y_axis_name = match graph_type {
+        GraphType::Memory => &config.plotting.algorithm_memory_y_label,
+        GraphType::APE => &config.plotting.algorithm_ape_y_label,
+        GraphType::RPE => &config.plotting.algorithm_rpe_y_label,
+        GraphType::CPU => &config.plotting.algorithm_cpu_y_label,
+    };
 
-    for iteration in &iterations {
-        let data_ts: Vec<DateTime<Utc>> = iteration.iter().map(|cs| cs.created_at).collect();
-        let start_ts = data_ts[0];
-        
-        let time_sec: Vec<f32> = data_ts.iter()
-            .map(|ts| (*ts - start_ts).num_seconds() as f32)
-            .collect();
-        
-        let memory_usage: Vec<f32> = iteration.iter()
-            .skip(2)
-            .map(|cs| {
+    let y_max = match graph_type {
+        GraphType::Memory => {
+            if config.plotting.algorithm_memory_y_max == -1.0 {
+                iterations
+                    .iter()
+                    .fold(-f32::INFINITY, |max, val| f32::floor(f32::max(max, val.stat.max)))*1.05
 
-                let mu = cs.memory_stats.usage;
-
-                let usage = match mu {
-                    Some(u) => u,
-                    None => 0
-                };
-
-                usage as f32 / 1_000_000.0 //Memory in MB
-
-            })
-            .collect();
-
-
-        for (t, usage) in time_sec.into_iter().zip(memory_usage) {
-            let bucket_key = (t * 1000.0) as i64; // ms precision for alignment
-            time_buckets
-                .entry(bucket_key)
-                .or_insert_with(Vec::new)
-                .push(usage);
-        }
-    }
-
-    // Convert to Vec<DataItem> with statistics
-    let data_items: Vec<DataItem> = time_buckets
-        .into_iter()
-        .map(|(key, loads)| {
-            let time = (key as f32) / 1000.0; // Convert back to seconds
-            let mean = loads.iter().sum::<f32>() / loads.len() as f32;
-
-            let variance = loads.iter()
-                .map(|&x| (x - mean).powi(2))
-                .sum::<f32>() / loads.len() as f32;
-            let std_dev = variance.sqrt();
-
-            DataItem {
-                time,
-                value: mean,
-                l: (mean - std_dev).max(0.0), // Don't go below 0%
-                u: (mean + std_dev), // Don't exceed 100%
+            } else {
+                config.plotting.algorithm_memory_y_max
             }
-        })
-        .collect();
-    
-    let max_y = data_items
-        .iter()
-        .fold(-f32::INFINITY, |max, val| f32::floor(f32::max(max, val.u)));
+        },
+        GraphType::APE => {
+            if config.plotting.algorithm_ape_y_max == -1.0 {
+                iterations
+                    .iter()
+                    .fold(-f32::INFINITY, |max, val| f32::floor(f32::max(max, val.stat.max)))*1.05
+
+            } else {
+                config.plotting.algorithm_ape_y_max
+            }
+        },
+        GraphType::RPE => {
+            if config.plotting.algorithm_ape_y_max == -1.0 {
+                iterations
+                    .iter()
+                    .fold(-f32::INFINITY, |max, val| f32::floor(f32::max(max, val.stat.max)))*1.05
+
+            } else {
+                config.plotting.algorithm_ape_y_max
+            }
+        },
+        GraphType::CPU => {
+            if config.plotting.algorithm_cpu_y_max == -1.0 {
+                iterations.iter().map(|d| d.stat.max + 0.1 * d.stat.max).fold(100.0, f32::max).ceil()
+            } else {
+                config.plotting.algorithm_cpu_y_max
+            }
+        },
+    };
+
+    let band_color = match graph_type{
+        GraphType::Memory => "rgba(56, 142, 60, 0.3)",
+        GraphType::APE => "rgba(41, 128, 185, 0.3)",
+        GraphType::RPE => "rgba(155, 89, 182, 0.3)",
+        GraphType::CPU => "rgba(33, 150, 243, 0.3)",
+    };
+
+    let line_color = match graph_type{
+        GraphType::Memory => "rgba(56, 142, 60, 0.9)",
+        GraphType::APE => "rgba(41, 128, 185, 0.9)",
+        GraphType::RPE => "rgba(155, 89, 182, 0.9)",
+        GraphType::CPU => "rgba(33, 150, 243, 0.9)",
+    };
+
 
     // Create confidence band and mean line points
-    let xy_mean = data_items.iter().map(|d| vec![d.time, d.value]).collect::<Vec<_>>();
-    let upper = data_items.iter().map(|d| vec![d.time, d.u]).collect::<Vec<_>>();
-    let lower = data_items.iter().rev().map(|d| vec![d.time, d.l]).collect::<Vec<_>>();
+    let xy_mean = iterations.iter().map(|d| vec![d.timestamp, d.stat.mean]).collect::<Vec<_>>();
+    let upper = iterations.iter().map(|d| vec![d.timestamp, d.stat.max]).collect::<Vec<_>>();
+    let lower = iterations.iter().rev().map(|d| vec![d.timestamp, d.stat.min]).collect::<Vec<_>>();
+
+    let confidence_band = upper
+        .into_iter()
+        .chain(lower)
+        .collect::<Vec<_>>();
+
+    // Create chart
+    let chart = Chart::new()
+        .x_axis(
+            Axis::new()
+                .type_(AxisType::Value)
+                .name("Time (s)")
+                .name_text_style(TextStyle::new().font_size(config.plotting.x_axis_title_size).font_weight("bold"))
+                .axis_label(AxisLabel::new().font_size(config.plotting.x_axis_label_size)),
+        )
+        .y_axis(
+            Axis::new()
+                .type_(AxisType::Value)
+                .name(y_axis_name)
+                //.max(y_max)
+                .name_text_style(TextStyle::new().font_size(config.plotting.y_axis_title_size).font_weight("bold"))
+                .axis_label(AxisLabel::new().font_size(config.plotting.y_axis_label_size)),
+        )
+        .series(
+            Line::new()
+                .name("Confidence Band")
+                .data(confidence_band)
+                .line_style(LineStyle::new().opacity(0))
+                .area_style(AreaStyle::new().color(band_color))
+                .symbol(Symbol::None)
+        )
+        .series(
+            Line::new()
+                .name("Mean Memory Usage")
+                .data(xy_mean)
+                .symbol::<Symbol>(config.plotting.marker_type.into())
+                .symbol_size(config.plotting.marker_size)
+                .smooth(config.plotting.smooth)
+                .line_style(
+                    LineStyle::new()
+                        .color(line_color)  
+                        .width(3)
+                )
+        );
+
+    Ok(chart)
+}
+
+pub fn algorithm_memory_usage_chart(iterations: &Vec<StatisticalMetricsStamped>, config: &Config) -> Result<Chart, PlotError> {
+ 
+    let max_y = iterations
+        .iter()
+        .fold(-f32::INFINITY, |max, val| f32::floor(f32::max(max, val.stat.max)));
+
+    // Create confidence band and mean line points
+    let xy_mean = iterations.iter().map(|d| vec![d.timestamp, d.stat.mean]).collect::<Vec<_>>();
+    let upper = iterations.iter().map(|d| vec![d.timestamp, d.stat.min]).collect::<Vec<_>>();
+    let lower = iterations.iter().rev().map(|d| vec![d.timestamp, d.stat.min]).collect::<Vec<_>>();
 
     let confidence_band = upper
         .into_iter()
@@ -471,65 +551,14 @@ pub fn algorithm_memory_usage_chart(iterations: Vec<Vec<ContainerStats>>, config
     Ok(chart)
 }
 
-pub fn algorithm_cpu_load_chart(iterations: Vec<Vec<ContainerStats>>, config: &Config) -> Result<Chart, PlotError> {
-    let mut time_buckets: BTreeMap<i64, Vec<f32>> = BTreeMap::new();
+pub fn algorithm_cpu_load_chart(iterations: &Vec<StatisticalMetricsStamped>, config: &Config) -> Result<Chart, PlotError> {
 
-    for iteration in &iterations {
-        let data_ts: Vec<DateTime<Utc>> = iteration.iter().map(|cs| cs.created_at).collect();
-        let start_ts = data_ts[0];
-
-        let time_sec: Vec<f32> = data_ts.iter()
-            .map(|ts| (*ts - start_ts).num_seconds() as f32)
-            .collect();
-
-        let cpu_load: Result<Vec<f32>, PlotError> = iteration.iter()
-            .skip(2)
-            .map(|cs| {
-    
-                let total_usage = cs.cpu_stats.cpu_usage.total_usage;
-                let prev_usage = cs.precpu_stats.cpu_usage.total_usage;
-                let system_cpu = cs.cpu_stats.system_cpu_usage.ok_or(PlotError::MissingData("CPU usage".to_owned()))?;
-                let prev_system_cpu = cs.precpu_stats.system_cpu_usage.ok_or(PlotError::MissingData("Pre CPU usage".to_owned()))?;
-                let online_cpus = cs.cpu_stats.online_cpus.ok_or(PlotError::MissingData("Online CPUs".to_owned()))? as f32;
-    
-                let used = (total_usage - prev_usage) as f32;
-                let available = (system_cpu - prev_system_cpu) as f32;
-                Ok(used / available * 100.0 * online_cpus)
-    
-            })
-            .collect();
-
-        let cpu_load = cpu_load?;
-
-        for (t, load) in time_sec.into_iter().zip(cpu_load) {
-            let bucket_key = (t * 1000.0) as i64;
-            time_buckets.entry(bucket_key).or_default().push(load);
-        }
-    }
-
-    let data_items: Vec<DataItem> = time_buckets
-        .into_iter()
-        .map(|(key, loads)| {
-            let time = (key as f32) / 1000.0;
-            let mean = loads.iter().sum::<f32>() / loads.len() as f32;
-            let variance = loads.iter().map(|&x| (x - mean).powi(2)).sum::<f32>() / loads.len() as f32;
-            let std_dev = variance.sqrt();
-
-            DataItem {
-                time,
-                value: mean,
-                l: (mean - std_dev).max(0.0),
-                u: (mean + std_dev),
-            }
-        })
-        .collect();
-
-    let max_y = data_items.iter().map(|d| d.u + 0.1 * d.u).fold(100.0, f32::max).ceil();
+    let max_y = iterations.iter().map(|d| d.stat.max + 0.1 * d.stat.max).fold(100.0, f32::max).ceil();
 
     // Create confidence band and mean line points
-    let xy_mean = data_items.iter().map(|d| vec![d.time, d.value]).collect::<Vec<_>>();
-    let upper = data_items.iter().map(|d| vec![d.time, d.u]).collect::<Vec<_>>();
-    let lower = data_items.iter().rev().map(|d| vec![d.time, d.l]).collect::<Vec<_>>();
+    let xy_mean = iterations.iter().map(|d| vec![d.timestamp, d.stat.mean]).collect::<Vec<_>>();
+    let upper = iterations.iter().map(|d| vec![d.timestamp, d.stat.max]).collect::<Vec<_>>();
+    let lower = iterations.iter().rev().map(|d| vec![d.timestamp, d.stat.min]).collect::<Vec<_>>();
 
     let confidence_band = upper
         .into_iter()
@@ -607,7 +636,7 @@ pub fn algorithm_ape_line_chart(iterations: Vec<Vec<APE>>, test_type: &TestType,
         }
     }
 
-    let area_data = get_area_from_def(test_type);
+    let area_data = get_area_from_def(test_type, config);
 
     // Convert to Vec<DataItem> with statistics
     let data_items: Vec<DataItem> = time_buckets
@@ -717,7 +746,7 @@ pub fn algorithm_rpe_line_chart(iterations: Vec<Vec<RPE>>, test_type: &TestType,
         }
     }
 
-    let area_data = get_area_from_def(test_type);
+    let area_data = get_area_from_def(test_type, config);
 
     // Convert to Vec<DataItem> with statistics
     let data_items: Vec<DataItem> = time_buckets
@@ -797,7 +826,146 @@ pub fn algorithm_rpe_line_chart(iterations: Vec<Vec<RPE>>, test_type: &TestType,
 }
 
 
-//PLOTS COMPARING THE DIFFERENT METHODS
+/// PLOTS FOR THE MULTIPLE ITERATIONS
+pub fn test_plot(data: &HashMap<AlgorithmRun, Vec<StatisticalMetricsStamped>>, config: &Config, graph_type: GraphType) -> Result<Chart, PlotError> {
+
+    let mut lines_vec: Vec<[Line;2]> = Vec::new();
+
+    // Need a max_vec to pull the maximum value of all graphs... START HERE FUTURE MARIO!!!!
+    let mut y_max_list: Vec<f32> = Vec::new();
+
+    let y_axis_name = match graph_type {
+        GraphType::Memory => &config.plotting.algorithm_memory_y_label,
+        GraphType::APE => &config.plotting.algorithm_ape_y_label,
+        GraphType::RPE => &config.plotting.algorithm_rpe_y_label,
+        GraphType::CPU => &config.plotting.algorithm_cpu_y_label,
+    };
+
+    for (algo_run, iterations) in data{
+    
+        let y_max = match graph_type {
+            GraphType::Memory => {
+                if config.plotting.algorithm_memory_y_max == -1.0 {
+                    iterations
+                        .iter()
+                        .fold(-f32::INFINITY, |max, val| f32::floor(f32::max(max, val.stat.max)))*1.05
+
+                } else {
+                    config.plotting.algorithm_memory_y_max
+                }
+            },
+            GraphType::APE => {
+                if config.plotting.algorithm_ape_y_max == -1.0 {
+                    iterations
+                        .iter()
+                        .fold(-f32::INFINITY, |max, val| f32::floor(f32::max(max, val.stat.max)))*1.05
+
+                } else {
+                    config.plotting.algorithm_ape_y_max
+                }
+            },
+            GraphType::RPE => {
+                if config.plotting.algorithm_ape_y_max == -1.0 {
+                    iterations
+                        .iter()
+                        .fold(-f32::INFINITY, |max, val| f32::floor(f32::max(max, val.stat.max)))*1.05
+
+                } else {
+                    config.plotting.algorithm_ape_y_max
+                }
+            },
+            GraphType::CPU => {
+                if config.plotting.algorithm_cpu_y_max == -1.0 {
+                    iterations.iter().map(|d| d.stat.max + 0.1 * d.stat.max).fold(100.0, f32::max).ceil()
+                } else {
+                    config.plotting.algorithm_cpu_y_max
+                }
+            },
+        };
+
+        // Create confidence band and mean line points
+        let xy_mean = iterations.iter().map(|d| vec![d.timestamp, d.stat.mean]).collect::<Vec<_>>();
+        let upper = iterations.iter().map(|d| vec![d.timestamp, d.stat.max]).collect::<Vec<_>>();
+        let lower = iterations.iter().rev().map(|d| vec![d.timestamp, d.stat.min]).collect::<Vec<_>>();
+        
+        let confidence_band = upper
+            .into_iter()
+            .chain(lower)
+            .collect::<Vec<_>>();
+
+        let main_line = Line::new()
+            .name(format!("{}_{}x",&algo_run.algo.name, &algo_run.bag_speed))
+            .data(xy_mean)
+            .smooth(config.plotting.smooth)
+            .symbol::<Symbol>(config.plotting.marker_type.into())
+            .symbol_size(config.plotting.marker_size)
+            .line_style(LineStyle::new()
+                .width(3)
+                .color(algo_run.get_distinct_rgba(0.9))
+        );
+
+        let band_line = Line::new()
+                .name("")
+                .data(confidence_band)
+                .line_style(LineStyle::new().opacity(0))
+                .area_style(AreaStyle::new().color(algo_run.get_distinct_rgba(0.2)))
+                .symbol(Symbol::None);
+        
+        lines_vec.push([main_line, band_line]);
+        y_max_list.push(y_max);
+
+    }
+
+
+
+    let mut chart = Chart::new()
+        .x_axis(
+            Axis::new()
+                .type_(AxisType::Value)
+                .name("Time (s)")
+                .name_text_style(TextStyle::new().font_size(config.plotting.x_axis_title_size).font_weight("bold"))
+                .axis_label(AxisLabel::new().font_size(config.plotting.x_axis_label_size)),
+        )
+        .y_axis(
+            Axis::new()
+                .type_(AxisType::Value)
+                .name(y_axis_name)
+                .name_text_style(TextStyle::new().font_size(config.plotting.y_axis_title_size).font_weight("bold"))
+                .axis_label(AxisLabel::new().font_size(config.plotting.y_axis_label_size)),
+        );
+
+
+    if config.plotting.show_legend{
+        chart = chart.legend(
+            Legend::new()
+                .show(true)
+                .top("top")
+                .left("right")
+                .orient(Orient::Horizontal)
+                .text_style(TextStyle::new().font_size(config.plotting.legend_size))
+        )
+    }
+
+    chart = add_lines(chart, lines_vec, config);
+
+    Ok(chart)
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 pub fn test_cpu_load_line_chart(data: &HashMap<AlgorithmRun, Vec<Vec<ContainerStats>>>, config: &Config)  -> Result<Chart, PlotError> {
 
     //For each algorithm//Stats in data I need to get a series!!!
@@ -915,9 +1083,9 @@ pub fn test_cpu_load_line_chart(data: &HashMap<AlgorithmRun, Vec<Vec<ContainerSt
             Legend::new()
                 .show(true)
                 .top("top")
-                .left("left")
+                .left("right")
                 .orient(Orient::Horizontal)
-                .text_style(TextStyle::new().font_size(14))
+                .text_style(TextStyle::new().font_size(config.plotting.legend_size))
         )
     }
 
@@ -1032,9 +1200,9 @@ pub fn test_memory_usage_line_chart(data: &HashMap<AlgorithmRun, Vec<Vec<Contain
                 Legend::new()
                     .show(true)
                     .top("top")
-                    .left("left")
+                    .left("right")
                     .orient(Orient::Horizontal)
-                    .text_style(TextStyle::new().font_size(14))
+                    .text_style(TextStyle::new().font_size(config.plotting.legend_size))
             )
         }
     
@@ -1141,9 +1309,9 @@ pub fn test_ape_line_chart(data: &HashMap<AlgorithmRun, Vec<Vec<APE>>>, config: 
             Legend::new()
                 .show(true)
                 .top("top")
-                .left("left")
+                .left("right")
                 .orient(Orient::Horizontal)
-                .text_style(TextStyle::new().font_size(14))
+                .text_style(TextStyle::new().font_size(config.plotting.legend_size))
         )
     }
     
@@ -1249,9 +1417,9 @@ pub fn test_rpe_line_chart(data: &HashMap<AlgorithmRun, Vec<Vec<RPE>>>, config: 
             Legend::new()
                 .show(true)
                 .top("top")
-                .left("left")
+                .left("right")
                 .orient(Orient::Horizontal)
-                .text_style(TextStyle::new().font_size(14))
+                .text_style(TextStyle::new().font_size(config.plotting.legend_size))
         )
     }
     
@@ -1297,7 +1465,7 @@ pub fn test_adp_chart(data: &HashMap<Algorithm, &Vec<Metric>>, test_type: &TestT
 
     }
 
-    let area_data = get_area_from_def(&test_type);
+    let area_data = get_area_from_def(&test_type, config);
 
     let mut chart = Chart::new()
         .x_axis(
@@ -1320,9 +1488,9 @@ pub fn test_adp_chart(data: &HashMap<Algorithm, &Vec<Metric>>, test_type: &TestT
             Legend::new()
                 .show(true)
                 .top("top")
-                .left("left")
+                .left("right")
                 .orient(Orient::Horizontal)
-                .text_style(TextStyle::new().font_size(14))
+                .text_style(TextStyle::new().font_size(config.plotting.legend_size))
         )
     }
     chart = add_areas_markers(chart, area_data, config);
@@ -1370,7 +1538,7 @@ pub fn test_rdp_chart(data: &HashMap<Algorithm, &Vec<Metric>>, test_type: &TestT
 
     }
 
-    let area_data = get_area_from_def(&test_type);
+    let area_data = get_area_from_def(&test_type, config);
 
     let mut chart = Chart::new()
         .x_axis(
@@ -1383,7 +1551,7 @@ pub fn test_rdp_chart(data: &HashMap<Algorithm, &Vec<Metric>>, test_type: &TestT
         .y_axis(
             Axis::new()
                 .type_(AxisType::Value)
-                .name("ADP")
+                .name("RDP")
                 .name_text_style(TextStyle::new().font_size(config.plotting.y_axis_title_size).font_weight("bold"))
                 .axis_label(AxisLabel::new().font_size(config.plotting.y_axis_label_size)),
         );
@@ -1393,9 +1561,9 @@ pub fn test_rdp_chart(data: &HashMap<Algorithm, &Vec<Metric>>, test_type: &TestT
             Legend::new()
                 .show(true)
                 .top("top")
-                .left("left")
+                .left("right")
                 .orient(Orient::Horizontal)
-                .text_style(TextStyle::new().font_size(14))
+                .text_style(TextStyle::new().font_size(config.plotting.legend_size))
         )
     }
     chart = add_areas_markers(chart, area_data, config);
@@ -1412,7 +1580,7 @@ pub fn test_rdp_chart(data: &HashMap<Algorithm, &Vec<Metric>>, test_type: &TestT
 
 //Helper functions
 
-fn get_area_from_def(test_type: &TestType) -> Vec<MarkArea>{  
+fn get_area_from_def(test_type: &TestType, config: &Config) -> Vec<MarkArea>{  
 
     match &test_type{
         TestType::Simple => vec![],
@@ -1440,7 +1608,7 @@ fn get_area_from_def(test_type: &TestType) -> Vec<MarkArea>{
                             .show(true)
                             .position(LabelPosition::Top)
                             .color("rgba(80, 80, 80, 0.8)")
-                            .font_size(12)
+                            .font_size(config.plotting.band_legend_size)
                             .formatter("{b}")
                         )                        
                     .data(mark_areas_data);

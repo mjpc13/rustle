@@ -38,6 +38,25 @@ impl Ros1 for Path {
                 poses
             }
         )   
-
     }
+
+    fn from_json(value: &serde_json::Value) -> Result<Path, RosError> {
+        // Parse header
+        let header = Header::from_json(&value["header"])?;
+
+        // Parse poses array
+        let poses_array = value["poses"].as_array()
+            .ok_or_else(|| RosError::FormatError(format!("Expected 'poses' array in Path: {:?}", value)))?;
+
+        let mut poses = Vec::with_capacity(poses_array.len());
+        for p in poses_array {
+            poses.push(PoseStamped::from_json(p)?);
+        }
+
+        Ok(Path {
+            header,
+            poses,
+        })
+    }
+
 }

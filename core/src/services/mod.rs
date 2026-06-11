@@ -4,11 +4,13 @@ pub mod algorithm;
 //pub mod test_definition;
 pub mod metrics;
 pub mod container;
-pub mod ros;
 pub mod algorithm_run;
 pub mod test_execution;
 pub mod iteration;
 pub mod stat;
+
+pub mod params;
+pub mod tuning;
 
 
 // Re-export key components
@@ -19,7 +21,6 @@ pub use self::{
 //    test_definition::TestDefinitionService,
     metrics::MetricService,
     container::ContainerService,
-    ros::RosService,
     algorithm_run::AlgorithmRunService,
     test_execution::TestExecutionService,
     iteration::IterationService,
