@@ -4,7 +4,7 @@ use serde::Serialize;
 use argmin::core::{ArgminFloat, Error};
 use argmin::{float, argmin_error};
 use rand_xoshiro::Xoshiro256PlusPlus;
-use rand::{Rng, thread_rng};
+use rand::RngExt;
 use rand_distr::{Normal, Distribution, Uniform};
 
 use serde_json::{Value, json, Map};
@@ -202,7 +202,7 @@ impl SimulatedAnnealingConfig {
     pub fn gaussian_perturbation(&self, x: f64, bounds: (f64, f64), mean: f64, std_dev: f64) -> f64 {
         //let normal = Normal::new(self.float_mean, self.float_std_dev).unwrap();
         let normal = Normal::new(mean, std_dev).unwrap();
-        let mut rng = thread_rng();
+        let mut rng = rand::rng();
 
         (x + normal.sample(&mut rng)).clamp(bounds.0, bounds.1)
     }
@@ -214,7 +214,7 @@ impl SimulatedAnnealingConfig {
             return x;
         }
 
-        let k = thread_rng().gen_range(-max_step..=max_step);
+        let k = rand::rng().random_range(-max_step..=max_step);
         (x + k).clamp(bounds.0, bounds.1)
     }
 
@@ -229,8 +229,8 @@ impl SimulatedAnnealingConfig {
             true
         }
         else {
-            let mut rng = thread_rng();
-            let niu = rng.gen();
+            let mut rng = rand::rng();
+            let niu = rng.random();
             let p = (((-1 as f64) * delta_solutions) / self.current_temp).exp();
 
             p > niu

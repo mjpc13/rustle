@@ -12,7 +12,7 @@ use charming::Chart;
 use chrono::{Utc};
 use futures_util::{future, StreamExt, SinkExt};
 use log::{debug, info, warn};
-use rand::rng;
+use rand::{rng, RngExt};
 use rand::{distr::Alphanumeric, Rng};
 use tokio::net::TcpStream;
 use tokio::sync::mpsc::Sender;
@@ -504,8 +504,8 @@ impl IterationService {
 
         let current_slam_config = self.params_service.repo.get_by_id(target_id).await?.unwrap();
 
-        let mut rng = rand::thread_rng();
-        let random_seed: u32 = rng.gen();
+        let mut rng = rand::rng();
+        let random_seed = rng.next_u32();
 
         let mut file_name = String::from("/tmp/");
         let mut temp_file_name = format!("/tmp/temp_params_{}.yaml", random_seed);
@@ -630,7 +630,7 @@ impl IterationService {
             "topic": topic,
             "type": topic_type
         });
-        ws.send(tungstenite::Message::Text(msg.to_string())).await.unwrap();
+        ws.send(tungstenite::Message::Text(msg.to_string().into())).await.unwrap();
 
         // Receive messages
         while let Some(Ok(msg)) = ws.next().await {
@@ -686,7 +686,7 @@ impl IterationService {
 
             let txt = req.to_string();
             warn!("Sending topic_type request (attempt {}): {}", attempt + 1, txt);
-            ws.send(tungstenite::Message::Text(txt)).await.unwrap();
+            ws.send(tungstenite::Message::Text(txt.into())).await.unwrap();
 
             // wait for response matching our id; allow multiple incoming messages and short timeouts
             let mut got_type: Option<String> = None;

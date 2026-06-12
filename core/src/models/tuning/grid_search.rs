@@ -1,7 +1,7 @@
 use std::{collections::HashMap, vec};
 use serde_json::{Value, Number, json, Map};
 use crate::{db::params, models::metrics::Metric};
-use rand::{Rng, thread_rng};
+use rand::RngExt;
 
 use crate::models::tuning_config::find_key_in_hash_map;
 
@@ -35,7 +35,7 @@ impl GridSearchConfig {
 
     pub fn generate_random_point(&mut self) -> Option<Vec<(String, u64)>> {
         let mut random_point: Vec<(String, u64)> = Vec::new();
-        let mut rng = thread_rng();
+        let mut rng = rand::rng();
 
         let total_grid_size = self.get_param_array_size_by_key(None).unwrap();
 
@@ -46,7 +46,7 @@ impl GridSearchConfig {
         loop {
                         
             for (key, param_size) in &self.tunable_params_array_sizes {
-                random_point.push((key.clone(), rng.gen_range(0..param_size.clone())));
+                random_point.push((key.clone(), rng.random_range(0..param_size.clone())));
             }
 
             if !self.visited_points.contains(&random_point) {
