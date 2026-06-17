@@ -33,6 +33,7 @@ pub async fn handle_dataset(
                             ground_truth_topic: Some(add.ground_truth_topic.expect("Missing: --ground-truth-topic")),
                             dataset_path: add.dataset_path.expect("Missing: --dataset-path"),
                             ground_truth: None,
+                            is_ros2_bag: add.is_ros2_bag,
                             created_at: Utc::now(),
                             duration: None
                         }

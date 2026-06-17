@@ -34,7 +34,6 @@ impl DatasetService {
     pub fn load_from_yaml(path: &str) -> Result<Dataset, Box<dyn std::error::Error>> {
         let file = File::open(path)?;
         let mut dataset: Dataset = serde_yaml::from_reader(file)?;
-        dataset.id = None;
         Ok(dataset)
     }
 
@@ -45,47 +44,6 @@ impl DatasetService {
             return Err(ProcessingError::Conflict(format!(
                 "Dataset '{}' already exists!",
                 existing.name
-            )));
-        }
-
-        //Check if the path to the dataset exists, is valid and contain at least 1 file with a .bag;
-        let dataset_path = Path::new(&dataset.dataset_path);
-
-        if !dataset_path.exists() {
-            return Err(ProcessingError::InvalidInput(format!(
-                "Dataset path '{}' does not exist.",
-                dataset.dataset_path
-            )));
-        }
-
-        if !dataset_path.is_dir() {
-            return Err(ProcessingError::InvalidInput(format!(
-                "Dataset path '{}' is not a directory.",
-                dataset.dataset_path
-            )));
-        }
-
-        // Check for at least one .bag file
-        let mut entries = read_dir(dataset_path)
-            .await
-            .map_err(|e| ProcessingError::IO(format!("Unable to read directory: {}", e)))?;
-
-        let mut bag_found = false;
-        while let Some(entry) = entries.next_entry().await.map_err(|e| {
-            ProcessingError::IO(format!("Error reading directory entry: {}", e))
-        })? {
-            if let Some(ext) = entry.path().extension() {
-                if ext == "bag" {
-                    bag_found = true;
-                    break;
-                }
-            }
-        }
-
-        if !bag_found {
-            return Err(ProcessingError::InvalidInput(format!(
-                "No .bag files found in '{}'.",
-                dataset.dataset_path
             )));
         }
 
@@ -106,7 +64,7 @@ impl DatasetService {
         let topic = dataset.ground_truth_topic.clone().ok_or(ProcessingError::InvalidDataset("Missing groundtruth topic in dataset definition!".to_owned()))?;
 
         //Read the dataset groundtruth and write it in the dataset folder!
-        let _ = rosbag_reader::read_rosbag_py(&dataset.dataset_path, &format!("{}/groundtruth",&full_dataset_path), &topic).unwrap();
+        let _ = rosbag_reader::read_rosbag_py(&dataset.dataset_path, &format!("{}/groundtruth",&full_dataset_path), &topic, dataset.is_ros2_bag).unwrap();
 
         // Read the TUM files as a CSV
         let file = File::open(&format!("{}/groundtruth",&full_dataset_path)).map_err(|e| ProcessingError::IO(format!("Unable to open Groundtruth positions file: {e}")))?;

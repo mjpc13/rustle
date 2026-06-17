@@ -9,6 +9,7 @@ pub struct Dataset {
     pub id: Option<Thing>,           // Add SurrealDB ID field
     pub name: String,
     pub dataset_path: String,
+    pub is_ros2_bag: Option<bool>,
     pub ground_truth_topic: Option<String>,
     pub ground_truth: Option<Vec<Odometry>>,
     pub duration: Option<f32>,
@@ -18,12 +19,13 @@ pub struct Dataset {
  
 impl Dataset {
     /// Pure data constructor (no I/O)
-    pub fn new(name: String, dataset_path: String, ground_truth_topic: Option<String>) -> Self {
+    pub fn new(name: String, dataset_path: String, ground_truth_topic: Option<String>, is_ros2_bag: Option<bool>) -> Self {
         Self {
             id: None, // SurrealDB-style ID
             name,
             ground_truth_topic,
             dataset_path,
+            is_ros2_bag,
             ground_truth: None,
             created_at: Utc::now(),
             duration: None,

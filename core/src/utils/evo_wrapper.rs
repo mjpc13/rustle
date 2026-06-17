@@ -59,7 +59,7 @@ def compute_metrics(gt_path, data_path, max_diff, align, n_to_align, t_offset, a
               delimiter=',')
     
     np.savetxt(os.path.join(output_dir, 'aligned_poses.txt'), 
-              np.column_stack((time_from_start, traj_est_aligned._positions_xyz)),
+              np.column_stack((time_from_start, traj_est_aligned.positions_xyz)),
               delimiter=',')
 "#;
 

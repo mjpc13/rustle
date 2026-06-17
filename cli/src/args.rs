@@ -66,6 +66,9 @@ pub struct AddDataset {
     /// Topic name for groundtruth data
     pub ground_truth_topic: Option<String>,
 
+    /// If the dataset is for ros 2, None & Some(false) => ros 1
+    pub is_ros2_bag: Option<bool>,
+
     /// File path where the dataset is stored
     pub dataset_path: Option<String>,
 }
