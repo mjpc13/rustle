@@ -497,7 +497,7 @@ impl IterationService {
             platform: None,
         });
 
-        let dataset = self.repo.get_dataset(iteration).await?; //get the dataset
+        let dataset: Dataset = self.repo.get_dataset(iteration).await?; //get the dataset
         let algorithm: Algorithm = self.repo.get_algorithm(iteration).await?; //get the algorithm
 
         let target_id: Option<Thing> = algorithm.current_params;

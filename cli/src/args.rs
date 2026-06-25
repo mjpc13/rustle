@@ -1,4 +1,5 @@
 use clap::{Args, Parser, Subcommand};
+use rustle_core::models::RosVersion;
 
 /// CLI parser for the `rustle` application.
 #[derive(Debug, Parser)]
@@ -135,6 +136,9 @@ pub struct AddAlgorithm {
 
     /// Custom parameters in string format
     pub parameters: Option<String>,
+
+    /// Ros version (either ROS_1 or ROS_2)
+    pub ros_version: Option<RosVersion>,
 
     /// List of odometry topics
     #[clap(short, long)]

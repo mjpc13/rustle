@@ -6,6 +6,7 @@ pub mod twist;
 pub mod path;
 pub mod ros_msg;
 pub mod tum;
+pub mod version;
 
 // Re-export repositories
 pub use self::{
@@ -15,4 +16,6 @@ pub use self::{
     pose::{Pose, PoseStamped},
     path::Path,
     tum::Tum,
+    version::RosVersion,
 };
+

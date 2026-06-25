@@ -1,15 +1,10 @@
-use std::fmt::Error;
 use std::hash::{DefaultHasher, Hash, Hasher};
+
+use crate::models::RosVersion;
 
 use serde::{Serialize, Deserialize};
 use surrealdb::sql::Thing;
 
-// new imports
-use std::collections::HashMap;
-use serde_json::Value;
-use chrono::{DateTime, Utc};
-use std::fs::{File, self};
-use std::io::{BufReader, Write, BufRead};
 
 #[derive(Debug, Clone, Serialize, Deserialize,Eq, Hash, PartialEq)]
 pub struct Algorithm {
@@ -17,6 +12,7 @@ pub struct Algorithm {
     pub name: String,
     pub image_name: String,
     pub version: String,
+    pub ros_version: RosVersion,
     pub current_params: Option<Thing>, 
     pub param_list: Vec<Thing>,
     pub odom_topics: Vec<String>
@@ -24,18 +20,20 @@ pub struct Algorithm {
 
 impl Algorithm {
     /// Constructor with automatic ID generation
-    pub fn new(name: String, version: String, image_name: String, parameters: String, odom_topics: Vec<String>) -> Self {
-
-
-        //Logic to parse file to a YAML object!
-        //YAML_obj
-        //let config = parse_yaml(&parameters).unwrap();
+    pub fn new(
+        name: String,
+        version: String,
+        image_name: String,
+        ros_version: RosVersion,
+        odom_topics: Vec<String>
+    ) -> Self {
 
         Self {
             id: None,
             name,
             image_name,
             version,
+            ros_version,
             current_params: None,
             param_list: Vec::new(),
             odom_topics

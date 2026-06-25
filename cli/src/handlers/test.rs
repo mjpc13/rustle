@@ -25,7 +25,7 @@ pub async fn handle_test(
 ) -> Result<(), Box<dyn Error>> {
     match cmd.command {
         TestSubCommand::Add(add) => {
-                                handle_add_cmd(add, service).await;
+                                handle_add_cmd(add, service).await?;
                     }
         TestSubCommand::List => {
                         let tests = service.get_all().await.unwrap();
@@ -187,7 +187,7 @@ async fn handle_add_cmd(add_test: AddTest, service: &TestExecutionService) -> Re
         //save the test executions in the database!
 
         for mut exec in exec_list{
-            let _ = service.save_test_execution(&mut exec).await;
+            service.save_test_execution(&mut exec).await?;
         }
 
     } else {

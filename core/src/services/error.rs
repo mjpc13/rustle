@@ -91,8 +91,10 @@ pub enum DbError {
     Validation(String),
 
     #[error("Invalid Data: {0}")]
-    InvalidData(&'static str),
+    InvalidData(String),
 
+    #[error("Creation failed: {0}")]
+    CreationFailed(String),
 }
 
 #[derive(Debug, Error)]

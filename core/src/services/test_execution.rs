@@ -42,7 +42,7 @@ impl TestExecutionService {
 
     pub async fn save_test_execution(&self, exec: &mut TestExecution) -> Result<(), DbError> {
 
-        let _ = self.execution_repo.save(exec).await;
+        self.execution_repo.save(exec).await?;
 
         Ok(())
     }

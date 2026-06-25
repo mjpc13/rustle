@@ -3,7 +3,7 @@ use std::sync::Arc;
 use log::{info, warn};
 use surrealdb::{engine::local::Db, RecordId, Surreal};
 use tokio::sync::Mutex;
-use crate::{models::{test_execution::TestExecution, Algorithm, AlgorithmRun, Dataset, Iteration, TestDefinition}, services::error::DbError};
+use crate::{models::{test_execution::TestExecution, RosVersion, Algorithm, AlgorithmRun, Dataset, Iteration, TestDefinition}, services::error::DbError};
 use surrealdb::sql::Thing;
 
 #[derive(Clone)]
@@ -18,41 +18,74 @@ impl TestExecutionRepo {
 
     pub async fn save(&self, execution: &mut TestExecution) -> Result<(), DbError> {
 
-        let created: Option<TestExecution> = self.conn.lock().await
+        let dataset = self.get_dataset_by_name(&execution.def.dataset_name).await
+            .map_err(|_| DbError::NotFound(format!("Dataset '{}' not found", execution.def.dataset_name)))?;
+
+        let ros_version = if dataset.is_ros2_bag.unwrap_or_default() { RosVersion::Ros2 } else { RosVersion::Ros1 };
+        execution.ros_version = Some(ros_version);
+
+        let mut resolved_algos = Vec::new();
+        for algo_name in &execution.def.algo_list {
+            let algo = self.get_algorithm_by_name(algo_name).await
+                .map_err(|_| DbError::NotFound(format!("Algorithm '{}' not found", algo_name)))?;
+
+            if algo.ros_version != ros_version {
+                return Err(DbError::InvalidData(format!(
+                            "Mismatched ROS versions: Dataset uses {:?}, but Algorithm '{}' uses {:?}", 
+                            ros_version, algo_name, algo.ros_version
+                )));
+            }
+            resolved_algos.push(algo);
+        }
+
+        let conn = self.conn.lock().await;
+
+        // Check for duplicate name
+        let mut response = conn.query("SELECT VALUE id FROM test_execution WHERE def.name = $name")
+            .bind(("name", execution.def.name.clone()))
+            .await?;
+
+        let existing_ids: Vec<surrealdb::sql::Thing> = response.take(0)?;
+
+        if !existing_ids.is_empty() {
+            return Err(DbError::InvalidData(format!(
+                "A test with the name '{}' already exists", 
+                execution.def.name
+            )));
+        }
+
+        // Start a transaction block. If anything goes wrong, SurrealDB discards everything.
+        conn.query("BEGIN TRANSACTION;").await?;
+
+        let created: Option<TestExecution> = conn
             .create("test_execution")
             .content(execution.clone())
             .await?;
 
-           if let Some(created) = created {
-                execution.id = created.id;
-            }
+        let created_execution = created
+            .ok_or(DbError::CreationFailed("Failed to insert TestExecution record".into()))?;
 
-            // Validate and get the execution ID
-            let execution_id = execution.id.clone()
-                .ok_or(DbError::NotFound("TestExecution ID not found after creation".into()))?;
+        execution.id = created_execution.id.clone();
+        let execution_id = created_execution.id;
 
-            // Create Dataset relationship
-            let dataset = self.get_dataset_by_name(&execution.def.dataset_name.clone()).await.unwrap();
-            // Create Dataset relationship
-            self.conn.lock().await
-                .query("RELATE $test_execution -> tested_in -> $dataset")
+        // Create Dataset relationship (tested_in)
+        conn.query("RELATE $test_execution -> tested_in -> $dataset")
+            .bind(("test_execution", execution_id.clone()))
+            .bind(("dataset", dataset.id))
+            .await?;
+
+        // Create Algorithm relationships (compares)
+        for algo in resolved_algos {
+            conn.query("RELATE $test_execution -> compares -> $algo")
                 .bind(("test_execution", execution_id.clone()))
-                .bind(("dataset", dataset.id.clone()))
-                .await.unwrap();
+                .bind(("algo", algo.id))
+                .await?;
+        }
 
-            for algo in execution.def.algo_list.clone() {
-                // Create Dataset relationship
-                let algo = self.get_algorithm_by_name(&algo).await.unwrap();
+        // Commit the entire transaction
+        conn.query("COMMIT TRANSACTION;").await?;
 
-                // Create Dataset relationship
-                self.conn.lock().await
-                    .query("RELATE $test_execution -> compares -> $algo")
-                    .bind(("test_execution", execution_id.clone()))
-                    .bind(("algo", algo.id.clone()))
-                    .await.unwrap();
-            }
-
-        Ok(())  
+        Ok(())
     }
 
     pub async fn get(&self, id: &str) -> Result<Option<TestExecution>, DbError> {
