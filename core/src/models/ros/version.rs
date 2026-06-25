@@ -1,4 +1,5 @@
 use std::str::FromStr;
+use std::fmt;
 use serde::{Serialize, Deserialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
@@ -15,9 +16,18 @@ impl FromStr for RosVersion {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_uppercase().trim() {
-            "ROS_1" => { Ok(Self::Ros1) }
-            "ROS_2" => { Ok(Self::Ros2) }
-            _ => { Err(format!("Invalide ROS version: '{}', expected 'ROS_1' or ROS_2'", s)) }
+            "ROS_1" => Ok(Self::Ros1),
+            "ROS_2" => Ok(Self::Ros2),
+            _ => Err(format!("Invalide ROS version: '{}', expected 'ROS_1' or ROS_2'", s)),
         }
+    }
+}
+
+impl fmt::Display for RosVersion {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", match self {
+            Self::Ros1 => "ROS_1",
+            Self::Ros2 => "ROS_2",
+        })
     }
 }

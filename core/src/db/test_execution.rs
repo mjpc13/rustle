@@ -21,7 +21,7 @@ impl TestExecutionRepo {
         let dataset = self.get_dataset_by_name(&execution.def.dataset_name).await
             .map_err(|_| DbError::NotFound(format!("Dataset '{}' not found", execution.def.dataset_name)))?;
 
-        let ros_version = if dataset.is_ros2_bag.unwrap_or_default() { RosVersion::Ros2 } else { RosVersion::Ros1 };
+        let ros_version = dataset.ros_version.unwrap_or_default();
         execution.ros_version = Some(ros_version);
 
         let mut resolved_algos = Vec::new();
@@ -84,6 +84,7 @@ impl TestExecutionRepo {
 
         // Commit the entire transaction
         conn.query("COMMIT TRANSACTION;").await?;
+        info!("Created test: {}", execution.def.name);
 
         Ok(())
     }

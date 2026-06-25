@@ -64,7 +64,7 @@ impl DatasetService {
         let topic = dataset.ground_truth_topic.clone().ok_or(ProcessingError::InvalidDataset("Missing groundtruth topic in dataset definition!".to_owned()))?;
 
         //Read the dataset groundtruth and write it in the dataset folder!
-        let _ = rosbag_reader::read_rosbag_py(&dataset.dataset_path, &format!("{}/groundtruth",&full_dataset_path), &topic, dataset.is_ros2_bag).unwrap();
+        let _ = rosbag_reader::read_rosbag_py(&dataset.dataset_path, &format!("{}/groundtruth",&full_dataset_path), &topic, dataset.ros_version).unwrap();
 
         // Read the TUM files as a CSV
         let file = File::open(&format!("{}/groundtruth",&full_dataset_path)).map_err(|e| ProcessingError::IO(format!("Unable to open Groundtruth positions file: {e}")))?;

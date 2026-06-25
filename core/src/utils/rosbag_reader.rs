@@ -2,6 +2,7 @@ use pyo3::{prelude::*};
 use pyo3::types::IntoPyDict;
 
 use crate::services::error::RunError;
+use crate::models::RosVersion;
 
 const PY_CODE: &str = r#"
 import os
@@ -9,7 +10,7 @@ import csv
 from pathlib import Path
 from rosbags.highlevel import AnyReader
 
-def read_robag(bag_path, gt_path, topic, is_ros2_bag):
+def read_rosbag(bag_path, gt_path, topic, ros_version):
     """
     Read all messages from a topic across multiple ROS bag files in a directory
     using the 'rosbags' Python package, and write them to a single CSV.
@@ -20,7 +21,7 @@ def read_robag(bag_path, gt_path, topic, is_ros2_bag):
 
     bag_files = (
             sorted([p for p in bag_dir.iterdir() if p.suffix == '.bag'])
-            if not is_ros2_bag else
+            if ros_version == 'ROS_1' else
             [bag_dir]
         )
 
@@ -89,7 +90,7 @@ pub fn read_rosbag_py(
     bag_path: &str,
     gt_path: &str,
     topic: &str,
-    is_ros2_bag: Option<bool>,
+    ros_version: Option<RosVersion>,
 ) -> Result<(), RunError>{
     Python::with_gil(|py| {
         // Create a Python module from the embedded code
@@ -100,12 +101,12 @@ pub fn read_rosbag_py(
             ("bag_path", bag_path.to_object(py)),
             ("gt_path", gt_path.to_object(py)),
             ("topic", topic.to_object(py)),
-            ("is_ros2_bag", is_ros2_bag.unwrap_or_default().to_object(py)),
+            ("ros_version", ros_version.unwrap_or_default().to_string().to_object(py)),
         ].into_py_dict(py);
 
         // Call the Python function
         embedded_module
-            .getattr("read_robag").unwrap()
+            .getattr("read_rosbag").unwrap()
             .call((), Some(kwargs)).map_err(|e| RunError::Execution(format!("Unable to retrieve ground truth measurements from the rosbag with error: {e}.")))?;
         Ok(())
     })
