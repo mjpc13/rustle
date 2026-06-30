@@ -1,0 +1,8 @@
+
+algorithms:
+  - name: "kiss-icp"
+    version: "1.0"
+    image_name: "local_rustle/kiss_icp:jazzy"
+    parameters: "/home/chouane/Code/rustle/examples/config/kiss-icp-ros2/params.yaml"
+    odom_topics: ["/lio_odom"]
+    ros_version: ROS_2

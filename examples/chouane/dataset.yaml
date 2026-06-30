@@ -1,0 +1,6 @@
+datasets:
+  - name: "botanic_garden"
+    ground_truth_topic: "/aeva/ATLAS/odometry"
+    dataset_path: "/home/chouane/Documents/rustle/dataset/"
+    tag: ["ig_lio_test"]
+    ros_version: ROS_2
