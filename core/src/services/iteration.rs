@@ -2,7 +2,7 @@ use std::fs;
 use std::path::Path;
 use std::str::FromStr;
 use std::time::{SystemTime, UNIX_EPOCH};
-use std::{collections::HashMap, fs::OpenOptions, path::PathBuf, sync::Arc, thread, time};
+use std::{collections::HashMap, fs::OpenOptions, path::PathBuf, sync::Arc, time, thread};
 use std::io::Write;
 
 use bollard::container::LogOutput;
@@ -32,7 +32,7 @@ use crate::models::metrics::metric::StatisticalMetrics;
 
 use crate::models::metrics::pose_error::{PoseErrorMetrics, Position, APE, RPE};
 use crate::models::metrics::{ContainerStats, CpuMetrics};
-use crate::models::{ProgressMessage, Dataset, TestDefinition, TestType};
+use crate::models::{ProgressMessage, Dataset, RosVersion, TestType};
 use crate::services::params::ParamsService;
 use crate::utils::config::Config;
 use crate::utils::evo_wrapper::{run_metrics_py, EvoApeArg, EvoRpeArg, PlotArg};
@@ -40,7 +40,7 @@ use crate::utils::plots::{ape_line_chart, cpu_load_line_chart, memory_usage_line
 use crate::{
     db::{iteration::IterationRepo}, 
     models::{iteration::{DockerContainer, Iteration}, 
-    ros::ros_msg::RosMsg, Algorithm, Odometry}, 
+        ros::ros_msg::RosMsg, Algorithm, Odometry}, 
     services::error::{DbError, ProcessingError, RosError}, 
     utils::evo_wrapper::EvoArg
 };
@@ -69,9 +69,9 @@ impl IterationService {
     }
 
     pub async fn create(&self, iter_number: u64, algo:Algorithm, algorithm_run_id: &Thing, exec_id: &Thing, test_type: TestType) -> Result<(), DbError> {
-        
+
         let sanitized = algo.name.replace(|c: char| !c.is_alphanumeric(), "_")
-        .to_lowercase();
+            .to_lowercase();
 
         let rng = rng();
         let rand_str: String = rng
@@ -102,21 +102,49 @@ impl IterationService {
     pub async fn run(&self, iter: Iteration, msg_tx: Option<Sender<ProgressMessage>>) -> Result<(), RunError> {
 
         let algorithm = self.repo.get_algorithm(&iter).await.unwrap(); //Maybe wrap in an Arc<>, Also, maybe wrap iter in an Arc
+        let ros_version = algorithm.ros_version;
 
         // -- CREATE THE CONTAINER ---
-        let _ = self.start_container(&iter).await;
+        self.start_container(&iter).await.unwrap();
 
         //get the corresponding algorithm run
         let algorithm_run = self.repo.get_algorithm_run(&iter).await.unwrap();
 
         let dataset = self.repo.get_dataset(&iter).await.unwrap(); //get the dataset
 
-        let cmd = match self.config.rustle.dataset_duration {
-            -1.0 => format!("rosbag play -s {} -r {} --clock /rustle/dataset/*.bag", self.config.rustle.dataset_start, algorithm_run.bag_speed),
-            _ => format!("rosbag play -s {} -u {} -r {} --clock /rustle/dataset/*.bag", self.config.rustle.dataset_start, self.config.rustle.dataset_duration, algorithm_run.bag_speed)
+        let cmd = match ros_version {
+            RosVersion::Ros1 => match self.config.rustle.dataset_duration {
+                -1.0 => format!(
+                    "rosbag play -s {} -r {} --clock /rustle/dataset/*.bag", 
+                    self.config.rustle.dataset_start, algorithm_run.bag_speed
+                ),
+                _ => format!(
+                    "rosbag play -s {} -u {} -r {} --clock /rustle/dataset/*.bag", 
+                    self.config.rustle.dataset_start, self.config.rustle.dataset_duration, algorithm_run.bag_speed
+                )
+            },
+            RosVersion::Ros2 => match self.config.rustle.dataset_duration {
+                -1.0 => format!(
+                    "ros2 bag play --start-offset {} -r {} /rustle/dataset/", 
+                    self.config.rustle.dataset_start, algorithm_run.bag_speed
+                ),
+                _ => format!(
+                    "ros2 bag play --start-offset {} --playback-duration {} -r {} /rustle/dataset/", 
+                    self.config.rustle.dataset_start, self.config.rustle.dataset_duration, algorithm_run.bag_speed
+                )
+            }
         };
 
-        let rustle_cmd = format!("roslaunch rustle-ros rustle.launch --wait test_type:={} algo_topic:={} gt_topic:={}", &iter.test_type.as_str(), &algorithm.odom_topics[0], &dataset.ground_truth_topic.clone().unwrap());
+        let rustle_cmd = match ros_version {
+            RosVersion::Ros1 => format!(
+                "roslaunch rustle-ros rustle.launch --wait test_type:={} algo_topic:={} gt_topic:={}", 
+                &iter.test_type.as_str(), &algorithm.odom_topics[0], &dataset.ground_truth_topic.clone().unwrap()
+            ),
+            RosVersion::Ros2 => format!(
+                "ros2 launch rustle_ros rustle.launch.py test_type:={} algo_topic:={} gt_topic:={}",
+                &iter.test_type.as_str(), &algorithm.odom_topics[0], &dataset.ground_truth_topic.clone().unwrap()
+            )
+        };
 
         //Vector of commands to run inside the container
         let commands: Vec<_> = vec![
@@ -142,8 +170,7 @@ impl IterationService {
         let token = Arc::new(CancellationToken::new());
 
         //Wait 1s for roscore to start
-        let ten_sec = time::Duration::from_secs(1);
-        thread::sleep(ten_sec);
+        thread::sleep(time::Duration::from_secs(1));
 
         let roslaunch_id = execs[0].id.clone();
         let task_token = token.clone();
@@ -156,26 +183,31 @@ impl IterationService {
                 loop{
                     select!{
                         Some(Ok(_msg)) = output.next() => {
-                           //info!("ROS MSG: {_msg}");
+                            //info!("ROS MSG: {_msg}");
                         },
                         _ = task_token.cancelled()=>{
                             //info!("Container Stopped");
                             //logic to cancel this task
 
+                            let kill_cmd = match ros_version {
+                                RosVersion::Ros1 => "rosnode kill -a 2>/dev/null",
+                                RosVersion::Ros2 => "pkill -f ros2", 
+                            };
+
                             let record_options_future = docker_clone
                                 .create_exec(
-                                &iter_clone.container.container_name,
-                                CreateExecOptions {
-                                    attach_stdout: Some(true),
-                                    attach_stderr: Some(true),
-                                    cmd: Some(vec!["/bin/bash", "-l", "-c", "rosnode", "kill", "-a", "2>/dev/null"]),
-                                    ..Default::default()
-                                },
-                            ).await.unwrap();
+                                    &iter_clone.container.container_name,
+                                    CreateExecOptions {
+                                        attach_stdout: Some(true),
+                                        attach_stderr: Some(true),
+                                        cmd: Some(vec!["/bin/bash", "-l", kill_cmd]),
+                                        ..Default::default()
+                                    },
+                                ).await.unwrap();
 
                             docker_clone.start_exec(&record_options_future.id, None).await.unwrap(); //This kills the record command
-                            //the record command
-                            debug!("Record command killed");
+                                                                                                     //the record command
+                            debug!("Record command killed"); 
                             break;
                         }
                     }
@@ -184,30 +216,29 @@ impl IterationService {
         });
 
         let topic_list = algorithm.odom_topics;
-        
+
         //TODO: OPTIMIZE THIS, THINK OF A BETTER WAY TO SAVE THE GT TOPIC
         let _res_tasks: Vec<_> = topic_list
             .into_iter()
             .map( |s: String| {
                 let iter_id_clone = iter.id
-                .clone()  // Clone the Option first
-                .ok_or_else(|| ProcessingError::NotFound("Iteration ID".into())).unwrap();
+                    .clone()  // Clone the Option first
+                    .ok_or_else(|| ProcessingError::NotFound("Iteration ID".into())).unwrap();
 
                 let odom_repo_clone = self.odom_repo.clone();
-                
+
                 tokio::spawn(async move {
                     // LOGIC TO SAVE ODOMS TO DB 
-                    let _ = Self::record_task_ws(&s, &iter_id_clone, odom_repo_clone).await;
+                    Self::record_task_ws(&s, &iter_id_clone, odom_repo_clone, ros_version).await;
                 })
             })
-            .collect();
+        .collect();
 
 
-       // Wait a certain number of seconds for the algorithm to init
-       let ten_sec = time::Duration::from_secs(self.config.rustle.start_offset as u64);
-       thread::sleep(ten_sec);
+        // Wait a certain number of seconds for the algorithm to init
+        thread::sleep(time::Duration::from_secs(self.config.rustle.start_offset as u64));
 
-       //Start the STATS collection
+        //Start the STATS collection
         let task_id_clone = iter.container.container_name.clone();
         let iteration_id_clone = iter.id
             .clone()  // Clone the Option first
@@ -217,32 +248,32 @@ impl IterationService {
         let docker_clone = self.docker.clone();
         let stat_service_clone = self.stat_service.clone();
 
-       let _stream_task = tokio::spawn(async move{
-           let stream= &mut docker_clone
-                   .stats(
-                       &task_id_clone,
-                       Some(StatsOptions {
-                           stream: true,
-                           one_shot: false
-                       }),
-                   );
-           loop{
-               select!{
-                   Some(Ok(msg)) = stream.next() => {
+        let _stream_task = tokio::spawn(async move{
+            let stream= &mut docker_clone
+                .stats(
+                    &task_id_clone,
+                    Some(StatsOptions {
+                        stream: true,
+                        one_shot: false
+                    }),
+                );
+            loop{
+                select!{
+                    Some(Ok(msg)) = stream.next() => {
 
-                       let stats = ContainerStats::new(msg.memory_stats, msg.cpu_stats, msg.precpu_stats, msg.num_procs);
+                        let stats = ContainerStats::new(msg.memory_stats, msg.cpu_stats, msg.precpu_stats, msg.num_procs);
 
-                       // Add stats the the database;
-                       let _ = stat_service_clone.record_stats(stats, &iteration_id_clone).await;
+                        // Add stats the the database;
+                        let _ = stat_service_clone.record_stats(stats, &iteration_id_clone).await;
 
-                   },
-                   _ = stream_token.cancelled()=>{
-                       break;
-                   }
+                    },
+                    _ = stream_token.cancelled()=>{
+                        break;
+                    }
 
-               }
-           }
-       });
+                }
+            }
+        });
 
         let rosplay_id = execs[1].id.clone();
         let docker_clone = self.docker.clone();
@@ -253,13 +284,13 @@ impl IterationService {
                 while let Some(Ok(log)) = output.next().await {
                     let line = match log {
                         LogOutput::StdOut { message } |
-                        LogOutput::StdErr { message } |
-                        LogOutput::Console { message } => {
-                            String::from_utf8_lossy(&message).to_string()
-                        },
+                            LogOutput::StdErr { message } |
+                            LogOutput::Console { message } => {
+                                String::from_utf8_lossy(&message).to_string()
+                            },
                         _ => continue, // Ignore unknown log types
                     };
-        
+
                     if let Some(progress) = parse_rosbag_line(&line, iter.iteration_num.into(), algorithm_run.to_string() ) {
                         if let Some(tx) = &msg_tx {
                             if tx.send(progress).await.is_err() {
@@ -283,11 +314,10 @@ impl IterationService {
 
         let _ = tokio::join!(rosplay_task);
         token.cancel(); // the end of the rosbag will be the first point where the other tasks need
-        // to stop
+                        // to stop
         let _ = tokio::join!(roslaunch_task);
 
-        let ten_sec = time::Duration::from_secs(1);
-        thread::sleep(ten_sec);
+        thread::sleep(time::Duration::from_secs(1));
 
         let iteration_id_clone = iter.id
             .clone()  // Clone the Option first
@@ -303,13 +333,13 @@ impl IterationService {
 
         //Compute the frequency
         let freq = self.repo.get_odom_frequency(&iter).await.map_err(|_e| RunError::Evo("Unable to find odometries".to_owned()))?;
-        
+
         let freq_metric = StatisticalMetrics::from_single_value(freq as f32);
         let _ = self.metric_service.create_freq_metric(iteration_id_clone.clone(), freq_metric).await; // add to DB
 
         warn!("Computing stats...");
         let stats = self.stat_service.get_stats(&iter).await.unwrap();
-        
+
         warn!("Computing cpu...");
         //Compute CPU stats
         let cpu_metric_opt = CpuMetrics::from_stats(&stats);
@@ -451,7 +481,7 @@ impl IterationService {
         let metrics = self.repo.get_metrics(iter).await?;
         Ok(metrics)
     }
-    
+
     pub async fn get_stats(&self, iter: &Iteration) -> Result<Vec<ContainerStats>, DbError>{
         let stats = self.stat_service.get_stats(iter).await?;
         Ok(stats)
@@ -502,7 +532,22 @@ impl IterationService {
 
         let target_id: Option<Thing> = algorithm.current_params;
 
-        let current_slam_config = self.params_service.repo.get_by_id(target_id).await?.unwrap();
+        // If target_id is None, handle it cleanly
+        let id = target_id.ok_or_else(|| {
+            DbError::InvalidData(format!(
+                    "Algorithm '{}' does not have any active configuration parameters assigned.", 
+                    algorithm.name
+            ))
+        })?;
+
+        // Safely map the database Option into a clean DbError::NotFound if the row doesn't exist
+        let current_slam_config = self.params_service.repo.get_by_id(Some(id.clone())).await?
+            .ok_or_else(|| {
+                DbError::NotFound(format!(
+                        "Configuration parameter record '{:?}' assigned to algorithm '{}' was not found in the database.", 
+                        id, algorithm.name
+                ))
+            })?;
 
         let mut rng = rand::rng();
         let random_seed = rng.next_u32();
@@ -572,30 +617,35 @@ impl IterationService {
             iter().
             map(|(k, v)| {
                 path_mounts.push(format!(
-                    "{}:{}",
-                    v,
-                    k
+                        "{}:{}",
+                        v,
+                        k
                 ));
             })
-            .collect();
-        
+        .collect();
+
 
         // Create a PortBinding mapping container port to host port
         let port_bindings = Some(HashMap::from([
-            ("57331/tcp".to_string(), Some(vec![
-                PortBinding {
-                    host_ip: Some("0.0.0.0".to_string()), // listen on all interfaces
-                    host_port: Some("57331".to_string()), // host port
-                }
-            ]))
+                ("57331/tcp".to_string(), Some(vec![
+                                               PortBinding {
+                                                   host_ip: Some("0.0.0.0".to_string()), // listen on all interfaces
+                                                   host_port: Some("57331".to_string()), // host port
+                                               }
+                ]))
         ]));
 
         //Setup container flags (cmd to execute, env variables, volumes to mount, etc...). 
+        let cmd_str = match algorithm.ros_version {
+            RosVersion::Ros1 => "roscore",
+            RosVersion::Ros2 => "sleep infinity",
+        };
+
         let config_docker = container::Config {
             image: Some(iteration.container.image_name.clone()),
-            cmd: Some(vec!["roscore".to_string()]),
+            cmd: Some(vec!["/bin/bash".to_string(), "-c".to_string(), cmd_str.to_string()]),
             exposed_ports: Some(HashMap::from([
-                ("57331/tcp".to_string(), HashMap::new())
+                    ("57331/tcp".to_string(), HashMap::new())
             ])),
             host_config: Some(HostConfig {
                 binds: Some(path_mounts),
@@ -616,10 +666,9 @@ impl IterationService {
     }
 
 
-    async fn record_task_ws(topic: &str, iteration_id: &Thing, odom_repo: OdometryRepo){
+    async fn record_task_ws(topic: &str, iteration_id: &Thing, odom_repo: OdometryRepo, ros_version: RosVersion){
 
-        let ten_sec = time::Duration::from_secs(5);
-        thread::sleep(ten_sec);
+        thread::sleep(time::Duration::from_secs(5));
 
         let (mut ws, _) = connect_async("ws://localhost:57331").await.unwrap();
         let topic_type = Self::resolve_topic_type(&mut ws, topic, 10).await.unwrap();
@@ -636,7 +685,7 @@ impl IterationService {
         while let Some(Ok(msg)) = ws.next().await {
             if let tungstenite::Message::Text(data) = msg {
 
-                match Self::convert_to_ros_msg(data.to_string()){
+                match Self::convert_to_ros_msg(data.to_string(), ros_version){
                     Ok(r) => {
 
                         let odometry_repo = odom_repo.clone();
@@ -654,6 +703,8 @@ impl IterationService {
                         warn!("{e:}");
                     }
                 }
+            } else {
+                warn!("could not parse recieved message: {msg:?}");
             }
         }
 
@@ -685,7 +736,7 @@ impl IterationService {
             });
 
             let txt = req.to_string();
-            warn!("Sending topic_type request (attempt {}): {}", attempt + 1, txt);
+            info!("Sending topic_type request (attempt {}): {}", attempt + 1, txt);
             ws.send(tungstenite::Message::Text(txt.into())).await.unwrap();
 
             // wait for response matching our id; allow multiple incoming messages and short timeouts
@@ -749,6 +800,7 @@ impl IterationService {
             }
 
             if let Some(t) = got_type {
+                info!("resolved type is: {}", t);
                 return Ok(t);
             }
 
@@ -757,9 +809,9 @@ impl IterationService {
         }
 
         Err(RosError::Query(format!(
-            "Could not resolve type for topic '{}' after {} attempts",
-            topic,
-            max_attempts
+                    "Could not resolve type for topic '{}' after {} attempts",
+                    topic,
+                    max_attempts
         )))
     }
 
@@ -770,7 +822,7 @@ impl IterationService {
 
 
 
-    fn convert_to_ros_msg(data: String) -> Result<RosMsg, RosError> {
+    fn convert_to_ros_msg(data: String, ros_version: RosVersion) -> Result<RosMsg, RosError> {
         // Parse JSON
         let v: Value = serde_json::from_str(&data)
             .map_err(|_| RosError::FormatError(data.clone()))?;
@@ -787,7 +839,7 @@ impl IterationService {
 
         // Create RosMsg
         let ros = RosMsg::new(top_fields)?;
-        let ros = ros.from_json(inner_msg)?;
+        let ros = ros.from_json(inner_msg, ros_version)?;
 
         Ok(ros)
     }
@@ -799,7 +851,7 @@ impl IterationService {
     ) -> Result<(), ProcessingError> {
         let odom = msg.as_odometry().unwrap();
         let mut db_odom = Odometry::new(odom.header);
-        
+
         // Copy relevant fields
         db_odom.child_frame_id = odom.child_frame_id;
         db_odom.pose = odom.pose;
@@ -829,7 +881,7 @@ impl IterationService {
         //    .await.unwrap()
         //    .ground_truth  // Clone the Option first
         //    .ok_or_else(|| ProcessingError::NotFound("Dataset Odometries were not found".into())).unwrap();
-        
+
         //let _ = Self::write_file(&ground_truth_data, "groundtruth", &mut PathBuf::from_str(&dataset_path).unwrap());
 
         let odoms: Vec<Odometry> = self.repo.get_odometries(iter).await.unwrap();
@@ -837,7 +889,7 @@ impl IterationService {
         let _ = Self::write_file(&odoms, &iter.container.container_name, &mut PathBuf::from_str(&result_path).unwrap());
 
         let evo_ape_str = args.compute(&format!("{dataset_path}/groundtruth"), &format!("{result_path}/{}",&iter.container.container_name))?;
-        
+
         let _ = run_metrics_py(&format!("{dataset_path}/groundtruth"), &format!("{result_path}/{}",&iter.container.container_name), &self.config, &result_path);
 
         let metric = StatisticalMetrics::from_str(&evo_ape_str); //TODO Dont unwrap() this
@@ -853,10 +905,10 @@ impl IterationService {
             .write(true)
             .create_new(true)
             .open(path)?;
-        
-            for odom in data {
-                writeln!(file, "{}", odom)?;
-            };
+
+        for odom in data {
+            writeln!(file, "{}", odom)?;
+        };
         Ok(())
     }
 

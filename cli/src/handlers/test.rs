@@ -254,7 +254,9 @@ async fn handle_run_cmd(run_test: RunTest, service: &TestExecutionService) -> Re
     } else {
         // If --all isn't present, execute a specific test (by name)
         if let Some(name) = run_test.name {
-            let test = service.get_by_name(&name).await?.unwrap();
+            let Some(test) = service.get_by_name(&name).await? else {
+                return Err(format!("No test execution with name '{}' found", name).into());
+            };
             info!("Running test: {}", test.def.name);
 
             let _ = service.start_execution(test, Some(msg_tx)).await;
