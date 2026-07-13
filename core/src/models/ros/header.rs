@@ -6,7 +6,8 @@ use yaml_rust2::Yaml;
 
 use crate::services::RosError;
 
-use super::ros_msg::Ros1;
+use super::RosVersion;
+use super::ros_msg::RosData;
 
 #[derive(Debug, Serialize, Deserialize, Default, Clone)]
 pub struct Header {
@@ -16,7 +17,7 @@ pub struct Header {
     pub frame_id: Option<String>,
 }
 
-impl Ros1 for Header {
+impl RosData for Header {
 
     fn empty() -> Header{
         Header { 
@@ -27,54 +28,68 @@ impl Ros1 for Header {
     }
 
 
-    fn from_yaml(yaml: Yaml) -> Result<Header, RosError>{
+    fn from_yaml(yaml: Yaml, ros_version: RosVersion) -> Result<Header, RosError>{
 
-        let seq = yaml["seq"].as_i64().unwrap();
-        let frame_id = yaml["frame_id"].as_str().unwrap();
-        let stamp_sec = yaml["stamp"]["secs"].as_i64().unwrap();
-        let stamp_nsec = yaml["stamp"]["nsecs"].as_i64().unwrap() as u32;
-        let dt = DateTime::from_timestamp(stamp_sec, stamp_nsec).unwrap();
+        let seq = match ros_version {
+            RosVersion::Ros1 => { yaml["seq"].as_i64() }
+            RosVersion::Ros2 => { Some(0) }
+        }.ok_or(RosError::FormatError(format!("Missing or invalid 'seq' in Header: {:?}", yaml)))?;
+
+        let frame_id = match yaml["frame_id"].as_str() {
+            Some("") => { None }
+            Some(x) => { Some(String::from(x)) }
+            None => { return Err(RosError::FormatError(format!("Missing 'frame_id' in Header: {:?}", yaml))) }
+        };
+
+        let stamp_sec = match ros_version {
+            RosVersion::Ros1 => { yaml["stamp"]["secs"].as_i64() }
+            RosVersion::Ros2 => { yaml["stamp"]["sec"].as_i64() }
+        }.ok_or(RosError::FormatError(format!("Missing 'stamp.secs' in Header: {:?}", yaml)))?;
+        let stamp_nsec = match ros_version {
+            RosVersion::Ros1 => { yaml["stamp"]["nsecs"].as_i64()}
+            RosVersion::Ros2 => { yaml["stamp"]["nanosec"].as_i64()}
+        }.ok_or(RosError::FormatError(format!("Missing 'stamp.nsecs' in Header: {:?}", yaml)))?;
+
+        let dt = DateTime::from_timestamp(stamp_sec, stamp_nsec as u32)
+            .ok_or(RosError::FormatError(format!("Invalid timestamp: {}.{:?}", stamp_sec, stamp_nsec)))?;
 
         Ok(Header{
             seq: seq as u32,
             time: dt,
-            frame_id: match frame_id{
-                "" => None,
-                _ => Some(String::from(frame_id))
-            }
+            frame_id
         })
     }
 
-    fn from_json(value: &serde_json::Value) -> Result<Header, RosError> {
-        // Parse sequence number
-        let seq = value["seq"].as_i64()
-            .ok_or_else(|| RosError::FormatError(format!("Missing or invalid 'seq' in Header: {:?}", value)))? as u32;
+    fn from_json(value: &serde_json::Value, ros_version: RosVersion) -> Result<Header, RosError> {
 
-        // Parse frame_id
-        let frame_id_str = value["frame_id"].as_str()
-            .ok_or_else(|| RosError::FormatError(format!("Missing 'frame_id' in Header: {:?}", value)))?;
-        let frame_id = if frame_id_str.is_empty() {
-            None
-        } else {
-            Some(frame_id_str.to_string())
+
+        let seq = match ros_version {
+            RosVersion::Ros1 => { value["seq"].as_i64() }
+            RosVersion::Ros2 => { Some(0) }
+        }.ok_or(RosError::FormatError(format!("Missing or invalid 'seq' in Header: {:?}", value)))?;
+
+        let frame_id = match value["frame_id"].as_str() {
+            Some("") => { None }
+            Some(x) => { Some(String::from(x)) }
+            None => { return Err(RosError::FormatError(format!("Missing 'frame_id' in Header: {:?}", value))) }
         };
 
-        // Parse timestamp
-        let stamp_sec = value["stamp"]["secs"].as_i64()
-            .ok_or_else(|| RosError::FormatError(format!("Missing 'stamp.secs' in Header: {:?}", value)))?;
-        let stamp_nsec = value["stamp"]["nsecs"].as_i64()
-            .ok_or_else(|| RosError::FormatError(format!("Missing 'stamp.nsecs' in Header: {:?}", value)))? as u32;
+        let stamp_sec = match ros_version {
+            RosVersion::Ros1 => { value["stamp"]["secs"].as_i64() }
+            RosVersion::Ros2 => { value["stamp"]["sec"].as_i64() }
+        }.ok_or(RosError::FormatError(format!("Missing 'stamp.secs' in Header: {:?}", value)))?;
+        let stamp_nsec = match ros_version {
+            RosVersion::Ros1 => { value["stamp"]["nsecs"].as_i64()}
+            RosVersion::Ros2 => { value["stamp"]["nanosec"].as_i64()}
+        }.ok_or(RosError::FormatError(format!("Missing 'stamp.nsecs' in Header: {:?}", value)))?;
 
-        let dt = chrono::DateTime::<chrono::Utc>::from_utc(
-            chrono::NaiveDateTime::from_timestamp_opt(stamp_sec, stamp_nsec)
-                .ok_or_else(|| RosError::FormatError(format!("Invalid timestamp: {}.{:?}", stamp_sec, stamp_nsec)))?,
-            chrono::Utc,
-        );
+        let dt = DateTime::from_timestamp(stamp_sec, stamp_nsec as u32)
+            .ok_or(RosError::FormatError(format!("Invalid timestamp: {}.{:?}", stamp_sec, stamp_nsec)))?;
 
-        Ok(Header {
-            seq,
+        Ok(Header{
+            seq: seq as u32,
             time: dt,
-            frame_id,
+            frame_id
         })
     }
     

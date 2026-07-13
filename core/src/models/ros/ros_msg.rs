@@ -1,5 +1,4 @@
 use chrono::Utc;
-use log::warn;
 use nalgebra::{Point3, Quaternion};
 use serde::{Deserialize, Serialize};
 use yaml_rust2::Yaml;
@@ -7,7 +6,7 @@ use yaml_rust2::Yaml;
 
 use crate::{models::ros::Tum, services::error::RosError};
 
-use super::{Header, Pose, PoseStamped, Twist, Path, Odometry};
+use super::{RosVersion, Header, Pose, PoseStamped, Twist, Path, Odometry};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum RosMsg{
@@ -20,10 +19,10 @@ pub enum RosMsg{
     Tum(Tum)
 }
 
-pub trait Ros1: Sized{
+pub trait RosData: Sized{
     fn empty() -> Self;
-    fn from_yaml(yaml: Yaml) -> Result<Self, RosError>;
-    fn from_json(value: &serde_json::Value) -> Result<Self, RosError>;
+    fn from_yaml(yaml: Yaml, ros_version: RosVersion) -> Result<Self, RosError>;
+    fn from_json(value: &serde_json::Value, ros_version: RosVersion) -> Result<Self, RosError>;
 }
 
 impl RosMsg{
@@ -115,68 +114,68 @@ impl RosMsg{
         }
     }
 
-    pub fn from_yaml(&self, yaml: Yaml) -> Result<RosMsg, RosError>{
+    pub fn from_yaml(&self, yaml: Yaml, ros_version: RosVersion) -> Result<RosMsg, RosError>{
         match self{
             RosMsg::Header(_) => {
                 Ok(RosMsg::Header(
-                    Header::from_yaml(yaml)?
+                    Header::from_yaml(yaml, ros_version)?
                 ))
             },
             RosMsg::Pose(_) => Ok(
                 RosMsg::Pose(
-                    Pose::from_yaml(yaml)?
+                    Pose::from_yaml(yaml, ros_version)?
                 )
             ),
             RosMsg::PoseStamped(_) => Ok(
                 RosMsg::PoseStamped(
-                    PoseStamped::from_yaml(yaml)?
+                    PoseStamped::from_yaml(yaml, ros_version)?
                 )
             ),
             RosMsg::Twist(_) => Ok(
                 RosMsg::Twist(
-                    Twist::from_yaml(yaml)?
+                    Twist::from_yaml(yaml, ros_version)?
                 )
             ),
             RosMsg::Path(_) => Ok(
                 RosMsg::Path(
-                    Path::from_yaml(yaml)?
+                    Path::from_yaml(yaml, ros_version)?
                 )
             ),
             RosMsg::Odometry(_) => Ok(
                 RosMsg::Odometry(
-                    Odometry::from_yaml(yaml)?
+                    Odometry::from_yaml(yaml, ros_version)?
                 )
             ),
             RosMsg::Tum(_) => Ok(
-                RosMsg::Tum(Tum::from_yaml(yaml)?)
+                RosMsg::Tum(Tum::from_yaml(yaml, ros_version)?)
             )
         }
     }
 
 
 
-    pub fn from_json(&self, value: &serde_json::Value) -> Result<RosMsg, RosError> {
+    pub fn from_json(&self, value: &serde_json::Value, ros_version: RosVersion) -> Result<RosMsg, RosError> {
         match self {
             RosMsg::Header(_) => Ok(RosMsg::Header(
-                Header::from_json(value)?
+                Header::from_json(value, ros_version)?
             )),
             RosMsg::Pose(_) => Ok(RosMsg::Pose(
-                Pose::from_json(value)?
+                Pose::from_json(value, ros_version)?
             )),
             RosMsg::PoseStamped(_) => Ok(RosMsg::PoseStamped(
-                PoseStamped::from_json(value)?
+                PoseStamped::from_json(value, ros_version)?
             )),
             RosMsg::Twist(_) => Ok(RosMsg::Twist(
-                Twist::from_json(value)?
+                Twist::from_json(value, ros_version)?
             )),
             RosMsg::Path(_) => Ok(RosMsg::Path(
-                Path::from_json(value)?
+                Path::from_json(value, ros_version)?
             )),
             RosMsg::Odometry(_) => Ok(RosMsg::Odometry(
-                Odometry::from_json(value)?
+                Odometry::from_json(value, ros_version)?
             )),
             RosMsg::Tum(_) => Ok(
-                RosMsg::Tum(Tum::from_json(value)?)
+                RosMsg::Tum(Tum::from_json(value, ros_version)?)
             )
         }
     }

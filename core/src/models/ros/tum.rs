@@ -2,7 +2,8 @@ use chrono::{DateTime, TimeZone, Utc};
 use serde::{Deserialize, Serialize};
 use yaml_rust2::Yaml;
 
-use crate::{models::ros::ros_msg::Ros1, services::RosError};
+use crate::services::RosError;
+use super::{RosVersion, ros_msg::RosData};
 
 
 
@@ -33,7 +34,7 @@ where
         .ok_or_else(|| serde::de::Error::custom("invalid timestamp"))?)
 }
 
-impl Ros1 for Tum {
+impl RosData for Tum {
     fn empty() -> Tum {
         Tum{
             time: DateTime::from_timestamp(0, 0).unwrap(),
@@ -47,7 +48,7 @@ impl Ros1 for Tum {
         }
     }
 
-    fn from_yaml(value: Yaml) -> Result<Tum, RosError>{
+    fn from_yaml(value: Yaml, _ros_version: RosVersion) -> Result<Tum, RosError>{
         let mut time = value["time"].as_str().unwrap().split(".");
         let sec = time.next().unwrap().parse::<i64>().unwrap();
         let nsec = time.next().unwrap().parse::<u32>().unwrap();
@@ -77,7 +78,7 @@ impl Ros1 for Tum {
         )
     }
 
-    fn from_json(value: &serde_json::Value) -> Result<Tum, RosError> {
+    fn from_json(value: &serde_json::Value, _ros_version: RosVersion) -> Result<Tum, RosError> {
         let mut time = value["time"].as_str().unwrap().split(".");
         let sec = time.next().unwrap().parse::<i64>().unwrap();
         let nsec = time.next().unwrap().parse::<u32>().unwrap();
