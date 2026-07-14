@@ -25,7 +25,7 @@ pub async fn handle_test(
 ) -> Result<(), Box<dyn Error>> {
     match cmd.command {
         TestSubCommand::Add(add) => {
-                                handle_add_cmd(add, service).await;
+                                handle_add_cmd(add, service).await?;
                     }
         TestSubCommand::List => {
                         let tests = service.get_all().await.unwrap();
@@ -187,7 +187,7 @@ async fn handle_add_cmd(add_test: AddTest, service: &TestExecutionService) -> Re
         //save the test executions in the database!
 
         for mut exec in exec_list{
-            let _ = service.save_test_execution(&mut exec).await;
+            service.save_test_execution(&mut exec).await?;
         }
 
     } else {
@@ -254,7 +254,9 @@ async fn handle_run_cmd(run_test: RunTest, service: &TestExecutionService) -> Re
     } else {
         // If --all isn't present, execute a specific test (by name)
         if let Some(name) = run_test.name {
-            let test = service.get_by_name(&name).await?.unwrap();
+            let Some(test) = service.get_by_name(&name).await? else {
+                return Err(format!("No test execution with name '{}' found", name).into());
+            };
             info!("Running test: {}", test.def.name);
 
             let _ = service.start_execution(test, Some(msg_tx)).await;

@@ -1,24 +1,14 @@
 use comfy_table::{presets::UTF8_FULL, ContentArrangement, Table};
 use log::{error, info};
-use rustle_core::{models::{Algorithm, slam_config::SLAMConfig}, 
-                  services::{AlgorithmService, params::ParamsService}, 
-                  utils::config::Config,};
-
-use rustle_core::db::params::ParamsRepo;
-
-use bollard::Docker;
-use std::sync::Arc;
-use tokio::sync::Mutex;
-use surrealdb::engine::local::RocksDb;
+use rustle_core::{
+    models::{RosVersion, Algorithm, slam_config::SLAMConfig}, 
+    services::{AlgorithmService, params::ParamsService}, 
+};
 
 use crate::args::{AlgoCommand, AlgoSubCommand};
 
 use serde_yaml::from_reader;
 use std::{error::Error, fs::File};
-
-use surrealdb::sql::Thing;
-
-use surrealdb::Surreal;
 
 #[derive(Debug, serde::Deserialize)]
 struct AlgorithmConfig {
@@ -30,6 +20,8 @@ struct AlgorithmTemp {
     pub name: String,
     pub image_name: String,
     pub version: String,
+    #[serde(default)]
+    pub ros_version: RosVersion,
     pub parameters: String,
     pub odom_topics: Vec<String>
 }
@@ -55,6 +47,7 @@ pub async fn handle_algo(
                         name: add.name.expect("Missing: --name"),
                         version: add.version.expect("Missing: --version"),
                         image_name: add.image_name.expect("Missing: --image-name"),
+                        ros_version: add.ros_version.unwrap_or_else(|| RosVersion::Ros1),
                         //current_params: add.parameters.expect("Missing: --parameters").to_string(),
                         current_params: None,
                         param_list: Vec::new(),
@@ -135,6 +128,7 @@ async fn load_yaml_config(path: &str, service: &ParamsService) -> Result<Algorit
             version: algo.version.clone(),
             image_name: algo.image_name.clone(),
             current_params: current_config.id.clone(),
+            ros_version: algo.ros_version,
             odom_topics: algo.odom_topics.clone(),
             param_list: Vec::new(),
         };

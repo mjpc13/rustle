@@ -33,6 +33,7 @@ pub async fn handle_dataset(
                             ground_truth_topic: Some(add.ground_truth_topic.expect("Missing: --ground-truth-topic")),
                             dataset_path: add.dataset_path.expect("Missing: --dataset-path"),
                             ground_truth: None,
+                            ros_version: add.ros_version,
                             created_at: Utc::now(),
                             duration: None
                         }

@@ -4,7 +4,8 @@ use yaml_rust2::Yaml;
 
 use crate::services::RosError;
 
-use super::{ros_msg::Ros1, Header};
+use super::RosVersion;
+use super::{ros_msg::RosData, Header};
 
 
 #[derive(Debug, Serialize, Deserialize, Default, Clone)]
@@ -21,7 +22,7 @@ pub struct PoseStamped
     pub pose: Pose
 }
 
-impl Ros1 for Pose {
+impl RosData for Pose {
     fn empty() -> Pose{
         Pose { 
             position: Point3::origin(), 
@@ -29,7 +30,7 @@ impl Ros1 for Pose {
             covariance: None 
         }
     }
-    fn from_yaml(yaml: Yaml) -> Result<Pose, RosError>{
+    fn from_yaml(yaml: Yaml, _ros_version: RosVersion) -> Result<Pose, RosError>{
 
         let p_x = yaml["position"]["x"].as_f64().expect(&format!("{:#?}", yaml["position"]));
         let p_y = yaml["position"]["y"].as_f64().unwrap();
@@ -44,32 +45,26 @@ impl Ros1 for Pose {
         let position = Point3::from([p_x, p_y, p_z]);
         let orientation = Quaternion::from([o_x, o_y, o_z, o_w]);
 
-        let pose =  Pose{
+        let mut pose = Pose {
             position,
             orientation,
             covariance: None
         };
 
-        let mut covariance: Vec<f64> = vec![];
 
-        let _: Vec<_> = yaml["covariance"]
-            .as_vec()
-            .unwrap_or(
-                return Ok(pose)
-            )
-            .iter()
-            .map(|y|{
-                covariance.push(y.as_f64().unwrap());
-            })
-            .collect();
-
-        pose.covariance = Some(Matrix6::from_vec(covariance));
+        if let Some(cov) = yaml["covariance"].as_vec() {
+            pose.covariance = Some(Matrix6::from_vec(
+                cov.iter()
+                    .map(|v| v.as_f64().unwrap())
+                    .collect()
+            ));
+        }
 
         return Ok(pose)
 
     }
 
-    fn from_json(value: &serde_json::Value) -> Result<Pose, RosError> {
+    fn from_json(value: &serde_json::Value, _ros_version: RosVersion) -> Result<Pose, RosError> {
         // Parse position
         let p_x = value["position"]["x"].as_f64()
             .ok_or_else(|| RosError::FormatError(format!("Missing 'position.x': {:?}", value)))?;
@@ -98,14 +93,14 @@ impl Ros1 for Pose {
         };
 
         // Parse covariance if present
-        if let Some(cov_vec) = value["covariance"].as_array() {
-            let covariance: Result<Vec<f64>, RosError> = cov_vec.iter()
-                .map(|v| v.as_f64().ok_or_else(|| 
-                    RosError::FormatError(format!("Invalid covariance value: {:?}", v))
-                ))
-                .collect();
-            
-            pose.covariance = Some(Matrix6::from_vec(covariance?));
+        if let Some(cov) = value["covariance"].as_array() {
+            pose.covariance = Some(Matrix6::from_vec(
+                cov.iter()
+                    .map(|v| v.as_f64().ok_or_else(||
+                        RosError::FormatError(format!("Invalid covariance value: {:?}", v))
+                    ))
+                    .collect::<Result<Vec<f64>, RosError>>()?
+            ));
         }
 
         Ok(pose)
@@ -114,7 +109,7 @@ impl Ros1 for Pose {
 
 }
 
-impl Ros1 for PoseStamped {
+impl RosData for PoseStamped {
     fn empty() -> PoseStamped{
         PoseStamped{
             header: Header::empty(),
@@ -122,10 +117,10 @@ impl Ros1 for PoseStamped {
         }
     }
 
-    fn from_yaml(yaml: Yaml) -> Result<PoseStamped, RosError>{
+    fn from_yaml(yaml: Yaml, ros_version: RosVersion) -> Result<PoseStamped, RosError>{
         
-        let header = Header::from_yaml(yaml["header"].clone())?;
-        let pose = Pose::from_yaml(yaml["pose"].clone())?;
+        let header = Header::from_yaml(yaml["header"].clone(), ros_version)?;
+        let pose = Pose::from_yaml(yaml["pose"].clone(), ros_version)?;
 
         return Ok(PoseStamped{
             header,
@@ -133,9 +128,9 @@ impl Ros1 for PoseStamped {
         });
     }
 
-    fn from_json(value: &serde_json::Value) -> Result<Self, RosError> {
-        let header = Header::from_json(&value["header"].clone())?;
-        let pose = Pose::from_json(&value["pose"].clone())?;
+    fn from_json(value: &serde_json::Value, ros_version: RosVersion) -> Result<Self, RosError> {
+        let header = Header::from_json(&value["header"].clone(), ros_version)?;
+        let pose = Pose::from_json(&value["pose"].clone(), ros_version)?;
 
         return Ok(PoseStamped{
             header,

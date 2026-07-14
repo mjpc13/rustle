@@ -1,0 +1,10 @@
+test_definitions:
+
+  #Runs the normal algorithms in the dataset
+  - name: "simple"
+    workers: 1
+    iterations: 1
+    algo_list: ["kiss-icp"]
+    dataset_name: "botanic_garden"
+    test_type:
+      type: simple

@@ -23,6 +23,7 @@ impl AlgorithmService {
     }
 
     /// Load algorithm configuration from YAML file and save to DB
+    // seems to be never used
     pub async fn create_from_yaml(
         &self,
         yaml_path: &str

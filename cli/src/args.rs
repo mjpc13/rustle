@@ -1,4 +1,5 @@
 use clap::{Args, Parser, Subcommand};
+use rustle_core::models::RosVersion;
 
 /// CLI parser for the `rustle` application.
 #[derive(Debug, Parser)]
@@ -66,6 +67,9 @@ pub struct AddDataset {
     /// Topic name for groundtruth data
     pub ground_truth_topic: Option<String>,
 
+    /// The ros version of the dataset (default -> Ros1)
+    pub ros_version: Option<RosVersion>,
+
     /// File path where the dataset is stored
     pub dataset_path: Option<String>,
 }
@@ -132,6 +136,9 @@ pub struct AddAlgorithm {
 
     /// Custom parameters in string format
     pub parameters: Option<String>,
+
+    /// Ros version (either ROS_1 or ROS_2)
+    pub ros_version: Option<RosVersion>,
 
     /// List of odometry topics
     #[clap(short, long)]

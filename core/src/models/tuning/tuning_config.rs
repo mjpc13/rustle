@@ -11,7 +11,7 @@ use crate::models::tuning::grid_search::GridSearchConfig;
 use crate::models::metrics::Metric;
 
 use crate::models::tuning::TuneType;
-use rand::{Rng, thread_rng};
+use rand::RngExt;
 
 use csv::Writer;
 

@@ -7,7 +7,8 @@ use yaml_rust2::Yaml;
 
 use crate::services::RosError;
 
-use super::{header::Header, pose::Pose, ros_msg::Ros1, twist::Twist};
+use super::RosVersion;
+use super::{header::Header, ros_msg::RosData, pose::Pose, twist::Twist};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Odometry {
@@ -32,7 +33,7 @@ impl Odometry {
     }
 }
 
-impl Ros1 for Odometry {
+impl RosData for Odometry {
     fn empty() -> Odometry{
         Odometry{
             id: None,
@@ -44,14 +45,14 @@ impl Ros1 for Odometry {
         }
     }
 
-    fn from_yaml(yaml: Yaml) -> Result<Odometry, RosError>{
-        let header = Header::from_yaml(yaml["header"].clone())?;
+    fn from_yaml(yaml: Yaml, ros_version: RosVersion) -> Result<Odometry, RosError>{
+        let header = Header::from_yaml(yaml["header"].clone(), ros_version)?;
 
-        let pose = match Pose::from_yaml(yaml["pose"]["pose"].clone()){
+        let pose = match Pose::from_yaml(yaml["pose"]["pose"].clone(), ros_version){
             Ok(p) => Some(p),
             Err(_) => None
         };
-        let twist = match Twist::from_yaml(yaml["twist"]["twist"].clone()){
+        let twist = match Twist::from_yaml(yaml["twist"]["twist"].clone(), ros_version){
             Ok(t) => Some(t),
             Err(_) => None
         };
@@ -72,19 +73,19 @@ impl Ros1 for Odometry {
             }
         )
     }
-    fn from_json(value: &serde_json::Value) -> Result<Odometry, RosError> {
+    fn from_json(value: &serde_json::Value, ros_version: RosVersion) -> Result<Odometry, RosError> {
         // Parse header
-        let header = Header::from_json(&value["header"])?;
+        let header = Header::from_json(&value["header"], ros_version)?;
 
         // Parse pose
         let pose = match value["pose"]["pose"].as_object() {
-            Some(_) => Some(Pose::from_json(&value["pose"]["pose"])?),
+            Some(_) => Some(Pose::from_json(&value["pose"]["pose"], ros_version)?),
             None => None,
         };
 
         // Parse twist
         let twist = match value["twist"]["twist"].as_object() {
-            Some(_) => Some(Twist::from_json(&value["twist"]["twist"])?),
+            Some(_) => Some(Twist::from_json(&value["twist"]["twist"], ros_version)?),
             None => None,
         };
 

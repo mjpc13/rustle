@@ -408,7 +408,7 @@ impl TuningService {
         });
 
         let mut all_iterations_metrics: Vec<(Vec<Metric>, Vec<(String, u64)>)> = Vec::new();
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
 
         //let all_configs: &Vec<HashMap<String, Value>> = &tuning_test.tuning_type.as_ref().unwrap().as_random_search().unwrap().configs;
         let initial_params = &self.params_service.get_by_id(algo.current_params.clone()).await?.unwrap().params;

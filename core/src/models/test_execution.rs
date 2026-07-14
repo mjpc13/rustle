@@ -4,7 +4,7 @@ use chrono::{DateTime, Utc};
 use serde::{Serialize, Deserialize};
 use surrealdb::sql::Thing;
 
-use crate::{models::{metric::Metric, test_definitions::{CutParams, DropParams}, Algorithm, SpeedTestParams, TestDefinition, TestDefinitionsConfig, TestType}, services::{error::ExecutionError, TestExecutionError, ValidationError}};
+use crate::{models::{RosVersion, metric::Metric, test_definitions::{CutParams, DropParams}, Algorithm, SpeedTestParams, TestDefinition, TestDefinitionsConfig, TestType}, services::{error::ExecutionError, TestExecutionError, ValidationError}};
 
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -34,6 +34,7 @@ pub struct TestExecution {
     pub created_at: DateTime<Utc>,
     pub start_time: Option<DateTime<Utc>>,
     pub end_time: Option<DateTime<Utc>>,
+    pub ros_version: Option<RosVersion>,
     pub metrics: HashMap<String, Vec<Metric>>,
     pub def: TestDefinition
 }
@@ -47,6 +48,7 @@ impl TestExecution {
             created_at: Utc::now(),
             start_time: None,
             end_time: None,
+            ros_version: None,
             metrics: HashMap::new(),
             def
         }

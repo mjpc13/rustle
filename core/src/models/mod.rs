@@ -21,7 +21,7 @@ pub use self::{
     test_definitions::{TestDefinition, TestType, SimpleTestParams, SpeedTestParams, TestDefinitionsConfig},
     metrics::metric,
     container::Container,
-    ros::{Odometry, Header, Pose, Twist},
+    ros::{Odometry, Header, Pose, Twist, RosVersion},
     algorithm_run::{AlgorithmRun},
     test_execution::{TestExecution, TestExecutionStatus},
     iteration::Iteration,

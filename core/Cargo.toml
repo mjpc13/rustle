@@ -24,12 +24,11 @@ regex = "*"
 thiserror = "1.0.57"
 custom_error = "1.9.2"
 
-surrealdb = { version = "*", features = ["kv-mem", "kv-rocksdb"] }
+surrealdb = { version = "2.6.5", features = ["kv-mem", "kv-rocksdb"] }
 chrono = "0.4.35"
 serde = "1.0.197"
 serde_yaml = "*"
 serde_json = "*"
-serde_as = "*"
 
 ulid = "*"
 
@@ -41,12 +40,12 @@ itertools = "*"
 nalgebra = { version = "0.32.4", features = ["serde-serialize"] }
 
 charming = {version = "0.4.0", features = ["ssr"]}
-rand = "*"
+rand = "0.10"
 pyo3 = { version = "0.20.0", features = ["auto-initialize"] }
 
 indicatif = "0.17.7"
 
 argmin = "*"
 rand_xoshiro = "0.7"
-rand_distr = "0.5.1"
+rand_distr = "0.6"
 csv = "1.4.0"

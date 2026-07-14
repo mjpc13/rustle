@@ -4,7 +4,8 @@ use yaml_rust2::Yaml;
 
 use crate::services::RosError;
 
-use super::ros_msg::Ros1;
+use super::RosVersion;
+use super::ros_msg::RosData;
 
 
 
@@ -15,7 +16,7 @@ pub struct Twist {
     pub covariance: Option<Matrix6<f64>>,
 }
 
-impl Ros1 for Twist {
+impl RosData for Twist {
     fn empty() -> Twist{
         Twist { 
             linear: Vector3::zeros(), 
@@ -24,7 +25,7 @@ impl Ros1 for Twist {
         }
     }
 
-    fn from_yaml(yaml: Yaml) -> Result<Twist, RosError>{
+    fn from_yaml(yaml: Yaml, _ros_version: RosVersion) -> Result<Twist, RosError>{
         let l_x = yaml["linear"]["x"].as_f64().unwrap();
         let l_y = yaml["linear"]["y"].as_f64().unwrap();
         let l_z = yaml["linear"]["z"].as_f64().unwrap();
@@ -36,34 +37,25 @@ impl Ros1 for Twist {
         let linear = Vector3::from([l_x, l_y, l_z]);
         let angular = Vector3::from([a_x, a_y, a_z]);
 
-        let twist =  Twist{
+        let mut twist =  Twist{
             linear,
             angular,
             covariance: None
         };
 
-        let mut covariance: Vec<f64> = vec![];
+        if let Some(cov) = yaml["covariance"].as_vec() {
+            twist.covariance = Some(Matrix6::from_vec(
+                cov.iter()
+                    .map(|v| v.as_f64().unwrap())
+                    .collect()
+            ));
+        }
 
-        let _: Vec<_> = yaml["covariance"]
-            .as_vec()
-            .unwrap_or(
-                return Ok(twist)
-            )
-            .iter()
-            .map(|y|{
-                covariance.push(y.as_f64().unwrap());
-            })
-            .collect();
-
-        twist.covariance = Some(Matrix6::from_vec(covariance));
-
-
-        return Ok(twist)
-
+        Ok(twist)
     }
 
 
-    fn from_json(value: &serde_json::Value) -> Result<Twist, RosError> {
+    fn from_json(value: &serde_json::Value, _ros_version: RosVersion) -> Result<Twist, RosError> {
         // Parse linear components
         let l_x = value["linear"]["x"].as_f64()
             .ok_or_else(|| RosError::FormatError(format!("Missing 'linear.x': {:?}", value)))?;
@@ -90,18 +82,16 @@ impl Ros1 for Twist {
         };
 
         // Parse covariance if present
-        if let Some(cov_vec) = value["covariance"].as_array() {
-            let covariance: Result<Vec<f64>, RosError> = cov_vec.iter()
-                .map(|v| v.as_f64().ok_or_else(|| 
-                    RosError::FormatError(format!("Invalid covariance value: {:?}", v))
-                ))
-                .collect();
-            
-            twist.covariance = Some(Matrix6::from_vec(covariance?));
+        if let Some(cov) = value["covariance"].as_array() {
+            twist.covariance = Some(Matrix6::from_vec(
+                cov.iter()
+                    .map(|v| v.as_f64().ok_or_else(||
+                        RosError::FormatError(format!("Invalid covariance value: {:?}", v))
+                    ))
+                    .collect::<Result<Vec<f64>, RosError>>()?
+            ));
         }
 
         Ok(twist)
     }
-
-
 }
