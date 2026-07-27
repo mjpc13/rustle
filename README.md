@@ -38,7 +38,7 @@ It feature:
 
 To run it you first have to build the docker image (only once):
 ```bash
-docker build -t neorustle/kiss-icp:latest -f docker/Dockerfile.kiss_icp .
+docker build -t neorustle/kiss-icp:latest -f tests/kiss_icp_demo/Dockerfile .
 ```
 
 Then generate the bag (only once):
