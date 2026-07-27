@@ -1,6 +1,0 @@
-/target
-Cargo.lock
-*.bag
-.vscode/
-.venv/
-rustle/examples/dataset/

@@ -1,5 +1,0 @@
-datasets:
-  - name: "ig_lio_test"
-    ground_truth_topic: "/gt_poses"
-    dataset_path: "/home/francisco/Desktop/dataset"
-    tag: ["ig_lio_test"]
