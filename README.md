@@ -34,7 +34,7 @@ It feature:
 - params.yaml: a parmeter file for the kiss-icp module
 - rosbag_generator.py: a script that generate a simple rosbag that conain a groundtruth and a pointcloud topic.
   The generated data correspond to a sensor doing an 8m diameter circle in a 10m box 0.5m above the ground.
-- main.py: the main script that run the three component and evo evaluation.
+- main.py: the main script that run the pipeline.
 
 To run it you first have to build the docker image (only once):
 ```bash

@@ -4,13 +4,14 @@ from typing import Dict, List
 import docker
 from docker.errors import APIError, NotFound
 
+logger = logging.getLogger(__name__)
+
 class DockerWrapper:
     """Docker SDK helper wrapper, to make interaction with container easier."""
 
     def __init__(self):
         try:
             self.client = docker.from_env()
-            self.logger = logging.getLogger(__name__)
         except Exception as e:
             logging.critical(
                 "Failed to connect to the Docker daemon. "
@@ -24,29 +25,29 @@ class DockerWrapper:
             # Check if network already exists to avoid throwing unnecessary errors
             existing_networks = self.client.networks.list(names=[network_name])
             if existing_networks:
-                self.logger.info(f"Docker network '{network_name}' already exists.")
+                logger.info(f"Docker network '{network_name}' already exists.")
                 return
 
-            self.logger.info(f"Creating isolated Docker network: {network_name}")
+            logger.info(f"Creating isolated Docker network: {network_name}")
             self.client.networks.create(
                 name=network_name,
                 driver="bridge",
                 check_duplicate=True
             )
         except APIError as e:
-            self.logger.error(f"Failed to create Docker network '{network_name}': {e}")
+            logger.error(f"Failed to create Docker network '{network_name}': {e}")
             raise e
 
     def remove_network(self, network_name: str) -> None:
         """Remove a custom network."""
         try:
             network = self.client.networks.get(network_name)
-            self.logger.info(f"Removing Docker network: {network_name}")
+            logger.info(f"Removing Docker network: {network_name}")
             network.remove()
         except NotFound:
-            self.logger.warning(f"Docker network '{network_name}' not found; skipping removal.")
+            logger.warning(f"Docker network '{network_name}' not found; skipping removal.")
         except APIError as e:
-            self.logger.error(f"Failed to remove Docker network '{network_name}': {e}")
+            logger.error(f"Failed to remove Docker network '{network_name}': {e}")
             raise e
 
     def run_container(
@@ -92,7 +93,7 @@ class DockerWrapper:
             }
 
         try:
-            self.logger.info(f"Spawning container from image: {image}")
+            logger.info(f"Spawning container from image: {image}")
             container = self.client.containers.run(
                 image=image,
                 command=command,
@@ -106,30 +107,30 @@ class DockerWrapper:
             )
 
             if container.id:
-                self.logger.info(f"Container was correctly spawned with id {container.id[:12]}")
+                logger.debug(f"Container was correctly spawned with id {container.id[:12]}")
                 return container.id
             else:
                 raise RuntimeError(f"Docker SDK returned an unexpected object type: {type(container)}")
 
         except APIError as e:
-            self.logger.error(f"Failed to run container for image {image}: {e}")
+            logger.error(f"Failed to run container for image {image}: {e}")
             raise e
 
     def wait_for_container(self, container_id: str) -> int:
         """Blocks until the container exits and returns its exit code."""
         try:
             container = self.client.containers.get(container_id)
-            self.logger.info(f"Waiting for container {container.name} ({container_id[:12]}).")
+            logger.info(f"Waiting for container {container.name} ({container_id[:12]}).")
             result = container.wait()
             status = result.get("StatusCode", -1)
             if status != 0:
-                self.logger.error(f"Container '{container.name}' crashed with status code {status}.")
+                logger.warning(f"Container '{container.name}' exited with status code {status}.")
             return status
-        except NotFound:
-            self.logger.error(f"Cannot wait for container {container_id[:12]}; it does not exist.")
-            return -1
+        except NotFound as e:
+            logger.error(f"Cannot wait for container {container_id[:12]}; it does not exist.")
+            raise e
         except APIError as e:
-            self.logger.error(f"Error waiting on container {container_id[:12]}: {e}")
+            logger.error(f"Error waiting on container {container_id[:12]}: {e}")
             raise e
 
     def get_container_logs(self, container_id: str) -> str:
@@ -138,10 +139,10 @@ class DockerWrapper:
             container = self.client.containers.get(container_id)
             return container.logs(stdout=True, stderr=True).decode("utf-8", errors="replace")
         except NotFound:
-            self.logger.warning(f"Container {container_id[:12]} not found to fetch logs, returning empty logs.")
+            logger.warning(f"Container {container_id[:12]} not found to fetch logs, returning empty logs.")
             return ""
         except APIError as e:
-            self.logger.error(f"Error fetching container {container_id[:12]} logs: {e}")
+            logger.error(f"Error fetching container {container_id[:12]} logs: {e}")
             raise e
 
     def stop_and_remove_container(self, container_id: str) -> None:
@@ -149,20 +150,20 @@ class DockerWrapper:
         container = None
         try:
             container = self.client.containers.get(container_id)
-            self.logger.info(f"Stopping container: {container.name} ({container_id[:12]})")
+            logger.info(f"Stopping container: {container.name} ({container_id[:12]})")
             
             container.stop(timeout=5)
             
-            self.logger.info(f"Removing container: {container.name} ({container_id[:12]})")
+            logger.info(f"Removing container: {container.name} ({container_id[:12]})")
             container.remove()
         except NotFound:
-            self.logger.debug(f"Container {container_id[:12]} was already removed or never created.")
+            logger.debug(f"Container {container_id[:12]} was already removed or never created.")
         except APIError as e:
             if container is None:
                 raise RuntimeError(f"Unexpected containers.get() crash: {e}")
-            self.logger.warning(f"Graceful stop failed for container {container_id[:12]}. Attempting force remove...")
+            logger.warning(f"Graceful stop failed for container {container_id[:12]}. Attempting force remove...")
             try:
                 container.remove(force=True)
             except Exception as force_err:
-                self.logger.error(f"Could not force remove container {container_id[:12]}: {force_err}")
+                logger.error(f"Could not force remove container {container_id[:12]}: {force_err}")
                 raise e

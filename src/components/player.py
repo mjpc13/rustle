@@ -31,8 +31,10 @@ class PlayerContainer(BaseContainer):
             "--delay", str(self.config.delay),
         ]
 
+        if self.config.topic_remaps.items():
+            command.append("--remap")
         for original_topic, pipeline_topic in self.config.topic_remaps.items():
-            command.extend(["--remap", f"{original_topic}:={pipeline_topic}"])
+            command.extend([f"{original_topic}:={pipeline_topic}"])
         
         self.container_id = self.docker.run_container(
             image="ros:jazzy-ros-base",
