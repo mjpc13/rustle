@@ -9,7 +9,9 @@ from utils import DockerWrapper, compute_ape
 workspace_dir = "./workspace/kiss_icp_demo"
 input_bag_name = "input_bag"
 output_bag_name = "output_bag"
-shutil.rmtree(f"{workspace_dir}/{output_bag_name}")
+
+if Path(f"{workspace_dir}/{output_bag_name}").resolve().exists():
+    shutil.rmtree(f"{workspace_dir}/{output_bag_name}")
 
 logging.basicConfig(
         level=logging.INFO,
