@@ -167,3 +167,11 @@ class DockerWrapper:
             except Exception as force_err:
                 logger.error(f"Could not force remove container {container_id[:12]}: {force_err}")
                 raise e
+
+    def get_container_data(self, container_id: str) -> Dict[str, float]:
+        """Get container usage of cpu and memory."""
+        stats = self.client.stats(container_id, stream=False)
+        return {
+                "cpu_usage": stats["cpu_stats"]["cpu_usage"]["total_usage"],
+                "mem_usage": stats["memory_stats"]["usage"]
+            }
