@@ -24,9 +24,10 @@ def main():
 
     iteration = Iteration(config)
 
-    ape = iteration.run()
-
-    iteration.teardown()
+    try:
+        ape = iteration.run()
+    finally:
+        iteration.teardown()
 
     # Print the computed APE
     print(f"Computed APE: {ape}")
