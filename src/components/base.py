@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Dict, List, Optional
 from utils import DockerWrapper
-from time import time
+from time import sleep, time
 import threading
 import logging
 
@@ -45,7 +45,7 @@ class BaseContainer(ABC):
             self.docker.stop_and_remove_container(self.container_id)
             self.container_id = None
 
-    def _monitor(self, interval: float = 0.5) -> None:
+    def _monitor(self) -> None:
         """
         Monitor the container's stats. Should always run one a detached thread.
 
@@ -57,12 +57,17 @@ class BaseContainer(ABC):
 
         stats = []
         time_origin = time()
-        while not self._stop_event.is_set():
-            stat = self.docker.get_container_data(self.container_id).copy()
-            stat["time"] = time() - time_origin
+        for raw_stat in self.docker.get_container_stats(self.container_id):
+            if self._stop_event.is_set():
+                break
+
+            stat = {
+                    "time": time() - time_origin,
+                    "cpu": raw_stat['cpu_stats']['cpu_usage']['total_usage'],
+                    "memory": raw_stat['memory_stats']['usage']
+                }
+
             stats.append(stat)
-            
-            self._stop_event.wait(interval)
 
         self._stats = stats
 

@@ -3,7 +3,7 @@ import shutil
 import tempfile
 import logging
 import secrets
-from typing import Dict, Optional
+from typing import Dict, List, Optional, Tuple, final
 from pathlib import Path
 from pydantic import BaseModel, Secret
 
@@ -28,6 +28,8 @@ class IterationConfig(BaseModel):
     input_topic: str
     output_topic: str
 
+    do_monitoring: bool
+
 
 class Iteration():
     """
@@ -44,8 +46,10 @@ class Iteration():
         Args:
             config: Configuration for the iteration.
         """
+        self.config = config
+
         self.iter_id = secrets.token_hex(6)
-        logger.info(f"Initializing iteration :{self.iter_id}.")
+        logger.info(f"Initializing iteration: {self.iter_id}.")
 
         self.tmp_dir = Path(tempfile.mkdtemp(prefix=f"rustle_iteration_{self.iter_id}_"))
         self.tmp_bag = "output_bag"
@@ -105,7 +109,7 @@ class Iteration():
                 network_name=self.network_name,
             )
 
-    def run(self, verbose:bool = False) -> Dict[str, float]:
+    def run(self, verbose:bool = False) -> Tuple[Optional[List[Dict[str, float]]], Dict[str, float]]: # TODO: make a proper reult object
         """
         Run the iteration and compute APE.
 
@@ -113,32 +117,38 @@ class Iteration():
             verbose: if true print the log of all the containers.
 
         Returns:
-            Computed APE.
+            (Slam container monitoring, Computed APE).
         """
         if self.iter_id is None:
             logger.error("You are trying to run a torndown iteration.")
             raise ValueError("Can not run torndown iteration")
 
-        writer_id = self.writer.start()
-        slam_id = self.slam.start()
+        try:
+            writer_id = self.writer.start()
+            slam_id = self.slam.start()
+            player_id = self.player.start()
 
-        player_id = self.player.start()
+            if self.config.do_monitoring:
+                self.slam.start_monitoring()
+            self.docker_wrapper.wait_for_container(player_id)
+            monitoring = None
+            if self.config.do_monitoring:
+                monitoring = self.slam.stop_monitoring()
 
-        self.docker_wrapper.wait_for_container(player_id)
+            if verbose:
+                print("== LOG ==")
+                print("-- writer --")
+                print(self.docker_wrapper.get_container_logs(writer_id))
+                print("-- slam --")
+                print(self.docker_wrapper.get_container_logs(slam_id))
+                print("-- player --")
+                print(self.docker_wrapper.get_container_logs(player_id))
+                print("== END LOG ==")
 
-        if verbose:
-            print("== LOG ==")
-            print("-- writer --")
-            print(self.docker_wrapper.get_container_logs(writer_id))
-            print("-- slam --")
-            print(self.docker_wrapper.get_container_logs(slam_id))
-            print("-- player --")
-            print(self.docker_wrapper.get_container_logs(player_id))
-            print("== END LOG ==")
-
-        self.player.stop()
-        self.slam.stop()
-        self.writer.stop()
+        finally:
+            self.player.stop()
+            self.slam.stop()
+            self.writer.stop()
 
         ape = compute_ape(
             bag_path=self.tmp_dir / self.tmp_bag,
@@ -146,7 +156,7 @@ class Iteration():
             odom_topic="/pipeline/odometry"
         )
 
-        return ape
+        return (monitoring, ape)
 
     def teardown(self) -> None:
         """
@@ -156,7 +166,7 @@ class Iteration():
             logger.warning("This iteration was already torndown.")
             return
 
-        logger.info(f"Trearing down iteration :{self.iter_id}")
+        logger.info(f"Trearing down iteration: {self.iter_id}")
         self.docker_wrapper.remove_network(self.network_name)
         if self.tmp_dir.exists():
             shutil.rmtree(self.tmp_dir)

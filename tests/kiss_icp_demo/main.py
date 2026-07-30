@@ -19,7 +19,9 @@ def main():
         algorithm_package="kiss_icp",
         algorithm_node_name="kiss_icp_node",
         input_topic="/pointcloud_topic",
-        output_topic="/kiss/odometry"
+        output_topic="/kiss/odometry",
+
+        do_monitoring=True,
     )
 
     iteration = Iteration(config)
@@ -30,7 +32,8 @@ def main():
         iteration.teardown()
 
     # Print the computed APE
-    print(f"Computed APE: {ape}")
+    print(f"Result: {ape}")
 
 if __name__ == '__main__':
     main()
+

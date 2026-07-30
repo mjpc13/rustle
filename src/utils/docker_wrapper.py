@@ -1,6 +1,6 @@
 import logging
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, Iterator, List, Any
 import docker
 from docker.errors import APIError, NotFound
 
@@ -145,6 +145,18 @@ class DockerWrapper:
             logger.error(f"Error fetching container {container_id[:12]} logs: {e}")
             raise e
 
+    def get_container_stats(self, container_id: str) -> Iterator[Dict[str, Any]]:
+        """Get the stream of container stats (cpu, memory,...)"""
+        try:
+            container = self.client.containers.get(container_id)
+            return container.stats(stream=True, decode=True)
+        except NotFound:
+            logger.warning(f"Container {container_id[:12]} not found to fetch logs, returning empty stats.")
+            return []
+        except APIError as e:
+            logger.error(f"Error fetching container {container_id[:12]} stats: {e}")
+            raise e
+
     def stop_and_remove_container(self, container_id: str) -> None:
         """Forces a container to stop and removes it."""
         container = None
@@ -168,10 +180,3 @@ class DockerWrapper:
                 logger.error(f"Could not force remove container {container_id[:12]}: {force_err}")
                 raise e
 
-    def get_container_data(self, container_id: str) -> Dict[str, float]:
-        """Get container usage of cpu and memory."""
-        stats = self.client.stats(container_id, stream=False)
-        return {
-                "cpu_usage": stats["cpu_stats"]["cpu_usage"]["total_usage"],
-                "mem_usage": stats["memory_stats"]["usage"]
-            }
