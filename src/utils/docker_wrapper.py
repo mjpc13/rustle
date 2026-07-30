@@ -120,11 +120,11 @@ class DockerWrapper:
         """Blocks until the container exits and returns its exit code."""
         try:
             container = self.client.containers.get(container_id)
-            logger.info(f"Waiting for container {container.name} ({container_id[:12]}).")
+            logger.info(f"Waiting for container {container_id[:12]}.")
             result = container.wait()
             status = result.get("StatusCode", -1)
             if status != 0:
-                logger.warning(f"Container '{container.name}' exited with status code {status}.")
+                logger.warning(f"Container '{container_id[:12]}' exited with status code {status}.")
             return status
         except NotFound as e:
             logger.error(f"Cannot wait for container {container_id[:12]}; it does not exist.")
@@ -162,11 +162,9 @@ class DockerWrapper:
         container = None
         try:
             container = self.client.containers.get(container_id)
-            logger.info(f"Stopping container: {container.name} ({container_id[:12]})")
+            logger.info(f"Stopping and removing container: {container_id[:12]}")
             
             container.stop(timeout=5)
-            
-            logger.info(f"Removing container: {container.name} ({container_id[:12]})")
             container.remove()
         except NotFound:
             logger.debug(f"Container {container_id[:12]} was already removed or never created.")

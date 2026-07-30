@@ -42,7 +42,6 @@ def compute_ape(
     ape_metric.process_data((traj_ref, traj_est))
 
     ape_stat = ape_metric.get_all_statistics()
-    logger.info("Compute success.")
 
     return ape_stat
 

@@ -98,6 +98,8 @@ class BaseContainer(ABC):
             raise RuntimeError("monitor_thread has crashed")
 
         assert self._stop_event is not None
+
+        logger.info("Stoping monitoring thread.")
         self._stop_event.set()
         self._monitor_thread.join()
         self._monitor_thread = None

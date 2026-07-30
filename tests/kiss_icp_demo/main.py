@@ -13,6 +13,7 @@ def main():
         dataset_path=Path("./workspace/kiss_icp_demo/input_bag"),
         pointcloud_topic="/ouster/points",
         groundtruth_topic="/ground_truth",
+        play_rate=1.0,
 
         algorithm_image="neorustle/kiss-icp:latest",
         algorithm_params=Path("./tests/kiss_icp_demo/params.yaml"),

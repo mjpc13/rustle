@@ -1,3 +1,4 @@
+from os import read
 import time
 import shutil
 import tempfile
@@ -6,6 +7,7 @@ import secrets
 from typing import Dict, List, Optional, Tuple, final
 from pathlib import Path
 from pydantic import BaseModel, Secret
+from rosbags.rosbag2 import Reader
 
 from components import (
         GenericNodeConfig, GenericNodeContainer,
@@ -20,6 +22,7 @@ class IterationConfig(BaseModel):
     dataset_path: Path
     pointcloud_topic: str
     groundtruth_topic: str
+    play_rate: float
 
     algorithm_image: str
     algorithm_params: Optional[Path]
@@ -34,6 +37,7 @@ class IterationConfig(BaseModel):
 class IterationResult(BaseModel):
     monitoring: Optional[List[Dict[str, float]]]
     ape: Dict[str, float]
+    frame_rate: float
 
 
 class Iteration():
@@ -64,7 +68,8 @@ class Iteration():
                 topic_remaps={
                     config.groundtruth_topic: "/pipeline/groundtruth",
                     config.pointcloud_topic: "/pipeline/pointcloud",
-                }
+                },
+                play_rate=self.config.play_rate
             )
 
         self.slam_config = GenericNodeConfig(
@@ -155,13 +160,32 @@ class Iteration():
             self.slam.stop()
             self.writer.stop()
 
+        gt_nb = -1.0
+        with Reader(self.config.dataset_path) as reader:
+            for connection in reader.connections:
+                if connection.topic == self.config.groundtruth_topic:
+                    gt_nb = connection.msgcount - 1
+
+            assert gt_nb > 0
+
+        frame_rate = -1.0
+        with Reader(self.tmp_dir / self.tmp_bag) as reader:
+            odom_nb = -1
+            for connection in reader.connections:
+                if connection.topic == "/pipeline/odometry":
+                    odom_nb = connection.msgcount
+
+            assert odom_nb != -1
+
+            frame_rate = odom_nb / gt_nb
+        
         ape = compute_ape(
             bag_path=self.tmp_dir / self.tmp_bag,
             gt_topic="/pipeline/groundtruth",
             odom_topic="/pipeline/odometry"
         )
 
-        return IterationResult(monitoring=monitoring, ape=ape)
+        return IterationResult(monitoring=monitoring, ape=ape, frame_rate=frame_rate)
 
     def teardown(self) -> None:
         """
