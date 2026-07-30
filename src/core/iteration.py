@@ -31,6 +31,11 @@ class IterationConfig(BaseModel):
     do_monitoring: bool
 
 
+class IterationResult(BaseModel):
+    monitoring: Optional[List[Dict[str, float]]]
+    ape: Dict[str, float]
+
+
 class Iteration():
     """
     Class representing one iteration of a modular pipeline.
@@ -109,7 +114,7 @@ class Iteration():
                 network_name=self.network_name,
             )
 
-    def run(self, verbose:bool = False) -> Tuple[Optional[List[Dict[str, float]]], Dict[str, float]]: # TODO: make a proper reult object
+    def run(self, verbose:bool = False) -> IterationResult:
         """
         Run the iteration and compute APE.
 
@@ -156,7 +161,7 @@ class Iteration():
             odom_topic="/pipeline/odometry"
         )
 
-        return (monitoring, ape)
+        return IterationResult(monitoring=monitoring, ape=ape)
 
     def teardown(self) -> None:
         """
