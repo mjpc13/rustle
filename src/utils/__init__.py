@@ -1,7 +1,7 @@
-from .docker_wrapper import DockerWrapper
+from .docker_wrapper import DockerInstance
 from .evo_wrapper import compute_ape
 
 __all__ = [
-        "DockerWrapper",
+        "DockerInstance",
         "compute_ape",
     ]
