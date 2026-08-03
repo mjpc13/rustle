@@ -1,11 +1,21 @@
-from abc import ABC, abstractmethod
+from abc import ABC, abstractmethod, abstractproperty
 from typing import Dict, List, Optional
 from utils import DockerWrapper
+from pydantic import BaseModel
 from time import sleep, time
 import threading
 import logging
 
 logger = logging.getLogger(__name__)
+
+class BaseConfig(ABC, BaseModel):
+    """
+    Abstract Base config for any component
+    """
+
+    @abstractmethod
+    def get_container(self, docker: DockerWrapper, network_name: str, env: Dict[str, str]) -> BaseContainer:
+        pass
 
 class BaseContainer(ABC):
     """

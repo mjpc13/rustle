@@ -1,19 +1,22 @@
-from .base import BaseContainer
-from utils import DockerWrapper
+from .base import BaseContainer, BaseConfig
+from utils import DockerInstance
 
 import os
 from pathlib import Path
-from pydantic import BaseModel, Field
+from pydantic import Field
 from typing import Dict, List
 
-class WriterConfig(BaseModel):
+class WriterConfig(BaseConfig):
     output_dir: Path
     bag_name: str
     topics: List[str] = Field(min_length=1)
 
+    def get_container(self, docker: DockerInstance) -> WriterContainer:
+        return WriterContainer(self, docker)
+
 class WriterContainer(BaseContainer):
-    def __init__(self, config: WriterConfig, docker: DockerWrapper, network_name: str, env: Dict[str, str]):
-        super().__init__(docker, network_name, env)
+    def __init__(self, config: WriterConfig, docker: DockerInstance):
+        super().__init__(docker)
         self.config = config
 
     def start(self) -> str:
@@ -28,6 +31,7 @@ class WriterContainer(BaseContainer):
             "--topics"
         ] + self.config.topics
 
+        # make sure the writen file is owned by the host madhine
         uid = os.getuid() if hasattr(os, "getuid") else 1000
         gid = os.getgid() if hasattr(os, "getgid") else 1000
         host_user_mapping = f"{uid}:{gid}"
@@ -36,8 +40,6 @@ class WriterContainer(BaseContainer):
             image="ros:jazzy-ros-base",
             command=command,
             volumes=volumes,
-            environment=self.env,
-            network_name=self.network_name,
             user=host_user_mapping
         )
         return self.container_id

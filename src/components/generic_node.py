@@ -1,22 +1,25 @@
-from .base import BaseContainer
-from utils import DockerWrapper
+from .base import BaseContainer, BaseConfig
+from utils import DockerInstance
 
 import logging
 from pathlib import Path
-from pydantic import BaseModel, Field
+from pydantic import Field
 from typing import Dict, Optional
 
-class GenericNodeConfig(BaseModel):
+class GenericNodeConfig(BaseConfig):
     image: str
     package_name: str
     node_name: str
     params_file: Optional[Path]
     topic_remaps: Dict[str, str] = Field(default_factory=dict)
 
+    def get_container(self, docker: DockerInstance) -> BaseContainer:
+        return GenericNodeContainer(self, docker)
+
 
 class GenericNodeContainer(BaseContainer):
-    def __init__(self, config: GenericNodeConfig, docker: DockerWrapper, network_name: str, env: Dict[str, str]):
-        super().__init__(docker, network_name, env)
+    def __init__(self, config: GenericNodeConfig, docker: DockerInstance):
+        super().__init__(docker)
         self.config = config
 
     def start(self) -> str:
@@ -40,7 +43,5 @@ class GenericNodeContainer(BaseContainer):
             image=self.config.image,
             command=command,
             volumes=volumes,
-            environment=self.env,
-            network_name=self.network_name
         )
         return self.container_id

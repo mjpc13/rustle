@@ -1,20 +1,23 @@
-from .base import BaseContainer
-from utils import DockerWrapper
+from .base import BaseConfig, BaseContainer
+from utils import DockerInstance
 
 from pathlib import Path
-from pydantic import BaseModel, Field
+from pydantic import Field
 from typing import Dict
 
-class PlayerConfig(BaseModel):
+class PlayerConfig(BaseConfig):
     bag_path: Path
     play_rate: float = Field(default=1.0, gt=0.0)
     delay: float = Field(default=1.0, gt=0.0)
     topic_remaps: Dict[str, str] = Field(default_factory=dict)
 
+    def get_container(self, docker: DockerInstance) -> PlayerContainer:
+        return PlayerContainer(self, docker)
+
 
 class PlayerContainer(BaseContainer):
-    def __init__(self, config: PlayerConfig, docker: DockerWrapper, network_name: str, env: Dict[str, str]):
-        super().__init__(docker, network_name, env)
+    def __init__(self, config: PlayerConfig, docker: DockerInstance):
+        super().__init__(docker)
         self.config = config
 
     def start(self) -> str:
@@ -40,7 +43,5 @@ class PlayerContainer(BaseContainer):
             image="ros:jazzy-ros-base",
             command=command,
             volumes=volumes,
-            environment=self.env,
-            network_name=self.network_name
         )
         return self.container_id
