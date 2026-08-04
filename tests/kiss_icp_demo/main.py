@@ -2,6 +2,7 @@ from pathlib import Path
 import logging
 
 from core.iteration import Iteration, IterationConfig
+from utils import DockerInstance
 
 logging.basicConfig(
         level=logging.INFO,
@@ -25,12 +26,16 @@ def main():
         do_monitoring=True,
     )
 
-    iteration = Iteration(config)
+    network_name = "test_network"
+    env = {
+            "ROS_DOMAIN_ID": "42",
+            "PYTHONUNBUFFERED": "1"
+        }
 
-    try:
-        ape = iteration.run()
-    finally:
-        iteration.teardown()
+    ape = None
+    with DockerInstance(network_name, env) as docker:
+        with Iteration(config, docker) as iteration:
+            ape = iteration.run()
 
     # Print the computed APE
     print(f"Result: {ape}")

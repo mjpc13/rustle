@@ -1,5 +1,4 @@
 from os import read
-import time
 import shutil
 import tempfile
 import logging
@@ -9,12 +8,9 @@ from pathlib import Path
 from pydantic import BaseModel, Secret
 from rosbags.rosbag2 import Reader
 
-from components import (
-        GenericNodeConfig, GenericNodeContainer,
-        PlayerConfig, PlayerContainer,
-        WriterConfig, WriterContainer
-    )
-from utils import DockerWrapper, compute_ape
+from components import BaseConfig, BaseContainer
+from components import GenericNodeConfig, PlayerConfig, WriterConfig
+from utils import DockerInstance, compute_ape
 
 logger = logging.getLogger(__name__)
 
@@ -43,19 +39,22 @@ class IterationResult(BaseModel):
 class Iteration():
     """
     Class representing one iteration of a modular pipeline.
+    Iteration should always be torndown or used in with statement.
     """
 
     network_name = "pipeline_network"
     iter_id: Optional[str] = None
 
-    def __init__(self, config: IterationConfig):
+    def __init__(self, config: IterationConfig, docker: DockerInstance):
         """
         Initialize the iteration with the given configuration.
 
         Args:
             config: Configuration for the iteration.
+            docker: Docker instance for handling containers, this should outlive the iteration object.
         """
         self.config = config
+        self.docker = docker
 
         self.iter_id = secrets.token_hex(6)
         logger.info(f"Initializing iteration: {self.iter_id}.")
@@ -63,7 +62,8 @@ class Iteration():
         self.tmp_dir = Path(tempfile.mkdtemp(prefix=f"rustle_iteration_{self.iter_id}_"))
         self.tmp_bag = "output_bag"
 
-        self.player_config = PlayerConfig(
+        self.player_idx = 0
+        player_config = PlayerConfig(
                 bag_path=config.dataset_path,
                 topic_remaps={
                     config.groundtruth_topic: "/pipeline/groundtruth",
@@ -72,7 +72,8 @@ class Iteration():
                 play_rate=self.config.play_rate
             )
 
-        self.slam_config = GenericNodeConfig(
+        self.slam_idx = 1
+        slam_config = GenericNodeConfig(
                 image=config.algorithm_image,
                 params_file=config.algorithm_params,
                 package_name=config.algorithm_package,
@@ -83,82 +84,61 @@ class Iteration():
                 }
             )
 
-        self.writer_config = WriterConfig(
+        writer_config = WriterConfig(
                 output_dir=self.tmp_dir,
                 bag_name=self.tmp_bag,
                 topics=["/pipeline/groundtruth", "/pipeline/pointcloud", "/pipeline/odometry"]
             )
 
+        self.component_configs: List[BaseConfig] = [player_config, slam_config, writer_config]
+        self.components = [c.get_container(self.docker) for c in self.component_configs]
 
-        self.docker_wrapper = DockerWrapper()
-        self.docker_wrapper.create_shared_network(self.network_name)
+    def __enter__(self):
+        return self
 
-        env = {
-                "ROS_DOMAIN_ID": "42",
-                "PYTHONUNBUFFERED": "1"
-            }
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        self.teardown()
 
-        self.player = PlayerContainer(
-                config=self.player_config,
-                docker=self.docker_wrapper,
-                env=env,
-                network_name=self.network_name,
-            )
-
-        self.slam = GenericNodeContainer(
-                config=self.slam_config,
-                docker=self.docker_wrapper,
-                env=env,
-                network_name=self.network_name,
-            )
-
-        self.writer = WriterContainer(
-                config=self.writer_config,
-                docker=self.docker_wrapper,
-                env=env,
-                network_name=self.network_name,
-            )
-
-    def run(self, verbose:bool = False) -> IterationResult:
+    def teardown(self) -> None:
         """
-        Run the iteration and compute APE.
+        Teardown the iteration by removing the network and cleaning up temporary files.
+        """
+        if self.iter_id is None:
+            logger.warning("This iteration was already torndown.")
+            return
 
-        Args:
-            verbose: if true print the log of all the containers.
+        logger.info(f"Trearing down iteration: {self.iter_id}")
+        if self.tmp_dir.exists():
+            shutil.rmtree(self.tmp_dir)
+
+        self.iter_id = None
+
+    def run(self) -> IterationResult:
+        """
+        Run iteration, monitoring, and evaluate results.
 
         Returns:
-            (Slam container monitoring, Computed APE).
+            The agregation of iteration measurement.
         """
         if self.iter_id is None:
             logger.error("You are trying to run a torndown iteration.")
-            raise ValueError("Can not run torndown iteration")
+            raise ValueError("can not run torndown iteration")
 
         try:
-            writer_id = self.writer.start()
-            slam_id = self.slam.start()
-            player_id = self.player.start()
+            for component in self.components[::-1]:
+                component.start()
 
             if self.config.do_monitoring:
-                self.slam.start_monitoring()
-            self.docker_wrapper.wait_for_container(player_id)
+                self.components[self.slam_idx].start_monitoring()
+            self.components[self.player_idx].wait()
+
             monitoring = None
             if self.config.do_monitoring:
-                monitoring = self.slam.stop_monitoring()
-
-            if verbose:
-                print("== LOG ==")
-                print("-- writer --")
-                print(self.docker_wrapper.get_container_logs(writer_id))
-                print("-- slam --")
-                print(self.docker_wrapper.get_container_logs(slam_id))
-                print("-- player --")
-                print(self.docker_wrapper.get_container_logs(player_id))
-                print("== END LOG ==")
+                monitoring = self.components[self.slam_idx].stop_monitoring()
 
         finally:
-            self.player.stop()
-            self.slam.stop()
-            self.writer.stop()
+            for component in self.components[::-1]:
+                component.stop()
 
         gt_nb = -1.0
         with Reader(self.config.dataset_path) as reader:
@@ -178,7 +158,7 @@ class Iteration():
             assert odom_nb != -1
 
             frame_rate = odom_nb / gt_nb
-        
+
         ape = compute_ape(
             bag_path=self.tmp_dir / self.tmp_bag,
             gt_topic="/pipeline/groundtruth",
@@ -187,15 +167,3 @@ class Iteration():
 
         return IterationResult(monitoring=monitoring, ape=ape, frame_rate=frame_rate)
 
-    def teardown(self) -> None:
-        """
-        Teardown the iteration by removing the network and cleaning up temporary files.
-        """
-        if self.iter_id is None:
-            logger.warning("This iteration was already torndown.")
-            return
-
-        logger.info(f"Trearing down iteration: {self.iter_id}")
-        self.docker_wrapper.remove_network(self.network_name)
-        if self.tmp_dir.exists():
-            shutil.rmtree(self.tmp_dir)

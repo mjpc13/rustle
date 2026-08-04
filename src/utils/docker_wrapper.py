@@ -9,9 +9,18 @@ from pydantic import InstanceOf
 logger = logging.getLogger(__name__)
 
 class DockerInstance:
-    """Docker SDK helper wrapper, to make interaction with container easier."""
+    """Docker SDK helper wrapper, to make interaction with container easier.
+    DockerInstance should always be torndown or used in with statement.
+    """
 
-    def __enter__(self, network_name: str, environment: Dict[str, str]):
+    def __init__(self, network_name: str, environment: Dict[str, str]):
+        """Initialize a docker interface instance.
+
+        Args:
+            network_name: name of the network shared by all the containers created by this interface.
+                This name should be unique enough to avoid collision.
+            environment: Environment variables shared by the containers (Dict[VAR_NAME, value]).
+        """
         self._network_name = network_name
         self._environment = environment
         try:
@@ -39,7 +48,13 @@ class DockerInstance:
             logger.error(f"Failed to create Docker network '{network_name}': {e}")
             raise e
 
-    def __exit__(self):
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.teardown()
+
+    def teardown(self):
         # Remove the custom network.
         try:
             network = self.client.networks.get(self._network_name)
