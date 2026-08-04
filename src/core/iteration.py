@@ -10,7 +10,7 @@ from rosbags.rosbag2 import Reader
 
 from components import BaseConfig, BaseContainer
 from components import GenericNodeConfig, PlayerConfig, WriterConfig
-from utils import DockerInstance, compute_ape
+from utils import DockerInstance, compute_ape, compute_drop_rate
 
 logger = logging.getLogger(__name__)
 
@@ -87,7 +87,7 @@ class Iteration():
         writer_config = WriterConfig(
                 output_dir=self.tmp_dir,
                 bag_name=self.tmp_bag,
-                topics=["/pipeline/groundtruth", "/pipeline/pointcloud", "/pipeline/odometry"]
+                topics=["/pipeline/odometry"]
             )
 
         self.component_configs: List[BaseConfig] = [player_config, slam_config, writer_config]
@@ -136,34 +136,27 @@ class Iteration():
             if self.config.do_monitoring:
                 monitoring = self.components[self.slam_idx].stop_monitoring()
 
+            for (i, component) in enumerate(self.components):
+                logger.debug(f"Internal logs of component {i}")
+                logger.debug(component.get_log())
+
         finally:
-            for component in self.components[::-1]:
+            for component in self.components:
                 component.stop()
 
-        gt_nb = -1.0
-        with Reader(self.config.dataset_path) as reader:
-            for connection in reader.connections:
-                if connection.topic == self.config.groundtruth_topic:
-                    gt_nb = connection.msgcount - 1
-
-            assert gt_nb > 0
-
-        frame_rate = -1.0
-        with Reader(self.tmp_dir / self.tmp_bag) as reader:
-            odom_nb = -1
-            for connection in reader.connections:
-                if connection.topic == "/pipeline/odometry":
-                    odom_nb = connection.msgcount
-
-            assert odom_nb != -1
-
-            frame_rate = odom_nb / gt_nb
+        frame_rate = compute_drop_rate(
+                self.config.dataset_path,
+                self.config.pointcloud_topic,
+                self.tmp_dir / self.tmp_bag,
+                "/pipeline/odometry"
+            )
 
         ape = compute_ape(
-            bag_path=self.tmp_dir / self.tmp_bag,
-            gt_topic="/pipeline/groundtruth",
-            odom_topic="/pipeline/odometry"
-        )
+                self.config.dataset_path,
+                self.config.groundtruth_topic,
+                self.tmp_dir / self.tmp_bag,
+                "/pipeline/odometry"
+            )
 
         return IterationResult(monitoring=monitoring, ape=ape, frame_rate=frame_rate)
 

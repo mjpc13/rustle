@@ -1,7 +1,8 @@
 from .docker_wrapper import DockerInstance
-from .evo_wrapper import compute_ape
+from .rosbag_compute import compute_ape, compute_drop_rate
 
 __all__ = [
         "DockerInstance",
         "compute_ape",
+        "compute_drop_rate"
     ]
