@@ -1,7 +1,8 @@
 from pathlib import Path
 import logging
 
-from core.iteration import Iteration, IterationConfig
+from core.iteration import Iteration
+from core.models import IterationConfig, DatasetConfig, SlamConfig
 from utils import DockerInstance
 
 logging.basicConfig(
@@ -11,19 +12,23 @@ logging.basicConfig(
 def main():
     # Define the configuration for the iteration
     config = IterationConfig(
-        dataset_path=Path("./workspace/kiss_icp_demo/input_bag"),
-        pointcloud_topic="/ouster/points",
-        groundtruth_topic="/ground_truth",
-        play_rate=1.0,
+        dataset_config=DatasetConfig(
+            name="BoxRotation",
+            dataset_path=Path("./workspace/kiss_icp_demo/input_bag"),
+            pointcloud_topic="/ouster/points",
+            groundtruth_topic="/ground_truth",
+            play_rate=1.0,
+        ),
 
-        algorithm_image="neorustle/kiss-icp:latest",
-        algorithm_params=Path("./tests/kiss_icp_demo/params.yaml"),
-        algorithm_package="kiss_icp",
-        algorithm_node_name="kiss_icp_node",
-        input_topic="/pointcloud_topic",
-        output_topic="/kiss/odometry",
-
-        do_monitoring=True,
+        slam_config=SlamConfig(
+            name="kiss-icp",
+            algorithm_image="neorustle/kiss-icp:latest",
+            algorithm_params=Path("./tests/kiss_icp_demo/params.yaml"),
+            algorithm_package="kiss_icp",
+            algorithm_node_name="kiss_icp_node",
+            input_topic="/pointcloud_topic",
+            output_topic="/kiss/odometry",
+        ),
     )
 
     network_name = "test_network"
