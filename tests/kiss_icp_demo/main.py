@@ -20,7 +20,7 @@ def main():
             play_rate=1.0,
         ),
 
-        slam_config=SlamConfig(
+        steps=[SlamConfig(
             name="kiss-icp",
             algorithm_image="neorustle/kiss-icp:latest",
             algorithm_params=Path("./tests/kiss_icp_demo/params.yaml"),
@@ -28,7 +28,9 @@ def main():
             algorithm_node_name="kiss_icp_node",
             input_topic="/pointcloud_topic",
             output_topic="/kiss/odometry",
-        ),
+        )],
+
+        monitor_idx=0,
     )
 
     network_name = "test_network"

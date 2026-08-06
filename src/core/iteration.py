@@ -39,40 +39,21 @@ class Iteration():
         self.tmp_dir = Path(tempfile.mkdtemp(prefix=f"rustle_iteration_{self.iter_id}_"))
         self.tmp_bag = "output_bag"
 
-        self.component_configs: List[BaseConfig] = []
+        topic_remap = "/pipeline/step_"
 
-        self.player_idx = 0
-        player_config = PlayerConfig(
-                bag_path=config.dataset_config.dataset_path,
-                topic_remaps={
-                    config.dataset_config.groundtruth_topic: "/pipeline/groundtruth",
-                    config.dataset_config.pointcloud_topic: "/pipeline/pointcloud",
-                },
-                play_rate=self.config.dataset_config.play_rate
-            )
-        self.component_configs.append(player_config)
+        player_config = self.config.dataset_config.to_component_config(topic_remap + "0")
+        self.components: List[BaseContainer] = [player_config.get_container(self.docker)]
+        for (i, step) in enumerate(self.config.steps):
+            comp_conf = step.to_component_config(topic_remap + str(i), topic_remap + str(i + 1))
+            self.components.append(comp_conf.get_container(self.docker))
 
-        self.slam_idx = 1
-        slam_config = GenericNodeConfig(
-                image=config.slam_config.algorithm_image,
-                params_file=config.slam_config.algorithm_params,
-                package_name=config.slam_config.algorithm_package,
-                node_name=config.slam_config.algorithm_node_name,
-                topic_remaps={
-                    config.slam_config.input_topic: "/pipeline/pointcloud",
-                    config.slam_config.output_topic: "/pipeline/odometry",
-                }
-            )
-        self.component_configs.append(slam_config)
-
+        self.odom_topic = topic_remap + str(len(self.components) - 1)
         writer_config = WriterConfig(
                 output_dir=self.tmp_dir,
                 bag_name=self.tmp_bag,
-                topics=["/pipeline/odometry"]
+                topics=[self.odom_topic]
             )
-        self.component_configs.append(writer_config)
-
-        self.components: List[BaseContainer] = [c.get_container(self.docker) for c in self.component_configs]
+        self.components.append(writer_config.get_container(self.docker))
 
     def __enter__(self):
         return self
@@ -109,9 +90,9 @@ class Iteration():
             for component in self.components[::-1]:
                 component.start()
 
-            self.components[self.slam_idx].start_monitoring()
-            self.components[self.player_idx].wait()
-            monitoring = self.components[self.slam_idx].stop_monitoring()
+            self.components[self.config.monitor_idx + 1].start_monitoring()
+            self.components[0].wait()
+            monitoring = self.components[self.config.monitor_idx + 1].stop_monitoring()
 
             for (i, component) in enumerate(self.components):
                 logger.debug(f"Internal logs of component {i}")
@@ -125,14 +106,14 @@ class Iteration():
                 self.config.dataset_config.dataset_path,
                 self.config.dataset_config.pointcloud_topic,
                 self.tmp_dir / self.tmp_bag,
-                "/pipeline/odometry"
+                self.odom_topic
             )
 
         ape = compute_ape(
                 self.config.dataset_config.dataset_path,
                 self.config.dataset_config.groundtruth_topic,
                 self.tmp_dir / self.tmp_bag,
-                "/pipeline/odometry"
+                self.odom_topic
             )
 
         return IterationResult(monitoring=monitoring, ape=ape, frame_rate=frame_rate)

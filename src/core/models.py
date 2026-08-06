@@ -1,7 +1,15 @@
+from abc import ABC, abstractmethod
 from pathlib import Path
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Tuple
 
+from components import PlayerConfig, BaseConfig, GenericNodeConfig
+
+
+class PipelineStep(ABC, BaseModel):
+    @abstractmethod
+    def to_component_config(self, input_remap: str, output_remap: str) -> BaseConfig:
+        pass
 
 class DatasetConfig(BaseModel):
     name: str
@@ -10,7 +18,16 @@ class DatasetConfig(BaseModel):
     groundtruth_topic: str
     play_rate: float
 
-class SlamConfig(BaseModel):
+    def to_component_config(self, output_remap: str) -> PlayerConfig:
+        return PlayerConfig(
+                bag_path=self.dataset_path,
+                topic_remaps={
+                    self.pointcloud_topic: output_remap,
+                },
+                play_rate=self.play_rate
+            )
+
+class SlamConfig(PipelineStep):
     name: str
     algorithm_image: str
     algorithm_params: Optional[Path]
@@ -19,10 +36,23 @@ class SlamConfig(BaseModel):
     input_topic: str
     output_topic: str
 
+    def to_component_config(self, input_remap: str, output_remap: str) -> BaseConfig:
+        return GenericNodeConfig(
+                image=self.algorithm_image,
+                params_file=self.algorithm_params,
+                package_name=self.algorithm_package,
+                node_name=self.algorithm_node_name,
+                topic_remaps={
+                    self.input_topic: input_remap,
+                    self.output_topic: output_remap,
+                }
+            )
+
 
 class IterationConfig(BaseModel):
     dataset_config: DatasetConfig
-    slam_config: SlamConfig
+    steps: List[PipelineStep] 
+    monitor_idx: int
 
 class IterationResult(BaseModel):
     monitoring: List[Dict[str, float]]
