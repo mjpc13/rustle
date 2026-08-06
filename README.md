@@ -4,24 +4,24 @@ Neorustle is a modular containerized benchmark tool for ros2 SLAM algorithm.
 
 ## system architecture
 
-```
-Components
- |
- V
-Docker
-```
+### docker
 
-Each component correspond to a single docker container that execute one independant task such as dataset player or ros node spinner.
-Different components share a Docker network that they use to comunicate together.
+`DockerInstance` object represent an execution environment. Any container created with the same instance can comunicate together.
 
-## setup
+### component
 
-Every module used are defined in pyproject.toml, you can install all of them using:
-```bash
-pip install -e .
-```
+Any pipeline is divided into different component, each one corresponding to a container.
+Components are then runned sequencially.
 
-You also need docker running on your computer. For installation see on the official website.
+### iteration
+
+An iteration correspond to a single execution of a pipeline.
+It is defined by a dataset to play and an iteration step sequence.
+This sequence should produce odometries, that are then evaluated.
+
+### benchmark (wip)
+
+A benchmark is a collection of steps that get composed (cartesian product) into iterations, and aggregate all the results.
 
 ## example
 
