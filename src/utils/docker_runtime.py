@@ -1,20 +1,21 @@
-import logging
+import docker
+from docker.errors import APIError, NotFound
+from docker.models.containers import Container
 from pathlib import Path
 from typing import Dict, Iterator, List, Any, Optional
-import docker
-from docker.models.containers import Container
-from docker.errors import APIError, NotFound
-from pydantic import InstanceOf
 
+import logging
 logger = logging.getLogger(__name__)
 
-class DockerInstance:
-    """Docker SDK helper wrapper, to make interaction with container easier.
-    DockerInstance should always be torndown or used in with statement.
+class DockerRuntime:
+    """
+    Manages the persistent Docker environment and with a shared network and environment.
+    DockerRuntime should always be used inside of a `with` statement, or must be manually torn down.
     """
 
     def __init__(self, network_name: str, environment: Dict[str, str]):
-        """Initialize a docker interface instance.
+        """
+        Initialize a docker interface instance.
 
         Args:
             network_name: name of the network shared by all the containers created by this interface.
@@ -26,7 +27,7 @@ class DockerInstance:
         try:
             self.client = docker.from_env()
         except Exception as e:
-            logging.error(
+            logger.error(
                 "Failed to connect to the Docker daemon. "
                 "Is Docker running, and does your user have permissions to access the socket?"
             )
@@ -55,6 +56,9 @@ class DockerInstance:
         self.teardown()
 
     def teardown(self):
+        """
+        Properly remove the docker resources used by the runtime.
+        """
         # Remove the custom network.
         try:
             network = self.client.networks.get(self._network_name)
@@ -75,7 +79,8 @@ class DockerInstance:
         environment: Dict[str, str] = {},
         **kwargs
     ) -> str:
-        """Starts a container and returns its container ID.
+        """
+        Starts a container and returns its container ID.
 
         Parameters:
             image: docker image name to use.
@@ -137,7 +142,9 @@ class DockerInstance:
             raise e
 
     def wait_for_container(self, container_id: str) -> int:
-        """Blocks until the container exits and returns its exit code."""
+        """
+        Blocks until the container exits and returns its exit code.
+        """
         container = self._get_container(container_id)
         if container is None:
             logger.error(f"Cant wait for container: {container_id[:12]}; it does not exists.")
@@ -152,7 +159,9 @@ class DockerInstance:
         return status
 
     def get_container_logs(self, container_id: str) -> str:
-        """Retrieves current logs from the container as a string."""
+        """
+        Retrieves current logs from the container as a string.
+        """
         container = self._get_container(container_id)
         if container is None:
             logger.warning(f"Container {container_id[:12]} not found to fetch logs, returning empty logs.")
@@ -160,8 +169,11 @@ class DockerInstance:
 
         return container.logs(stdout=True, stderr=True).decode("utf-8", errors="replace")
 
-    def get_container_stats(self, container_id: str) -> Iterator[Dict[str, Any]]:
-        """Get the stream of container stats (cpu, memory,...)"""
+    def get_container_stats_stream(self, container_id: str) -> Iterator[Dict[str, Any]]:
+        """
+        Get the stream of container stats (cpu, memory,...).
+        See the docker package documentation for more detail on the data structure.
+        """
         container = self.client.containers.get(container_id)
         if container is None:
             logger.warning(f"Container {container_id[:12]} not found to fetch logs, returning empty stats.")
@@ -173,7 +185,9 @@ class DockerInstance:
         return stats
 
     def stop_and_remove_container(self, container_id: str) -> None:
-        """Forces a container to stop and removes it."""
+        """
+        Forces a container to stop and removes it.
+        """
         container = self._get_container(container_id)
         if container is None:
             logger.warning(f"Container {container_id[:12]} was already removed or never created.")

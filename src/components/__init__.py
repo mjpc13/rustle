@@ -1,11 +1,11 @@
-from .base import BaseConfig, BaseContainer
-from .writer import WriterConfig, WriterContainer
-from .player import PlayerConfig, PlayerContainer
-from .generic_node import GenericNodeConfig, GenericNodeContainer
+from .base import BaseComponent, BaseComponentConfig
+from .generic_node import GenericNodeComponent, GenericNodeComponentConfig
+from .player import PlayerComponent, PlayerComponentConfig
+from .writer import WriterComponent, WriterComponentConfig
 
 __all__ = [
-        "BaseConfig", "BaseContainer",
-        "WriterConfig", "WriterContainer",
-        "PlayerConfig", "PlayerContainer",
-        "GenericNodeConfig", "GenericNodeContainer",
+        "BaseComponent", "BaseComponentConfig",
+        "GenericNodeComponent", "GenericNodeComponentConfig",
+        "PlayerComponent", "PlayerComponentConfig",
+        "WriterComponent", "WriterComponentConfig",
     ]

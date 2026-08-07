@@ -1,16 +1,15 @@
 from pathlib import Path
-import logging
 
 from core.iteration import Iteration
 from core.models import IterationConfig, DatasetConfig, SlamConfig
-from utils import DockerInstance
+from utils import DockerRuntime
 
+import logging
 logging.basicConfig(
         level=logging.INFO,
     )
 
 def main():
-    # Define the configuration for the iteration
     config = IterationConfig(
         dataset_config=DatasetConfig(
             name="BoxRotation",
@@ -40,12 +39,11 @@ def main():
         }
 
     ape = None
-    with DockerInstance(network_name, env) as docker:
+    with DockerRuntime(network_name, env) as docker:
         with Iteration(config, docker) as iteration:
-            ape = iteration.run()
+            result = iteration.run()
 
-    # Print the computed APE
-    print(f"Result: {ape}")
+    print(f"Result: {result}")
 
 if __name__ == '__main__':
     main()

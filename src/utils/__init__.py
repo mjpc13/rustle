@@ -1,8 +1,8 @@
-from .docker_wrapper import DockerInstance
-from .rosbag_compute import compute_ape, compute_drop_rate
+from .docker_runtime import DockerRuntime
+from .rosbag_compute import compute_ape, compute_frame_rate
 
 __all__ = [
-        "DockerInstance",
+        "DockerRuntime",
         "compute_ape",
-        "compute_drop_rate"
+        "compute_frame_rate"
     ]

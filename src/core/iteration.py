@@ -1,15 +1,15 @@
-import shutil
-import tempfile
 import logging
 import secrets
-from os import read
+import shutil
+import tempfile
 from pathlib import Path
+from os import read
 from typing import Optional, List
 
 from .models import IterationConfig, IterationResult
-from components import BaseConfig, BaseContainer
-from components import GenericNodeConfig, PlayerConfig, WriterConfig
-from utils import DockerInstance, compute_ape, compute_drop_rate
+from components import BaseComponent, BaseComponentConfig
+from components import GenericNodeComponentConfig, PlayerComponentConfig, WriterComponentConfig
+from utils import DockerRuntime, compute_ape, compute_frame_rate
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +22,7 @@ class Iteration():
 
     iter_id: Optional[str] = None
 
-    def __init__(self, config: IterationConfig, docker: DockerInstance):
+    def __init__(self, config: IterationConfig, docker: DockerRuntime):
         """
         Initialize the iteration with the given configuration.
 
@@ -42,18 +42,18 @@ class Iteration():
         topic_remap = "/pipeline/step_"
 
         player_config = self.config.dataset_config.to_component_config(topic_remap + "0")
-        self.components: List[BaseContainer] = [player_config.get_container(self.docker)]
+        self.components: List[BaseComponent] = [player_config.to_component(self.docker)]
         for (i, step) in enumerate(self.config.steps):
             comp_conf = step.to_component_config(topic_remap + str(i), topic_remap + str(i + 1))
-            self.components.append(comp_conf.get_container(self.docker))
+            self.components.append(comp_conf.to_component(self.docker))
 
         self.odom_topic = topic_remap + str(len(self.components) - 1)
-        writer_config = WriterConfig(
+        writer_config = WriterComponentConfig(
                 output_dir=self.tmp_dir,
                 bag_name=self.tmp_bag,
                 topics=[self.odom_topic]
             )
-        self.components.append(writer_config.get_container(self.docker))
+        self.components.append(writer_config.to_component(self.docker))
 
     def __enter__(self):
         return self
@@ -102,7 +102,7 @@ class Iteration():
             for component in self.components:
                 component.stop()
 
-        frame_rate = compute_drop_rate(
+        frame_rate = compute_frame_rate(
                 self.config.dataset_config.dataset_path,
                 self.config.dataset_config.pointcloud_topic,
                 self.tmp_dir / self.tmp_bag,

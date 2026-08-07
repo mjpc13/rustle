@@ -1,22 +1,31 @@
-from .base import BaseConfig, BaseContainer
-from utils import DockerInstance
+from .base import BaseComponent, BaseComponentConfig
+from utils import DockerRuntime
 
 from pathlib import Path
 from pydantic import Field
 from typing import Dict
 
-class PlayerConfig(BaseConfig):
+class PlayerComponentConfig(BaseComponentConfig):
+    """
+    Config for a ros2 bag player component.
+
+    Attributes:
+        bag_path: path to the rosbag.
+        play_rate: play rate of the bag (default: 0.0)
+        delay: delay in sec before the bag start playing after the component is started (default: 1.0)
+        topic_remaps: topic remaps as Dict[original topic name, new topic name]
+    """
     bag_path: Path
     play_rate: float = Field(default=1.0, gt=0.0)
     delay: float = Field(default=1.0, gt=0.0)
     topic_remaps: Dict[str, str] = Field(default_factory=dict)
 
-    def get_container(self, docker: DockerInstance) -> PlayerContainer:
-        return PlayerContainer(self, docker)
+    def to_component(self, docker: DockerRuntime) -> PlayerComponent:
+        return PlayerComponent(self, docker)
 
 
-class PlayerContainer(BaseContainer):
-    def __init__(self, config: PlayerConfig, docker: DockerInstance):
+class PlayerComponent(BaseComponent):
+    def __init__(self, config: PlayerComponentConfig, docker: DockerRuntime):
         super().__init__(docker)
         self.config = config
 

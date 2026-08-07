@@ -1,21 +1,27 @@
-from pathlib import Path
-from typing import Dict
-from rosbags.rosbag2 import Reader
-from evo.tools import file_interface
 from evo.core import metrics, sync
+from evo.tools import file_interface
+from pathlib import Path
+from rosbags.rosbag2 import Reader
+from typing import Dict
 
 import logging
-
 logger = logging.getLogger(__name__)
 
-def compute_drop_rate(
+def compute_frame_rate(
         pc_bag_path: Path,
         pc_topic: str,
         odom_bag_path: Path,
         odom_topic: str,
     ) -> float:
     """
-    Compute the ratio of odometry over initial pointclouds message count.
+    Compute the ratio of computed odometry over the initial nuber of pointcloud messages.
+    Bags should be ros2 bags (this maybe good to change to a high level reader for better compatibility).
+
+    Args:
+        pc_bag_path: path to the pointcloud rosbag.
+        pc_topic: pointcloud topic name.
+        odom_bag_path: path to the odometry rosbag.
+        odom_topic: odometry topic name.
     """
     pc_msg_count = -1
     with Reader(pc_bag_path) as reader:
@@ -54,6 +60,13 @@ def compute_ape(
     ) -> Dict[str, float]:
     """
     Compute the Average Pose Error (APE) between ground truth and odometry.
+    Bags should be ros2 bags (this maybe good to change to a high level reader for better compatibility).
+
+    Args:
+        gt_bag_path: path to the ground truth rosbag.
+        gt_topic: ground truth topic name.
+        odom_bag_path: path to the odometry rosbag.
+        odom_topic: odometry topic name.
     """
     # Read ground truth and odometry trajectories from the ROS 2 bag
     logger.info("Reading trajectories.")

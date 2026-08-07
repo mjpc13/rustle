@@ -1,14 +1,14 @@
+from components import PlayerComponentConfig, BaseComponentConfig, GenericNodeComponentConfig
+
 from abc import ABC, abstractmethod
 from pathlib import Path
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Tuple
 
-from components import PlayerConfig, BaseConfig, GenericNodeConfig
-
 
 class PipelineStep(ABC, BaseModel):
     @abstractmethod
-    def to_component_config(self, input_remap: str, output_remap: str) -> BaseConfig:
+    def to_component_config(self, input_remap: str, output_remap: str) -> BaseComponentConfig:
         pass
 
 class DatasetConfig(BaseModel):
@@ -18,8 +18,8 @@ class DatasetConfig(BaseModel):
     groundtruth_topic: str
     play_rate: float
 
-    def to_component_config(self, output_remap: str) -> PlayerConfig:
-        return PlayerConfig(
+    def to_component_config(self, output_remap: str) -> PlayerComponentConfig:
+        return PlayerComponentConfig(
                 bag_path=self.dataset_path,
                 topic_remaps={
                     self.pointcloud_topic: output_remap,
@@ -36,8 +36,8 @@ class SlamConfig(PipelineStep):
     input_topic: str
     output_topic: str
 
-    def to_component_config(self, input_remap: str, output_remap: str) -> BaseConfig:
-        return GenericNodeConfig(
+    def to_component_config(self, input_remap: str, output_remap: str) -> BaseComponentConfig:
+        return GenericNodeComponentConfig(
                 image=self.algorithm_image,
                 params_file=self.algorithm_params,
                 package_name=self.algorithm_package,
@@ -60,10 +60,11 @@ class IterationResult(BaseModel):
     frame_rate: float
 
 
-class PipelineConfig(BaseModel):
+class BenchmarkConfig(BaseModel):
+    # TODO: WIP
     dataset_configs: List[DatasetConfig]
     slam_configs: List[SlamConfig]
 
     iteration_repetion: int
 
-PipelineResult = List[Tuple[str, List[IterationResult]]]
+BenchmarkResult = List[Tuple[str, List[IterationResult]]]

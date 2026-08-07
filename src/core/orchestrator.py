@@ -1,10 +1,9 @@
-
-from utils import DockerInstance
-
-from .models import PipelineConfig, IterationConfig, IterationResult, PipelineResult
+from .models import IterationConfig, IterationResult, BenchmarkConfig, BenchmarkResult
 from .iteration import Iteration
+from utils import DockerRuntime
 
-def run(config: PipelineConfig) -> PipelineResult:
+
+def run(config: BenchmarkConfig) -> BenchmarkResult:
 
     network_name = "test_network"
     env = {
@@ -12,12 +11,12 @@ def run(config: PipelineConfig) -> PipelineResult:
             "PYTHONUNBUFFERED": "1"
         }
 
-    pipline_results: PipelineResult = []
+    pipline_results: BenchmarkResult = []
 
-    with DockerInstance(network_name, env) as docker:
+    with DockerRuntime(network_name, env) as docker:
         for dataset_config in config.dataset_configs:
             for slam_config in config.slam_configs:
-                it_config = IterationConfig(dataset_config=dataset_config, slam_config=slam_config)
+                it_config = IterationConfig(dataset_config=dataset_config, steps=[slam_config], monitor_idx=0)
                 identifier = f"{dataset_config.name}:{slam_config.name}"
                 results = []
                 with Iteration(it_config, docker) as iteration:
